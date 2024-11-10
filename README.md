@@ -40,12 +40,14 @@ Use it as a library to make use of `CargoRunner` to **init** , **load** , **merg
 <summary>Init Config</summary>
 
 ```rust
-use core::CargoRunner;
+use core::{CargoRunner, Error};
+use anyhow::Result;
 
 /// Use when you want to initialize a new config at `~/.cargo-runner/config.toml`
-fn main() {
-    let config = CargoRunner::init();
+fn main() -> Result<(),Error> {
+    let config = CargoRunner::init()?;
     println!("{:#?}", config);
+    Ok(())
 }
 ```
 </details>
@@ -71,18 +73,19 @@ fn main() {
 <summary>Merge Config</summary>
 
 ```rust
-use core::{CargoRunner, Context};
+use core::{CargoRunner, Context, Error};
 use std::path::PathBuf;
+use anyhow::Result;
 
 /// Use when you want to merge a specific config and override it with another config
-fn main() {
+fn main() -> Result<(),Error> {
     let mut config = CargoRunner::default();
 
     let path = PathBuf::from("cargo-runner-leptos.toml");
 
-    let leptos_config = CargoRunner::load(path);
+    let leptos_config = CargoRunner::load(path)?;
 
-    config.merge(leptos_config);
+    config.merge(leptos_config)?;
 
     let default = config.get_default(Context::Run);
 
@@ -92,6 +95,8 @@ fn main() {
     );
 
     println!("{:#?}", config);
+    config.save(None)?;
+    Ok(())
 }
 ```
 
@@ -102,15 +107,15 @@ fn main() {
 <summary>Get and Set Default Config</summary>
 
 ```rust
-use core::{CargoRunner, Context};
+use core::{CargoRunner, Config, Context, Error};
 use std::path::PathBuf;
 
-fn main() {
+fn main()-> anyhow::Result<(),Error> {
     let path = PathBuf::from("cargo-runner-leptos.toml");
 
-    let mut config = CargoRunner::load(path);
+    let mut config = CargoRunner::load(path.clone())?;
 
-    config.merge(CargoRunner::default());
+    config.merge(CargoRunner::default())?;
 
     let default = config.get_default(Context::Run);
 
@@ -119,7 +124,7 @@ fn main() {
         default.unwrap_or_default()
     );
 
-    config.set_default(Context::Run, "leptos").unwrap();
+    config.set_default(Context::Run, "leptos")?;
 
     let default = config.get_default(Context::Run);
 
@@ -127,6 +132,10 @@ fn main() {
         "latest default for run context: {:#?}",
         default.unwrap_or_default()
     );
+
+    config.save(Some(&path))?;
+
+    Ok(())
 }
 ```
 
@@ -136,21 +145,23 @@ fn main() {
 <summary>Find Config by Context</summary>
 
 ```rust
-use core::{CargoRunner, Context};
+use core::{CargoRunner, Context, Error};
 use std::path::PathBuf;
+use anyhow::Result;
 
 /// Use when you want to find a specific config for a given context
-fn main() {
+fn main()-> Result<(),Error> {
     let mut config = CargoRunner::default();
     let path = PathBuf::from("example-leptos.toml");
-    let  leptos = CargoRunner::load(path);
+    let  leptos = CargoRunner::load(path)?;
     {
-        config.merge(leptos);
+        config.merge(leptos)?;
     }
 
     let default = config.find(Context::Run,"leptos");
 
     println!("{:#?}", default);
+    Ok(())
 }
 ```
 
@@ -160,8 +171,9 @@ fn main() {
 <summary>Pluck Config by Name</summary>
 
 ```rust
-use core::CargoRunner;
+use core::{CargoRunner, Error};
 use std::path::PathBuf;
+use anyhow::Result;
 
 /// Use when you need to pluck all config with same name 
 /// on different context, does providing you a new [CargRunner] instance
@@ -169,17 +181,19 @@ use std::path::PathBuf;
 /// e.g. when you want to pluck only the **leptos** config and remove other configs.
 /// prior merging to other configs.
 /// It also set all  default for any context that matches the **config_name**
-fn main() {
+fn main() -> Result<(), Error> {
     let mut config = CargoRunner::default();
     let path = PathBuf::from("example-leptos.toml");
-    let  leptos = CargoRunner::load(path);
+    let  leptos = CargoRunner::load(path)?;
     {
-        config.merge(leptos);
+        config.merge(leptos)?;
     }
 
     let default = config.pluck("leptos");
 
     println!("{:#?}", default);
+    config.save(None)?;
+    Ok(())
 }
 ```
 
@@ -189,10 +203,15 @@ fn main() {
 <summary>Reset Config</summary>
 
 ```rust
-use core::CargoRunner;
+use core::{CargoRunner, Error};
 
-fn main() {
-    CargoRunner::reset();
+/// Use when the default config becomes polluted and wanna start fresh
+/// This would backup the current default config
+/// to a filename with format `config.$number.bak` 
+/// Then replace the old config with the default config
+fn main()-> anyhow::Result<(),Error> {
+    CargoRunner::reset()?;
+    Ok(())
 }
 ```
 
@@ -220,10 +239,36 @@ fn main() {
 <summary>Download Config</summary>
 
 ```rust
-use core::Config;
+use core::{CargoRunner, Error};
+use anyhow::Result;
 
-fn main() {
-    todo!()
+/// Download allows you to download a config from a url
+/// If No save_path is provided it would save the config to the default config path
+/// And would merge the downloaded config with the default config
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    let url = "https://gist.githubusercontent.com/codeitlikemiley/26205a6d642c33dbdcf9fc85b79f29bf/raw/a59d51136aca2fed51ca45de6b2319039e977637/leptos.toml";
+    CargoRunner::download(url,None).await?;
+    Ok(())
+}
+```
+
+- Download to a specified path
+```rust
+use core::{CargoRunner, Error};
+use std::path::PathBuf;
+use anyhow::Result;
+
+/// Download allows you to download a config from a url
+/// If No save_path is provided it would save the config to the default config path
+/// And would merge the downloaded config with the default config
+/// If a save_path is provided it would save the config to the specified path
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    let url = "https://gist.githubusercontent.com/codeitlikemiley/26205a6d642c33dbdcf9fc85b79f29bf/raw/a59d51136aca2fed51ca45de6b2319039e977637/leptos.toml";
+    let save_path = Some(PathBuf::from("example-downloaded.toml"));
+    CargoRunner::download(url,save_path).await?;
+    Ok(())
 }
 ```
 

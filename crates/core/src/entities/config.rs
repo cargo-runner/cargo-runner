@@ -2,7 +2,12 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize, Serializer};
 
+
+use crate::Error;
+
 use super::CommandType;
+
+use anyhow::Result;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 pub struct Config {
@@ -40,13 +45,11 @@ where
 }
 
 impl Config {
-    pub fn merge(&mut self, other: &Config) {
-        // Only merge if names match
+    pub fn merge(&mut self, other: &Config) -> Result<(), Error> {
         if self.name != other.name {
-            return;
+            return Err(Error::MergeConflict(self.name.clone(),other.name.clone()));
         }
 
-        // Merge fields, keeping original values if other doesn't specify them
         if let Some(cmd_type) = &other.command_type {
             self.command_type = Some(cmd_type.clone());
         }
@@ -59,10 +62,10 @@ impl Config {
         if let Some(allowed) = &other.allowed_subcommands {
             self.allowed_subcommands = Some(allowed.clone());
         }
-        // Merge environment variables if present
         if let Some(other_env) = &other.env {
             let base_env = self.env.get_or_insert_with(HashMap::new);
             base_env.extend(other_env.clone());
         }
+        Ok(())
     }
 }

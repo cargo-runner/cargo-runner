@@ -1,11 +1,27 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use anyhow::{anyhow, Result};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::PathBuf,
+};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tracing::warn;
+
+use crate::Error;
 
 use super::{CommandType, Config, Context};
 
+pub type ConfigKey = String;
+
+pub type DefaultContext = Option<String>;
+
+pub type ListOfConfig = Option<Vec<Config>>;
+
+pub type ConfigVal = (DefaultContext, ListOfConfig);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CargoRunner(pub HashMap<String, (Option<String>, Option<Vec<Config>>)>);
+pub struct CargoRunner(pub HashMap<ConfigKey, ConfigVal>);
 
 impl Serialize for CargoRunner {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -63,91 +79,43 @@ impl Default for CargoRunner {
     fn default() -> Self {
         let mut commands = HashMap::new();
 
-        // Add default commands
-        commands.insert(
-            "run".to_string(),
-            (
-                Some("default".to_string()),
-                Some(vec![Config {
-                    name: "default".to_string(),
-                    command_type: Some(CommandType::Cargo),
-                    command: Some("cargo".to_string()),
-                    sub_command: Some("run".to_string()),
-                    allowed_subcommands: Some(vec![]),
-                    env: Some(HashMap::new()),
-                }]),
-            ),
-        );
-
-        commands.insert(
-            "test".to_string(),
-            (
-                Some("default".to_string()),
-                Some(vec![Config {
-                    name: "default".to_string(),
-                    command_type: Some(CommandType::Cargo),
-                    command: Some("cargo".to_string()),
-                    sub_command: Some("test".to_string()),
-                    allowed_subcommands: Some(vec![]),
-                    env: Some(HashMap::new()),
-                }]),
-            ),
-        );
-
-        commands.insert(
-            "build".to_string(),
-            (
-                Some("default".to_string()),
-                Some(vec![Config {
-                    name: "default".to_string(),
-                    command_type: Some(CommandType::Cargo),
-                    command: Some("cargo".to_string()),
-                    sub_command: Some("build".to_string()),
-                    allowed_subcommands: Some(vec![]),
-                    env: Some(HashMap::new()),
-                }]),
-            ),
-        );
-
-        commands.insert(
-            "bench".to_string(),
-            (
-                Some("default".to_string()),
-                Some(vec![Config {
-                    name: "default".to_string(),
-                    command_type: Some(CommandType::Cargo),
-                    command: Some("cargo".to_string()),
-                    sub_command: Some("bench".to_string()),
-                    allowed_subcommands: Some(vec![]),
-                    env: Some(HashMap::new()),
-                }]),
-            ),
-        );
+        commands.insert("run".to_string(), Self::default_configs("run"));
+        commands.insert("test".to_string(), Self::default_configs("test"));
+        commands.insert("build".to_string(), Self::default_configs("build"));
+        commands.insert("bench".to_string(), Self::default_configs("bench"));
 
         CargoRunner(commands)
     }
 }
 
-impl Into<String> for CargoRunner {
-    fn into(self) -> String {
-        toml::to_string_pretty(&self).expect("Failed to serialize config to TOML")
+impl TryFrom<String> for CargoRunner {
+    type Error = Error;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        toml::from_str(&value).map_err(Error::Deserialize)
     }
 }
 
-impl From<String> for CargoRunner {
-    fn from(value: String) -> Self {
-        toml::from_str(&value).expect("Failed to convert String to Config")
-    }
-}
-
-impl From<&str> for CargoRunner {
-    fn from(value: &str) -> Self {
-        toml::from_str(value).expect("Failed to convert String to Config")
+impl TryFrom<&str> for CargoRunner {
+    type Error = Error;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        toml::from_str(value).map_err(Error::Deserialize)
     }
 }
 
 impl CargoRunner {
-    pub fn set_default(&mut self, context: Context, name: &str) -> Result<(), String> {
+    fn default_configs(sub_command: &str) -> (DefaultContext, ListOfConfig) {
+        let config = Config {
+            name: "default".to_string(),
+            command_type: Some(CommandType::Cargo),
+            command: Some("cargo".to_string()),
+            sub_command: Some(sub_command.to_string()),
+            allowed_subcommands: Some(vec![]),
+            env: Some(HashMap::new()),
+        };
+        (Some("default".to_string()), Some(vec![config]))
+    }
+
+    pub fn set_default(&mut self, context: Context, name: &str) -> Result<(), Error> {
         if let Some((_, configs)) = self.0.get(context.into()) {
             if let Some(configs) = configs {
                 if configs.iter().any(|c| c.name == name) {
@@ -159,10 +127,7 @@ impl CargoRunner {
                 }
             }
         }
-        Err(format!(
-            "Command '{}' not found for type '{}'",
-            name, context
-        ))
+        Err(Error::SetDefault(context))
     }
 
     pub fn get_default(&self, context: Context) -> Option<&str> {
@@ -172,7 +137,16 @@ impl CargoRunner {
             .map(|s| s.as_str())
     }
 
-    pub fn pluck(&self, config_name: &str) -> CargoRunner {
+    fn get_default_config_path() -> Result<PathBuf, Error> {
+        Ok(dirs::home_dir()
+            .ok_or(Error::Other(anyhow!("Could not find home directory")))?
+            .join(".cargo-runner")
+            .join("config.toml"))
+    }
+}
+
+impl CargoRunner {
+    pub fn collect(&self, config_name: &str) -> Option<CargoRunner> {
         let mut found_configs = HashMap::new();
 
         for (context, (_, configs)) in &self.0 {
@@ -193,7 +167,10 @@ impl CargoRunner {
             }
         }
 
-        CargoRunner(found_configs)
+        match found_configs.is_empty() {
+            true => None,
+            false => Some(CargoRunner(found_configs)),
+        }
     }
 
     pub fn find(&self, context: Context, config_name: &str) -> Option<&Config> {
@@ -203,21 +180,23 @@ impl CargoRunner {
                 .and_then(|configs_vec| configs_vec.iter().find(|c| c.name == config_name))
         })
     }
+}
 
-    pub fn init() -> CargoRunner {
-        let home = dirs::home_dir().expect("Could not find home directory");
+impl CargoRunner {
+    pub fn init() -> Result<CargoRunner, Error> {
+        let home =
+            dirs::home_dir().ok_or(Error::Other(anyhow!("Could not find home directory")))?;
+
         let config_dir = home.join(".cargo-runner");
-        let config_path = Self::get_default_config_path();
+        let config_path = Self::get_default_config_path()?;
 
-        // Create the config directory if it doesn't exist
-        fs::create_dir_all(&config_dir).expect("Failed to create config directory");
+        fs::create_dir_all(&config_dir).map_err(|e| Error::Io(e))?;
 
-        // Attempt to load the config
         CargoRunner::load(config_path)
     }
 
-    pub fn reset() {
-        let config_path = Self::get_default_config_path();
+    pub fn reset() -> Result<(), Error> {
+        let config_path = Self::get_default_config_path()?;
 
         let default_config = Self::default();
 
@@ -225,129 +204,198 @@ impl CargoRunner {
 
         fs::write(
             &config_path,
-            toml::to_string_pretty(&default_config).expect("Failed to serialize default config"),
+            toml::to_string_pretty(&default_config).map_err(|e| Error::Serialize(e))?,
         )
-        .expect("Failed to write default config file");
+        .map_err(|e| Error::Io(e))?;
+
+        Ok(())
+    }
+}
+
+impl CargoRunner {
+    pub fn pluck(&mut self, config_name: &str) -> CargoRunner {
+        let mut removed_configs = HashMap::new();
+
+        // Iterate over each context to apply the changes
+        self.0.retain(|context, (default, configs)| {
+            let Some(configs_vec) = configs else {
+                // Retain context if no configurations are present
+                return true;
+            };
+            let matching_configs: Vec<Config> = configs_vec
+                .iter()
+                .filter(|c| c.name == config_name)
+                .cloned()
+                .collect();
+
+            let remaining_configs: Vec<Config> = configs_vec
+                .iter()
+                .filter(|c| c.name != config_name)
+                .cloned()
+                .collect();
+
+            if !matching_configs.is_empty() {
+                // Add matching configs to the output with `config_name` as the default
+                removed_configs.insert(
+                    context.clone(),
+                    (
+                        Some(config_name.to_string()),
+                        Some(matching_configs.to_vec()),
+                    ),
+                );
+
+                if remaining_configs.is_empty() {
+                    // Remove the context if there are no remaining configs
+                    *default = Some("default".to_string());
+                    false
+                } else {
+                    // Retain the context with remaining configs and reset default if needed
+                    *configs = Some(remaining_configs.to_vec());
+                    if default.as_deref() == Some(config_name) {
+                        *default = Some("default".to_string());
+                    }
+                    true
+                }
+            } else {
+                true
+            }
+        });
+
+        CargoRunner(removed_configs)
     }
 
-    pub async fn download(
-        url: &str,
-        save_path: Option<PathBuf>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Download the content from the URL asynchronously
+    pub async fn download(url: &str, save_path: Option<PathBuf>) -> Result<(), Error> {
         let response = reqwest::get(url).await?;
         let content = response.text().await?;
-
-        // Parse the fetched content as TOML into CargoRunner
         let mut config: CargoRunner = toml::from_str(&content)?;
 
         if let Some(path) = save_path {
             if path.exists() {
-                // If the file already exists, load and merge it
                 let existing_content = fs::read_to_string(&path)?;
                 let mut existing_config: CargoRunner = toml::from_str(&existing_content)?;
-                
-                existing_config.merge(config.clone());
+
+                existing_config.merge(config.clone())?;
+
                 config = existing_config;
             }
-            // Save the parsed configuration to the specified path
+
             fs::create_dir_all(path.parent().unwrap())?;
+
             let toml_content = toml::to_string_pretty(&config)?;
+
             fs::write(&path, toml_content)?;
         } else {
             let mut default_config = Self::default();
-            default_config.merge(config.clone());
 
-            let config_path = Self::get_default_config_path();
-            // Save the parsed configuration to the default path
+            default_config.merge(config.clone())?;
+
+            let config_path = Self::get_default_config_path()?;
+
             Self::create_backup(&config_path);
 
-            let toml = toml::to_string_pretty(&default_config)
-                .expect("Failed to serialize default config");
-            fs::write(config_path, toml).expect("Failed to write default config file");
+            let toml = toml::to_string_pretty(&default_config).map_err(|e| Error::Serialize(e))?;
+
+            fs::write(config_path, toml).map_err(|e| Error::Io(e))?;
         }
 
         Ok(())
     }
+}
+impl CargoRunner {
+    pub fn save(&self, file_path: Option<&PathBuf>) -> Result<(), Error> {
+        // Determine the path to save the file
+        let path_to_save = match file_path {
+            Some(path) => path.clone(),
+            None => Self::get_default_config_path()?,  // Assuming this is a function that returns a default path
+        };
 
-    fn get_default_config_path() -> PathBuf {
-        dirs::home_dir()
-            .expect("Could not find home directory")
-            .join(".cargo-runner")
-            .join("config.toml")
+        // Serialize the CargoRunner struct to TOML format
+        let toml_content = toml::to_string_pretty(&self).map_err(|e| Error::Serialize(e))?;
+
+        // Write the serialized content to the file
+        fs::write(&path_to_save, toml_content).map_err(|e| Error::Io(e))?;
+
+        Ok(())
     }
 
-    pub fn load(path: PathBuf) -> CargoRunner {
+    pub fn load(path: PathBuf) -> Result<CargoRunner, Error> {
         match fs::read_to_string(&path) {
-            Ok(data) => {
-                toml::from_str(&data).unwrap_or_else(|_| {
-                    eprintln!("Failed to parse config file from: {}", path.display());
-                    Self::create_backup(&path); // Create a backup on parse failure
+            Ok(data) => match toml::from_str(&data) {
+                Ok(config) => Ok(config),
+                Err(_) => {
+                    warn!(
+                        "Failed to parse config file from: {} , creating a backup",
+                        path.display()
+                    );
 
-                    // Write the default config to the file
+                    Self::create_backup(&path);
+
                     let default_config = Self::default();
-                    let toml = toml::to_string_pretty(&default_config)
-                        .expect("Failed to serialize default config");
-                    fs::write(&path, toml).expect("Failed to write default config file");
 
-                    default_config // Return default config
-                })
-            }
+                    let toml =
+                        toml::to_string_pretty(&default_config).map_err(|e| Error::Serialize(e))?;
+
+                    fs::write(&path, toml).map_err(|e| Error::Io(e))?;
+
+                    Ok(default_config)
+                }
+            },
+
             Err(_) => {
-                eprintln!("Failed to read config path: {}", path.display());
-                Self::create_backup(&path); // Create a backup on read failure
+                warn!("Failed to read config path: {}", path.display());
 
-                // Write the default config to the file
+                Self::create_backup(&path);
+
                 let default_config = Self::default();
-                let toml = toml::to_string_pretty(&default_config)
-                    .expect("Failed to serialize default config");
-                fs::write(&path, toml).expect("Failed to write default config file");
 
-                default_config // Return default config
+                let toml =
+                    toml::to_string_pretty(&default_config).map_err(|e| Error::Serialize(e))?;
+
+                fs::write(&path, toml).map_err(|e| Error::Io(e))?;
+
+                Ok(default_config)
             }
         }
     }
 
-    pub fn merge(&mut self, other: CargoRunner) {
+    pub fn merge(&mut self, other: CargoRunner) -> Result<()> {
         for (command_type, (other_default, other_configs)) in other.0 {
-            let command_type_clone = command_type.clone(); // Clone command_type for later use
             let (base_default, base_configs) = self
                 .0
-                .entry(command_type_clone) // Use the cloned value here
+                .entry(command_type.clone())
                 .or_insert_with(|| (None, Some(Vec::new())));
 
-            // Merge command configurations first
             if let Some(other_configs) = other_configs {
-                if let Some(base) = base_configs {
-                    for other_config in other_configs {
-                        // Check if the command already exists
-                        if let Some(existing) =
-                            base.iter_mut().find(|c| c.name == other_config.name)
-                        {
-                            existing.merge(&other_config); // Merge existing command
-                        } else {
-                            base.push(other_config.clone()); // Add new command
-                        }
+                let base = base_configs.get_or_insert_with(Vec::new);
+                let mut existing_names: HashSet<_> = base.iter().map(|c| c.name.clone()).collect();
+
+                for other_config in other_configs {
+                    if existing_names.insert(other_config.name.clone()) {
+                        base.push(other_config);
+                    } else if let Some(existing) =
+                        base.iter_mut().find(|c| c.name == other_config.name)
+                    {
+                        existing.merge(&other_config)?;
                     }
                 }
             }
 
-            // Now update the default value if the other configuration has one
             if let Some(ref new_default) = other_default {
-                // Check if the new default exists in the command list
-                if let Some(base) = base_configs {
-                    if base.iter().any(|cmd| cmd.name == *new_default) {
-                        *base_default = Some(new_default.clone()); // Update the default field
-                    } else {
-                        eprintln!(
-                            "Warning: Default command '{}' does not exist in the '{}' commands.",
-                            new_default, command_type
-                        );
-                        // Optionally, you can set it to None or keep the existing default
-                    }
+                if base_configs.as_ref().map_or(false, |base| {
+                    base.iter().any(|cmd| cmd.name == *new_default)
+                }) {
+                    *base_default = Some(new_default.clone());
+                } else {
+                    return Err(anyhow!(
+                        "Default command '{}' does not exist in the '{}' commands.",
+                        new_default,
+                        command_type
+                    ));
                 }
             }
         }
+
+        Ok(())
     }
 
     fn create_backup(config_path: &PathBuf) {
@@ -467,7 +515,7 @@ mod tests {
 
         let dx_config: CargoRunner = toml::from_str(dx_content).expect("Failed to parse dx config");
 
-        base_config.merge(dx_config);
+        base_config.merge(dx_config).unwrap();
 
         let (default, run_configs) = base_config.0.get("run").expect("Run config should exist");
         let run_configs = run_configs.as_ref().expect("Run config should have values");
