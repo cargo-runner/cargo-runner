@@ -21,7 +21,7 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub env: Option<HashMap<String, String>>,
+    pub extra_env: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_test_binary_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -109,7 +109,7 @@ mod tests {
                 extra_test_binary_args: Some(vec!["--test-threads=1".to_string()]),
                 test_framework: None,
                 force_replace_args: Some(false),
-                env: Some(HashMap::from([(
+                extra_env: Some(HashMap::from([(
                     "RUST_LOG".to_string(),
                     "debug".to_string(),
                 )])),

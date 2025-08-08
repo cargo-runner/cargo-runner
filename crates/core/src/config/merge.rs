@@ -129,10 +129,10 @@ impl ConfigMerger {
         }
 
         // Merge env
-        if let Some(ref env) = override_config.env {
-            if force_replace || base.env.is_none() {
-                base.env = Some(env.clone());
-            } else if let Some(ref mut base_env) = base.env {
+        if let Some(ref env) = override_config.extra_env {
+            if force_replace || base.extra_env.is_none() {
+                base.extra_env = Some(env.clone());
+            } else if let Some(ref mut base_env) = base.extra_env {
                 base_env.extend(env.clone());
             }
         }
@@ -207,10 +207,10 @@ impl ConfigMerger {
                 }
 
                 // Handle env merging
-                if let Some(ref env) = new_override.env {
-                    if new_override.force_replace_env.unwrap_or(false) || existing.env.is_none() {
-                        existing.env = Some(env.clone());
-                    } else if let Some(ref mut existing_env) = existing.env {
+                if let Some(ref env) = new_override.extra_env {
+                    if new_override.force_replace_env.unwrap_or(false) || existing.extra_env.is_none() {
+                        existing.extra_env = Some(env.clone());
+                    } else if let Some(ref mut existing_env) = existing.extra_env {
                         existing_env.extend(env.clone());
                     }
                 }

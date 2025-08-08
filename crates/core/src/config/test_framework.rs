@@ -13,5 +13,5 @@ pub struct TestFramework {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub env: Option<HashMap<String, String>>,
+    pub extra_env: Option<HashMap<String, String>>,
 }

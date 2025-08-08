@@ -148,8 +148,8 @@ trait CommandBuilderImpl {
     
     /// Apply common configuration
     fn apply_common_config(&self, command: &mut CargoCommand, config: &Config) {
-        if let Some(env) = &config.env {
-            for (key, value) in env {
+        if let Some(extra_env) = &config.extra_env {
+            for (key, value) in extra_env {
                 command.env.push((key.clone(), value.clone()));
             }
         }
@@ -251,8 +251,8 @@ impl DocTestCommandBuilder {
     fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
         // Apply override env vars
         if let Some(override_config) = self.get_override(runnable, config) {
-            if let Some(env) = &override_config.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &override_config.extra_env {
+                for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
                 }
             }
@@ -319,8 +319,8 @@ impl CommandBuilderImpl for TestCommandBuilder {
         
         // Apply test framework env
         if let Some(test_framework) = &config.test_framework {
-            if let Some(env) = &test_framework.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &test_framework.extra_env {
+                for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
                 }
             }
@@ -414,8 +414,8 @@ impl TestCommandBuilder {
     fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
         // Apply override env vars (highest priority)
         if let Some(override_config) = self.get_override(runnable, config) {
-            if let Some(env) = &override_config.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &override_config.extra_env {
+                for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
                 }
             }
@@ -565,8 +565,8 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         
         // Apply binary framework env
         if let Some(binary_framework) = &config.binary_framework {
-            if let Some(env) = &binary_framework.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &binary_framework.extra_env {
+                for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
                 }
             }
@@ -597,8 +597,8 @@ impl BinaryCommandBuilder {
     fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
         // Apply override env vars (highest priority)
         if let Some(override_config) = self.get_override(runnable, config) {
-            if let Some(env) = &override_config.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &override_config.extra_env {
+                for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
                 }
             }
@@ -709,8 +709,8 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
         
         // Apply test framework env
         if let Some(test_framework) = &config.test_framework {
-            if let Some(env) = &test_framework.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &test_framework.extra_env {
+                for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
                 }
             }
@@ -739,8 +739,8 @@ impl ModuleTestCommandBuilder {
     fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
         // Apply override env vars (highest priority)
         if let Some(override_config) = self.get_override(runnable, config) {
-            if let Some(env) = &override_config.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &override_config.extra_env {
+                for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
                 }
             }
@@ -835,8 +835,8 @@ impl BenchmarkCommandBuilder {
     fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
         // Apply override env vars (highest priority)
         if let Some(override_config) = self.get_override(runnable, config) {
-            if let Some(env) = &override_config.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &override_config.extra_env {
+                for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
                 }
             }

@@ -26,7 +26,7 @@ pub struct Override {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub force_replace_args: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub env: Option<HashMap<String, String>>,
+    pub extra_env: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub force_replace_env: Option<bool>,
 }

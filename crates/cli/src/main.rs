@@ -284,8 +284,8 @@ fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepat
                     if override_config.extra_test_binary_args.is_some() {
                         println!("      • extra_test_binary_args: {:?}", override_config.extra_test_binary_args);
                     }
-                    if override_config.env.is_some() {
-                        println!("      • env: {:?}", override_config.env);
+                    if override_config.extra_env.is_some() {
+                        println!("      • extra_env: {:?}", override_config.extra_env);
                     }
                 }
             }
@@ -794,9 +794,9 @@ fn print_config_details(_runner: &cargo_runner_core::CargoRunner, filepath: &str
             println!("      • extra_args: {:?}", extra_args);
         }
     }
-    if let Some(env) = &merged_config.env {
-        if !env.is_empty() {
-            println!("      • env: {} variables", env.len());
+    if let Some(extra_env) = &merged_config.extra_env {
+        if !extra_env.is_empty() {
+            println!("      • extra_env: {} variables", extra_env.len());
         }
     }
     if let Some(linked_projects) = &merged_config.linked_projects {

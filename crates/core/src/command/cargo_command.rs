@@ -120,6 +120,7 @@ impl CargoCommand {
 
         // Set environment variables
         for (key, value) in &self.env {
+            eprintln!("Setting env: {}={}", key, value);
             cmd.env(key, value);
         }
 

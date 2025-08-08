@@ -155,8 +155,8 @@ impl TargetCommandBuilder for TestBuilder {
         
         // Apply override env vars (these take precedence)
         if let Some(override_config) = self.get_override(runnable) {
-            if let Some(env) = &override_config.env {
-                for (key, value) in env {
+            if let Some(extra_env) = &override_config.extra_env {
+                for (key, value) in extra_env {
                     command.env.insert(key.clone(), value.clone());
                 }
             }
