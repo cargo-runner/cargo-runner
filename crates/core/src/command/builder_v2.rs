@@ -307,7 +307,7 @@ impl CommandBuilderImpl for TestCommandBuilder {
         }
         
         // Add target
-        self.add_target(&mut args, &runnable.file_path)?;
+        self.add_target(&mut args, &runnable.file_path, package_name)?;
         
         // Apply configuration
         self.apply_args(&mut args, runnable, config);
@@ -346,7 +346,7 @@ impl CommandBuilderImpl for TestCommandBuilder {
 }
 
 impl TestCommandBuilder {
-    fn add_target(&self, args: &mut Vec<String>, file_path: &Path) -> Result<()> {
+    fn add_target(&self, args: &mut Vec<String>, file_path: &Path, package_name: Option<&str>) -> Result<()> {
         use crate::command::Target;
         
         if let Some(target) = Target::from_file_path(file_path) {
@@ -354,7 +354,13 @@ impl TestCommandBuilder {
                 Target::Lib => args.push("--lib".to_string()),
                 Target::Bin(name) => {
                     args.push("--bin".to_string());
-                    args.push(name);
+                    // Special case: if binary name is "main" and we have a package name,
+                    // use the package name as the binary name (Rust convention for src/main.rs)
+                    if name == "main" && package_name.is_some() {
+                        args.push(package_name.unwrap().to_string());
+                    } else {
+                        args.push(name);
+                    }
                 }
                 Target::Test(name) => {
                     args.push("--test".to_string());
@@ -653,7 +659,13 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
                 Target::Lib => args.push("--lib".to_string()),
                 Target::Bin(name) => {
                     args.push("--bin".to_string());
-                    args.push(name);
+                    // Special case: if binary name is "main" and we have a package name,
+                    // use the package name as the binary name (Rust convention for src/main.rs)
+                    if name == "main" && package_name.is_some() {
+                        args.push(package_name.unwrap().to_string());
+                    } else {
+                        args.push(name);
+                    }
                 }
                 Target::Test(name) => {
                     args.push("--test".to_string());
