@@ -4,6 +4,7 @@ use crate::{
     FunctionIdentity, Result, Runnable, RunnableKind,
 };
 use std::path::Path;
+use tracing::debug;
 
 pub struct CommandBuilder {
     config: Config,
@@ -41,7 +42,9 @@ impl CommandBuilder {
         }
 
         // Determine and add target
+        debug!("Determining target for file path: {:?}", runnable.file_path);
         if let Some(target) = Target::from_file_path(&runnable.file_path) {
+            debug!("Target determined: {:?}", target);
             match target {
                 Target::Lib => args.push("--lib".to_string()),
                 Target::Bin(name) => {

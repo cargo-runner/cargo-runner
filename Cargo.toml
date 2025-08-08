@@ -15,6 +15,10 @@ path = "src/bin/cargo-x.rs"
 name = "cargo-runnables"
 path = "src/bin/cargo-runnables.rs"
 
+[[bin]]
+name = "cargo-exec"
+path = "src/bin/cargo-ran.rs"
+
 [[bin]] 
 name = "cargo-r"
 path = "src/bin/cargo-runnables.rs"
@@ -28,6 +32,8 @@ serde_json = "1.0"
 thiserror = "1.0"
 md5 = "0.7"
 cargo_toml = "0.20"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 insta = "1.41"

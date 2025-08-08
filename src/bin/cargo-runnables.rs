@@ -15,13 +15,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             print_usage(&args[0]);
             Ok(())
         }
-        file_path => {
-            let path = Path::new(file_path);
+        input => {
+            let path = Path::new(input);
             if !path.exists() {
                 eprintln!("Error: File not found: {}", path.display());
                 std::process::exit(1);
             }
             
+            // Show all runnables
             show_all_runnables_extended(path)
         }
     }

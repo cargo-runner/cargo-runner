@@ -62,6 +62,28 @@ impl CargoCommand {
         }
         cmd
     }
+    
+    pub fn execute(&self) -> std::io::Result<std::process::ExitStatus> {
+        let mut cmd = match self.command_type {
+            CommandType::Cargo => std::process::Command::new("cargo"),
+            CommandType::Rustc => std::process::Command::new("rustc"),
+        };
+        
+        cmd.args(&self.args);
+        
+        // Set working directory if specified
+        if let Some(ref dir) = self.working_dir {
+            cmd.current_dir(dir);
+        }
+        
+        // Set environment variables
+        for (key, value) in &self.env {
+            cmd.env(key, value);
+        }
+        
+        // Execute and wait for completion
+        cmd.status()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,11 +111,11 @@ impl Target {
         } else if path_str.contains("/benches/") {
             let name = file_path.file_stem()?.to_str()?.to_string();
             Some(Target::Bench(name))
-        } else if path_str.ends_with("/src/lib.rs") {
+        } else if path_str.ends_with("/src/lib.rs") || path_str == "src/lib.rs" {
             Some(Target::Lib)
-        } else if path_str.ends_with("/src/main.rs") {
+        } else if path_str.ends_with("/src/main.rs") || path_str == "src/main.rs" {
             Some(Target::Bin("main".to_string()))
-        } else if path_str.contains("/src/") && !path_str.contains("/src/bin/") {
+        } else if (path_str.contains("/src/") || path_str.starts_with("src/")) && !path_str.contains("/src/bin/") && !path_str.starts_with("src/bin/") {
             // Any other file under src/ is part of the library
             Some(Target::Lib)
         } else {

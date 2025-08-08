@@ -100,8 +100,17 @@ impl ModuleResolver {
             .to_str()
             .ok_or_else(|| Error::ParseError("Invalid file path".to_string()))?;
 
-        if let Some(src_index) = path_str.find("/src/") {
-            let relative_path = &path_str[src_index + 5..];
+        // Check for /src/ or if path starts with src/
+        let (src_index, offset) = if let Some(idx) = path_str.find("/src/") {
+            (Some(idx), 5)
+        } else if path_str.starts_with("src/") {
+            (Some(0), 4)
+        } else {
+            (None, 0)
+        };
+        
+        if let Some(src_index) = src_index {
+            let relative_path = &path_str[src_index + offset..];
             let path_without_ext = relative_path.trim_end_matches(".rs");
 
             // Handle special cases

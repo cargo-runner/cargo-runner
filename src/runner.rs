@@ -7,6 +7,7 @@ use crate::{
     Result, Runnable,
 };
 use std::path::{Path, PathBuf};
+use tracing::{debug, trace};
 
 pub struct CargoRunner {
     detector: RunnableDetector,
@@ -57,23 +58,32 @@ impl CargoRunner {
         file_path: &Path,
         line: u32,
     ) -> Result<Vec<Runnable>> {
+        debug!("detect_runnables_at_line: file={:?}, line={}", file_path, line);
         self.ensure_project_root(file_path)?;
 
         // Check cache first
         if self.config.cache_enabled {
             if let Some(cached) = self.cache.get(file_path) {
+                debug!("Checking {} cached runnables", cached.len());
                 let filtered: Vec<Runnable> = cached
                     .iter()
-                    .filter(|r| r.scope.contains_line(line))
+                    .filter(|r| {
+                        let contains = r.scope.contains_line(line);
+                        debug!("  Runnable '{}' scope {}-{} contains line {}? {} (module_path: '{}')", 
+                            r.label, r.scope.start.line, r.scope.end.line, line, contains, r.module_path);
+                        contains
+                    })
                     .cloned()
                     .collect();
                 if !filtered.is_empty() {
+                    debug!("Found {} runnables in cache", filtered.len());
                     return Ok(filtered);
                 }
             }
         }
 
         // Detect runnables
+        debug!("Detecting runnables from file");
         let mut runnables = self.detector.detect_runnables(file_path, Some(line))?;
 
         // Resolve module paths
@@ -81,7 +91,8 @@ impl CargoRunner {
 
         // Update cache
         if self.config.cache_enabled {
-            let all_runnables = self.detector.detect_runnables(file_path, None)?;
+            let mut all_runnables = self.detector.detect_runnables(file_path, None)?;
+            self.resolve_module_paths(file_path, &mut all_runnables)?;
             let _ = self.cache.insert(file_path.to_path_buf(), all_runnables);
         }
 

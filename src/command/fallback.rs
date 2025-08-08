@@ -54,7 +54,9 @@ pub fn generate_fallback_command(
         args.push("--test".to_string());
         args.push(file_name.to_string());
     } else if normalized_path.ends_with("/src/lib.rs") || normalized_path.ends_with("src/lib.rs") 
-        || (normalized_path.contains("/src/") && !normalized_path.contains("/src/bin/")) {
+        || ((normalized_path.contains("/src/") || normalized_path.starts_with("src/")) 
+            && !normalized_path.contains("/src/bin/") 
+            && !normalized_path.starts_with("src/bin/")) {
         // Library target - lib.rs or any other file under src/ (except bin/)
         args.push("test".to_string());
         
