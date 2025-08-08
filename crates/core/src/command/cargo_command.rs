@@ -52,7 +52,7 @@ impl CargoCommand {
         }
     }
 
-    pub fn new_single_file_script_test(args: Vec<String>) -> Self {
+    pub fn new_rust_sf_script(args: Vec<String>) -> Self {
         Self {
             command_type: CommandType::RustSFScript,
             args,
