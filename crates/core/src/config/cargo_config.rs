@@ -1,17 +1,10 @@
-use crate::types::FunctionIdentity;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-use super::{CargoConfig, Features, RustcConfig, SingleFileScriptConfig, TestFramework};
+use super::{Features, TestFramework};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct Override {
-    #[serde(rename = "match")]
-    #[serde(alias = "function")] // For backward compatibility with FunctionBased
-    pub identity: FunctionIdentity,
-
-    // Legacy fields (will be moved to cargo section during merge)
+pub struct CargoConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -23,23 +16,33 @@ pub struct Override {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_env: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_test_binary_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_framework: Option<TestFramework>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub force_replace_args: Option<bool>,
+    pub binary_framework: Option<TestFramework>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub force_replace_features: Option<bool>,
+    pub linked_projects: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RustcConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_env: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub force_replace_env: Option<bool>,
+}
 
-    // Command-type specific overrides
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SingleFileScriptConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cargo: Option<CargoConfig>,
+    pub extra_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rustc: Option<RustcConfig>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub single_file_script: Option<SingleFileScriptConfig>,
+    pub extra_env: Option<HashMap<String, String>>,
 }

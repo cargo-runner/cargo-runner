@@ -1,32 +1,76 @@
 {
+  "cargo": {
+    "package": "my_crate",
+    "channel": "stable",
+    "features": ["default"],
+    "extra_args": ["--verbose"],
+    "extra_env": {
+      "RUST_LOG": "info"
+    },
+    "test_framework": {
+      "command": "cargo",
+      "subcommand": "test",
+      "features": ["test-utils"],
+      "extra_args": ["--test-threads=4"]
+    },
+    "binary_framework": {
+      "command": "cargo",
+      "subcommand": "run",
+      "channel": "nightly"
+    }
+  },
+  "rustc": {
+    "extra_args": ["--edition=2021", "-O"],
+    "extra_env": {
+      "RUST_BACKTRACE": "1"
+    }
+  },
+  "single_file_script": {
+    "extra_args": ["-Zscript"],
+    "extra_env": {
+      "CARGO_SCRIPT_DEBUG": "1"
+    }
+  },
   "overrides": [
     {
-      "matcher": {
+      "match": {
         "package": "my_crate",
-        "module_path": "*::tests::*"
+        "module_path": "tests"
       },
-      "cargo_args": ["--release"],
-      "exec_args": ["--nocapture"],
-      "env": {
-        "RUST_LOG": "debug"
+      "cargo": {
+        "extra_args": ["--release"],
+        "extra_test_binary_args": ["--nocapture"],
+        "extra_env": {
+          "RUST_LOG": "debug"
+        }
       }
     },
     {
-      "matcher": {
-        "function_name": "bench_*"
+      "match": {
+        "function_name": "bench_"
       },
-      "cargo_args": ["--release"]
+      "cargo": {
+        "extra_args": ["--release"]
+      }
     },
     {
-      "matcher": {
-        "file_path": "**/integration_tests/**"
+      "match": {
+        "file_path": "integration_tests/"
       },
-      "cargo_args": ["--features", "integration"],
-      "env": {
-        "TEST_ENV": "integration"
+      "cargo": {
+        "features": ["integration"],
+        "extra_env": {
+          "TEST_ENV": "integration"
+        }
+      }
+    },
+    {
+      "match": {
+        "file_type": "standalone"
+      },
+      "rustc": {
+        "extra_args": ["--edition=2024"]
       }
     }
-  ],
-  "cache_enabled": true,
-  "cache_dir": "/tmp/cargo-runner-cache"
+  ]
 }

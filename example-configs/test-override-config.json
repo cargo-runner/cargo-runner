@@ -1,37 +1,45 @@
 {
-  "package": "project-a",
-  "channel": "nightly",
-  "extra_args": ["--features", "test-feature"],
-  "env": {
-    "RUST_LOG": "debug"
+  "cargo": {
+    "package": "project-a",
+    "channel": "nightly",
+    "extra_args": ["--features", "test-feature"],
+    "extra_env": {
+      "RUST_LOG": "debug"
+    }
   },
   "overrides": [
     {
       "match": {
         "function_name": "test_user"
       },
-      "extra_test_binary_args": ["--test-threads=1"],
-      "env": {
-        "SPECIAL_TEST": "true"
+      "cargo": {
+        "extra_test_binary_args": ["--test-threads=1"],
+        "extra_env": {
+          "SPECIAL_TEST": "true"
+        }
       }
     },
     {
       "match": {
         "module_path": "tests"
       },
-      "extra_args": ["--nocapture"],
-      "test_framework": {
-        "command": "cargo",
-        "subcommand": "nextest run",
-        "extra_args": ["-j4"]
+      "cargo": {
+        "extra_args": ["--nocapture"],
+        "test_framework": {
+          "command": "cargo",
+          "subcommand": "nextest run",
+          "extra_args": ["-j4"]
+        }
       }
     },
     {
       "match": {
-        "struct_or_module_name": "User"
+        "module_path": "User"
       },
-      "extra_args": ["--doc", "--features", "doc-test"],
-      "channel": "stable"
+      "cargo": {
+        "extra_args": ["--doc", "--features", "doc-test"],
+        "channel": "stable"
+      }
     }
   ]
 }

@@ -96,7 +96,47 @@ impl ConfigMerger {
 
     /// Merge two configs, respecting force_replace settings
     fn merge_configs(&self, mut base: Config, override_config: Config, force_replace: bool) -> Config {
-        // Merge global settings
+        // Merge cargo config
+        if let Some(override_cargo) = override_config.cargo {
+            if base.cargo.is_none() {
+                base.cargo = Some(override_cargo);
+            } else if let Some(ref mut base_cargo) = base.cargo {
+                self.merge_cargo_config(base_cargo, override_cargo, force_replace);
+            }
+        }
+        
+        // Merge rustc config
+        if let Some(override_rustc) = override_config.rustc {
+            if base.rustc.is_none() {
+                base.rustc = Some(override_rustc);
+            } else if let Some(ref mut base_rustc) = base.rustc {
+                self.merge_rustc_config(base_rustc, override_rustc, force_replace);
+            }
+        }
+        
+        // Merge single_file_script config
+        if let Some(override_sfs) = override_config.single_file_script {
+            if base.single_file_script.is_none() {
+                base.single_file_script = Some(override_sfs);
+            } else if let Some(ref mut base_sfs) = base.single_file_script {
+                self.merge_single_file_script_config(base_sfs, override_sfs, force_replace);
+            }
+        }
+
+        // Merge overrides - these are function-specific, so we merge the arrays
+        self.merge_overrides(&mut base.overrides, override_config.overrides);
+        
+        // Cache settings are internal and not merged
+
+        base
+    }
+    
+    /// Get information about which config files were loaded
+    pub fn get_config_info(&self) -> &ConfigInfo {
+        &self.config_info
+    }
+    
+    fn merge_cargo_config(&self, base: &mut super::CargoConfig, override_config: super::CargoConfig, force_replace: bool) {
         if override_config.command.is_some() {
             base.command = override_config.command;
         }
@@ -151,23 +191,51 @@ impl ConfigMerger {
         if override_config.binary_framework.is_some() {
             base.binary_framework = override_config.binary_framework;
         }
-
-        // Merge overrides - these are function-specific, so we merge the arrays
-        self.merge_overrides(&mut base.overrides, override_config.overrides);
-
-        // linked_projects is only allowed at root level, so only copy from root config
+        
+        // Merge linked_projects
         if override_config.linked_projects.is_some() {
             base.linked_projects = override_config.linked_projects;
         }
-        
-        // Cache settings are internal and not merged
-
-        base
     }
     
-    /// Get information about which config files were loaded
-    pub fn get_config_info(&self) -> &ConfigInfo {
-        &self.config_info
+    fn merge_rustc_config(&self, base: &mut super::RustcConfig, override_config: super::RustcConfig, force_replace: bool) {
+        // Merge extra_args
+        if let Some(ref extra_args) = override_config.extra_args {
+            if force_replace || base.extra_args.is_none() {
+                base.extra_args = Some(extra_args.clone());
+            } else if let Some(ref mut base_args) = base.extra_args {
+                base_args.extend(extra_args.clone());
+            }
+        }
+        
+        // Merge env
+        if let Some(ref env) = override_config.extra_env {
+            if force_replace || base.extra_env.is_none() {
+                base.extra_env = Some(env.clone());
+            } else if let Some(ref mut base_env) = base.extra_env {
+                base_env.extend(env.clone());
+            }
+        }
+    }
+    
+    fn merge_single_file_script_config(&self, base: &mut super::SingleFileScriptConfig, override_config: super::SingleFileScriptConfig, force_replace: bool) {
+        // Merge extra_args
+        if let Some(ref extra_args) = override_config.extra_args {
+            if force_replace || base.extra_args.is_none() {
+                base.extra_args = Some(extra_args.clone());
+            } else if let Some(ref mut base_args) = base.extra_args {
+                base_args.extend(extra_args.clone());
+            }
+        }
+        
+        // Merge env
+        if let Some(ref env) = override_config.extra_env {
+            if force_replace || base.extra_env.is_none() {
+                base.extra_env = Some(env.clone());
+            } else if let Some(ref mut base_env) = base.extra_env {
+                base_env.extend(env.clone());
+            }
+        }
     }
 
     /// Merge override arrays, handling force_replace per override
@@ -239,6 +307,31 @@ impl ConfigMerger {
                 if new_override.force_replace_env.is_some() {
                     existing.force_replace_env = new_override.force_replace_env;
                 }
+                
+                // Merge nested configs
+                if let Some(new_cargo) = new_override.cargo {
+                    if existing.cargo.is_none() {
+                        existing.cargo = Some(new_cargo);
+                    } else if let Some(ref mut existing_cargo) = existing.cargo {
+                        self.merge_cargo_config(existing_cargo, new_cargo, false);
+                    }
+                }
+                
+                if let Some(new_rustc) = new_override.rustc {
+                    if existing.rustc.is_none() {
+                        existing.rustc = Some(new_rustc);
+                    } else if let Some(ref mut existing_rustc) = existing.rustc {
+                        self.merge_rustc_config(existing_rustc, new_rustc, false);
+                    }
+                }
+                
+                if let Some(new_sfs) = new_override.single_file_script {
+                    if existing.single_file_script.is_none() {
+                        existing.single_file_script = Some(new_sfs);
+                    } else if let Some(ref mut existing_sfs) = existing.single_file_script {
+                        self.merge_single_file_script_config(existing_sfs, new_sfs, false);
+                    }
+                }
             } else {
                 // No existing override for this identity, add the new one
                 base_overrides.push(new_override);
@@ -308,29 +401,36 @@ mod tests {
     #[test]
     fn test_config_merging() {
         let base = Config {
-            command: Some("cargo".to_string()),
-            extra_args: Some(vec!["--release".to_string()]),
-            extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
+            cargo: Some(super::CargoConfig {
+                command: Some("cargo".to_string()),
+                extra_args: Some(vec!["--release".to_string()]),
+                extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
+                ..Default::default()
+            }),
             ..Default::default()
         };
 
         let override_config = Config {
-            channel: Some("nightly".to_string()),
-            extra_args: Some(vec!["--features".to_string(), "foo".to_string()]),
-            extra_env: Some(HashMap::from([("RUST_BACKTRACE".to_string(), "1".to_string())])),
+            cargo: Some(super::CargoConfig {
+                channel: Some("nightly".to_string()),
+                extra_args: Some(vec!["--features".to_string(), "foo".to_string()]),
+                extra_env: Some(HashMap::from([("RUST_BACKTRACE".to_string(), "1".to_string())])),
+                ..Default::default()
+            }),
             ..Default::default()
         };
 
         let merger = ConfigMerger::new();
         let merged = merger.merge_configs(base, override_config, false);
 
-        assert_eq!(merged.command, Some("cargo".to_string()));
-        assert_eq!(merged.channel, Some("nightly".to_string()));
+        let cargo_config = merged.cargo.unwrap();
+        assert_eq!(cargo_config.command, Some("cargo".to_string()));
+        assert_eq!(cargo_config.channel, Some("nightly".to_string()));
         assert_eq!(
-            merged.extra_args,
+            cargo_config.extra_args,
             Some(vec!["--release".to_string(), "--features".to_string(), "foo".to_string()])
         );
-        let env = merged.extra_env.unwrap();
+        let env = cargo_config.extra_env.unwrap();
         assert_eq!(
             env.get("RUST_LOG"),
             Some(&"info".to_string())
@@ -344,25 +444,32 @@ mod tests {
     #[test]
     fn test_force_replace() {
         let base = Config {
-            extra_args: Some(vec!["--release".to_string()]),
-            extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
+            cargo: Some(super::CargoConfig {
+                extra_args: Some(vec!["--release".to_string()]),
+                extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
+                ..Default::default()
+            }),
             ..Default::default()
         };
 
         let override_config = Config {
-            extra_args: Some(vec!["--debug".to_string()]),
-            extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "debug".to_string())])),
+            cargo: Some(super::CargoConfig {
+                extra_args: Some(vec!["--debug".to_string()]),
+                extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "debug".to_string())])),
+                ..Default::default()
+            }),
             ..Default::default()
         };
 
         let merger = ConfigMerger::new();
         let merged = merger.merge_configs(base, override_config, true);
 
+        let cargo_config = merged.cargo.unwrap();
         // With force_replace, args should be replaced, not merged
-        assert_eq!(merged.extra_args, Some(vec!["--debug".to_string()]));
+        assert_eq!(cargo_config.extra_args, Some(vec!["--debug".to_string()]));
         // Env should also be replaced
         assert_eq!(
-            merged.extra_env.unwrap().get("RUST_LOG"),
+            cargo_config.extra_env.unwrap().get("RUST_LOG"),
             Some(&"debug".to_string())
         );
     }

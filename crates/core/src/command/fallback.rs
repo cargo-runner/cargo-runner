@@ -34,7 +34,7 @@ pub fn generate_fallback_command(
             merger.get_merged_config()
         };
         
-        debug!("Fallback command config: binary_framework={:?}", config.binary_framework);
+        debug!("Fallback command config: cargo.binary_framework={:?}", config.cargo.as_ref().and_then(|c| c.binary_framework.as_ref()));
         
         // Use the CommandBuilder to build the command with config support
         let command = crate::command::builder::CommandBuilder::for_runnable(&runnable)

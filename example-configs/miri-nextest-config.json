@@ -1,27 +1,31 @@
 {
-  "package": "example-package",
-  "test_frameworks": {
-    "command": "cargo",
-    "subcommand": "miri nextest run",
-    "channel": "nightly",
-    "extra_args": ["-j10"],
-    "env": {
-      "MIRIFLAGS": "-Zmiri-disable-isolation",
-      "RUST_BACKTRACE": "full"
+  "cargo": {
+    "package": "example-package",
+    "test_framework": {
+      "command": "cargo",
+      "subcommand": "miri nextest run",
+      "channel": "nightly",
+      "extra_args": ["-j10"],
+      "extra_env": {
+        "MIRIFLAGS": "-Zmiri-disable-isolation",
+        "RUST_BACKTRACE": "full"
+      }
+    },
+    "extra_args": ["--features", "test-feature"],
+    "extra_env": {
+      "RUST_LOG": "debug"
     }
-  },
-  "extra_args": ["--features", "test-feature"],
-  "env": {
-    "RUST_LOG": "debug"
   },
   "overrides": [
     {
       "match": {
         "function_name": "test_integration"
       },
-      "extra_test_binary_args": ["--test-threads=1"],
-      "env": {
-        "INTEGRATION_TEST": "true"
+      "cargo": {
+        "extra_test_binary_args": ["--test-threads=1"],
+        "extra_env": {
+          "INTEGRATION_TEST": "true"
+        }
       }
     }
   ]

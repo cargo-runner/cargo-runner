@@ -1,26 +1,32 @@
 {
-  "package": "windrunner",
-  "features": ["core", "logging"],
-  "extra_env": {
-    "RUST_LOG": "debug"
-  },
-  "test_framework": {
-    "command": "cargo",
-    "subcommand": "test",
-    "features": ["test-utils"]
+  "cargo": {
+    "package": "windrunner",
+    "features": ["core", "logging"],
+    "extra_env": {
+      "RUST_LOG": "debug"
+    },
+    "test_framework": {
+      "command": "cargo",
+      "subcommand": "test",
+      "features": ["test-utils"]
+    }
   },
   "overrides": [
     {
       "match": {
         "file_path": "examples/showcase.rs"
       },
-      "features": "all"
+      "cargo": {
+        "features": "all"
+      }
     },
     {
       "match": {
         "file_path": "src/lib.rs"
       },
-      "features": ["minimal"],
+      "cargo": {
+        "features": ["minimal"]
+      },
       "force_replace_features": true
     }
   ]

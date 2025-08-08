@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use super::FileType;
 
 /// Represents the identity of a function in a Rust project
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -8,6 +9,7 @@ pub struct FunctionIdentity {
     pub module_path: Option<String>,
     pub file_path: Option<PathBuf>,
     pub function_name: Option<String>,
+    pub file_type: Option<FileType>,
 }
 
 impl FunctionIdentity {
@@ -58,6 +60,18 @@ impl FunctionIdentity {
                 }
             } else {
                 // Self requires function_name but other doesn't have one
+                return false;
+            }
+        }
+        
+        // If self has a file_type requirement, it must match
+        if let Some(my_type) = self.file_type {
+            if let Some(other_type) = other.file_type {
+                if my_type != other_type {
+                    return false;
+                }
+            } else {
+                // Self requires file_type but other doesn't have one
                 return false;
             }
         }

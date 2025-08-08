@@ -4,7 +4,7 @@ use crate::{
     command::CargoCommand,
     config::{Config, ConfigMerger, Features},
     error::Result,
-    types::{FunctionIdentity, Runnable, RunnableKind},
+    types::{FileType, FunctionIdentity, Runnable, RunnableKind},
 };
 use std::path::Path;
 use tracing::debug;
@@ -122,11 +122,26 @@ impl<'a> CommandBuilder<'a> {
         }
     }
     
+    /// Determine the file type
+    fn get_file_type(&self) -> Result<FileType> {
+        // Check if it's a cargo script first
+        if self.is_cargo_script_file(&self.runnable.file_path)? {
+            return Ok(FileType::SingleFileScript);
+        }
+        
+        // Check if it's a standalone file
+        if self.is_standalone_file(&self.runnable.file_path) {
+            return Ok(FileType::Standalone);
+        }
+        
+        // Default to cargo project
+        Ok(FileType::CargoProject)
+    }
+    
     /// Build the command
     pub fn build(self) -> Result<CargoCommand> {
-        // Check file type for special handling
-        let is_cargo_script = self.is_cargo_script_file(&self.runnable.file_path)?;
-        let is_standalone = self.is_standalone_file(&self.runnable.file_path);
+        // Determine file type
+        let file_type = self.get_file_type()?;
         
         // Resolve configuration
         let config = if let Some(config) = self.config_override {
@@ -138,35 +153,17 @@ impl<'a> CommandBuilder<'a> {
                 .resolve()?
         };
         
-        // Select appropriate builder based on runnable type
-        let builder: Box<dyn CommandBuilderImpl> = match &self.runnable.kind {
-            RunnableKind::Binary { .. } => {
-                if is_standalone {
-                    Box::new(RustcCommandBuilder)
-                } else {
-                    Box::new(BinaryCommandBuilder)
-                }
-            },
-            RunnableKind::DocTest { .. } => Box::new(DocTestCommandBuilder),
-            RunnableKind::Test { .. } => {
-                if is_cargo_script {
-                    Box::new(SingleFileScriptBuilder)
-                } else if is_standalone {
-                    Box::new(RustcCommandBuilder)
-                } else {
-                    Box::new(TestCommandBuilder)
-                }
-            },
-            RunnableKind::ModuleTests { .. } => {
-                if is_standalone {
-                    Box::new(RustcCommandBuilder)
-                } else {
-                    Box::new(ModuleTestCommandBuilder)
-                }
-            },
-            RunnableKind::Benchmark { .. } => Box::new(BenchmarkCommandBuilder),
-            RunnableKind::Standalone { .. } => Box::new(RustcCommandBuilder),
-            RunnableKind::SingleFileScript { .. } => Box::new(SingleFileScriptBuilder),
+        // Select appropriate builder based on runnable type and file type
+        let builder: Box<dyn CommandBuilderImpl> = match (&self.runnable.kind, file_type) {
+            (RunnableKind::SingleFileScript { .. }, _) => Box::new(SingleFileScriptBuilder),
+            (RunnableKind::Standalone { .. }, _) => Box::new(RustcCommandBuilder),
+            (_, FileType::SingleFileScript) => Box::new(SingleFileScriptBuilder),
+            (_, FileType::Standalone) => Box::new(RustcCommandBuilder),
+            (RunnableKind::Binary { .. }, FileType::CargoProject) => Box::new(BinaryCommandBuilder),
+            (RunnableKind::DocTest { .. }, FileType::CargoProject) => Box::new(DocTestCommandBuilder),
+            (RunnableKind::Test { .. }, FileType::CargoProject) => Box::new(TestCommandBuilder),
+            (RunnableKind::ModuleTests { .. }, FileType::CargoProject) => Box::new(ModuleTestCommandBuilder),
+            (RunnableKind::Benchmark { .. }, FileType::CargoProject) => Box::new(BenchmarkCommandBuilder),
         };
         
         // Build the command
@@ -174,6 +171,7 @@ impl<'a> CommandBuilder<'a> {
             self.runnable,
             self.package_name.as_deref(),
             &config,
+            file_type,
         )
     }
 }
@@ -221,43 +219,97 @@ impl<'a> ConfigResolver<'a> {
     }
 }
 
+/// Helper functions for accessing nested config
+trait ConfigAccess {
+    fn get_channel<'a>(&self, config: &'a Config, file_type: FileType) -> Option<&'a str> {
+        match file_type {
+            FileType::CargoProject => config.cargo.as_ref()?.channel.as_deref(),
+            _ => None, // rustc and single_file_script don't have channel
+        }
+    }
+    
+    fn get_extra_args<'a>(&self, config: &'a Config, file_type: FileType) -> Option<&'a Vec<String>> {
+        match file_type {
+            FileType::CargoProject => config.cargo.as_ref()?.extra_args.as_ref(),
+            FileType::Standalone => config.rustc.as_ref()?.extra_args.as_ref(),
+            FileType::SingleFileScript => config.single_file_script.as_ref()?.extra_args.as_ref(),
+        }
+    }
+    
+    fn get_test_framework<'a>(&self, config: &'a Config, file_type: FileType) -> Option<&'a crate::config::TestFramework> {
+        match file_type {
+            FileType::CargoProject => config.cargo.as_ref()?.test_framework.as_ref(),
+            _ => None, // Only cargo projects have test frameworks
+        }
+    }
+    
+    fn get_binary_framework<'a>(&self, config: &'a Config, file_type: FileType) -> Option<&'a crate::config::TestFramework> {
+        match file_type {
+            FileType::CargoProject => config.cargo.as_ref()?.binary_framework.as_ref(),
+            _ => None, // Only cargo projects have binary frameworks
+        }
+    }
+    
+    fn get_extra_test_binary_args<'a>(&self, config: &'a Config, file_type: FileType) -> Option<&'a Vec<String>> {
+        match file_type {
+            FileType::CargoProject => config.cargo.as_ref()?.extra_test_binary_args.as_ref(),
+            _ => None, // Only cargo projects have test binary args
+        }
+    }
+}
+
 /// Internal trait for command builders
-trait CommandBuilderImpl {
+trait CommandBuilderImpl: ConfigAccess {
     fn build(
         &self,
         runnable: &Runnable,
         package_name: Option<&str>,
         config: &Config,
+        file_type: FileType,
     ) -> Result<CargoCommand>;
     
     /// Get override configuration for the runnable
-    fn get_override<'a>(&self, runnable: &Runnable, config: &'a Config) -> Option<&'a crate::config::Override> {
-        let identity = self.create_identity(runnable, config);
+    fn get_override<'a>(&self, runnable: &Runnable, config: &'a Config, file_type: FileType) -> Option<&'a crate::config::Override> {
+        let identity = self.create_identity(runnable, config, file_type);
         config.get_override_for(&identity)
     }
     
     /// Create function identity for override matching
-    fn create_identity(&self, runnable: &Runnable, config: &Config) -> FunctionIdentity;
+    fn create_identity(&self, runnable: &Runnable, config: &Config, file_type: FileType) -> FunctionIdentity;
     
     /// Apply common configuration
-    fn apply_common_config(&self, command: &mut CargoCommand, config: &Config) {
-        if let Some(extra_env) = &config.extra_env {
+    fn apply_common_config(&self, command: &mut CargoCommand, config: &Config, file_type: FileType) {
+        // Apply environment variables based on file type
+        let extra_env = match file_type {
+            FileType::CargoProject => config.cargo.as_ref().and_then(|c| c.extra_env.as_ref()),
+            FileType::Standalone => config.rustc.as_ref().and_then(|c| c.extra_env.as_ref()),
+            FileType::SingleFileScript => config.single_file_script.as_ref().and_then(|c| c.extra_env.as_ref()),
+        };
+        
+        if let Some(extra_env) = extra_env {
             for (key, value) in extra_env {
                 command.env.push((key.clone(), value.clone()));
             }
         }
     }
     
-    /// Apply features from configuration
-    fn apply_features(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config) {
+    /// Apply features from configuration (only for Cargo projects)
+    fn apply_features(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config, file_type: FileType) {
+        // Features are only applicable to Cargo projects
+        if file_type != FileType::CargoProject {
+            return;
+        }
+        
         // Collect features from different levels
         let mut collected_features: Option<Features> = None;
         
-        // Base features from config
-        collected_features = Features::merge(collected_features.as_ref(), config.features.as_ref());
+        // Base features from cargo config
+        if let Some(cargo_config) = &config.cargo {
+            collected_features = Features::merge(collected_features.as_ref(), cargo_config.features.as_ref());
+        }
         
         // Override features
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if override_config.force_replace_features.unwrap_or(false) {
                 // Replace features entirely
                 collected_features = override_config.features.clone();
@@ -277,12 +329,15 @@ trait CommandBuilderImpl {
 /// Doc test command builder
 struct DocTestCommandBuilder;
 
+impl ConfigAccess for DocTestCommandBuilder {}
+
 impl CommandBuilderImpl for DocTestCommandBuilder {
     fn build(
         &self,
         runnable: &Runnable,
         package_name: Option<&str>,
         config: &Config,
+        file_type: FileType,
     ) -> Result<CargoCommand> {
         let mut args = vec!["test".to_string(), "--doc".to_string()];
         
@@ -293,7 +348,7 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
         }
         
         // Apply configuration
-        self.apply_args(&mut args, runnable, config);
+        self.apply_args(&mut args, runnable, config, file_type);
         
         // Add doc test filter
         if let RunnableKind::DocTest { struct_or_module_name, method_name } = &runnable.kind {
@@ -307,17 +362,17 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
             args.push(test_path);
             
             // Apply test binary args
-            self.apply_test_binary_args(&mut args, runnable, config);
+            self.apply_test_binary_args(&mut args, runnable, config, file_type);
         }
         
         let mut command = CargoCommand::new(args);
-        self.apply_common_config(&mut command, config);
-        self.apply_env(&mut command, runnable, config);
+        self.apply_common_config(&mut command, config, file_type);
+        self.apply_env(&mut command, runnable, config, file_type);
         
         Ok(command)
     }
     
-    fn create_identity(&self, runnable: &Runnable, config: &Config) -> FunctionIdentity {
+    fn create_identity(&self, runnable: &Runnable, _config: &Config, file_type: FileType) -> FunctionIdentity {
         if let RunnableKind::DocTest { struct_or_module_name, method_name } = &runnable.kind {
             let function_name = if let Some(method) = method_name {
                 Some(format!("{}::{}", struct_or_module_name, method))
@@ -326,10 +381,11 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
             };
             
             FunctionIdentity {
-                package: config.package.clone(),
+                package: _config.cargo.as_ref().and_then(|c| c.package.clone()),
                 module_path: if runnable.module_path.is_empty() { None } else { Some(runnable.module_path.clone()) },
                 file_path: Some(runnable.file_path.clone()),
                 function_name,
+                file_type: Some(file_type),
             }
         } else {
             FunctionIdentity::default()
@@ -338,40 +394,40 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
 }
 
 impl DocTestCommandBuilder {
-    fn apply_args(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config) {
+    fn apply_args(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply features first (so they come before other args)
-        self.apply_features(args, runnable, config);
+        self.apply_features(args, runnable, config, file_type);
         
         // Apply override args
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_args) = &override_config.extra_args {
                 args.extend(extra_args.clone());
             }
         }
         
         // Apply global args
-        if let Some(extra_args) = &config.extra_args {
+        if let Some(extra_args) = self.get_extra_args(config, file_type) {
             args.extend(extra_args.clone());
         }
     }
     
-    fn apply_test_binary_args(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config) {
+    fn apply_test_binary_args(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply override test binary args
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_args) = &override_config.extra_test_binary_args {
                 args.extend(extra_args.clone());
             }
         }
         
         // Apply global test binary args
-        if let Some(extra_args) = &config.extra_test_binary_args {
+        if let Some(extra_args) = self.get_extra_test_binary_args(config, file_type) {
             args.extend(extra_args.clone());
         }
     }
     
-    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
+    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply override env vars
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_env) = &override_config.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -384,21 +440,24 @@ impl DocTestCommandBuilder {
 /// Test command builder with test framework support
 struct TestCommandBuilder;
 
+impl ConfigAccess for TestCommandBuilder {}
+
 impl CommandBuilderImpl for TestCommandBuilder {
     fn build(
         &self,
         runnable: &Runnable,
         package_name: Option<&str>,
         config: &Config,
+        file_type: FileType,
     ) -> Result<CargoCommand> {
         let mut args = vec![];
         
         // Handle test framework configuration
-        if let Some(test_framework) = &config.test_framework {
+        if let Some(test_framework) = self.get_test_framework(config, file_type) {
             // Add channel
             if let Some(channel) = &test_framework.channel {
                 args.push(format!("+{}", channel));
-            } else if let Some(channel) = &config.channel {
+            } else if let Some(channel) = self.get_channel(config, file_type) {
                 args.push(format!("+{}", channel));
             }
             
@@ -420,7 +479,7 @@ impl CommandBuilderImpl for TestCommandBuilder {
             }
         } else {
             // Standard test command
-            if let Some(channel) = &config.channel {
+            if let Some(channel) = self.get_channel(config, file_type) {
                 args.push(format!("+{}", channel));
             }
             args.push("test".to_string());
@@ -436,15 +495,15 @@ impl CommandBuilderImpl for TestCommandBuilder {
         self.add_target(&mut args, &runnable.file_path, package_name)?;
         
         // Apply configuration
-        self.apply_args(&mut args, runnable, config);
+        self.apply_args(&mut args, runnable, config, file_type);
         
         // Add test filter
-        self.add_test_filter(&mut args, runnable, config);
+        self.add_test_filter(&mut args, runnable, config, file_type);
         
         let mut command = CargoCommand::new(args);
         
         // Apply test framework env
-        if let Some(test_framework) = &config.test_framework {
+        if let Some(test_framework) = self.get_test_framework(config, file_type) {
             if let Some(extra_env) = &test_framework.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -452,21 +511,22 @@ impl CommandBuilderImpl for TestCommandBuilder {
             }
         }
         
-        self.apply_common_config(&mut command, config);
-        self.apply_env(&mut command, runnable, config);
+        self.apply_common_config(&mut command, config, file_type);
+        self.apply_env(&mut command, runnable, config, file_type);
         
         Ok(command)
     }
     
-    fn create_identity(&self, runnable: &Runnable, config: &Config) -> FunctionIdentity {
+    fn create_identity(&self, runnable: &Runnable, _config: &Config, file_type: FileType) -> FunctionIdentity {
         FunctionIdentity {
-            package: config.package.clone(),
+            package: _config.cargo.as_ref().and_then(|c| c.package.clone()),
             module_path: if runnable.module_path.is_empty() { None } else { Some(runnable.module_path.clone()) },
             file_path: Some(runnable.file_path.clone()),
             function_name: match &runnable.kind {
                 RunnableKind::Test { test_name, .. } => Some(test_name.clone()),
                 _ => None,
             },
+            file_type: Some(file_type),
         }
     }
 }
@@ -498,24 +558,24 @@ impl TestCommandBuilder {
         Ok(())
     }
     
-    fn apply_args(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config) {
+    fn apply_args(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply features first (so they come before other args)
-        self.apply_features(args, runnable, config);
+        self.apply_features(args, runnable, config, file_type);
         
         // Apply override args
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_args) = &override_config.extra_args {
                 args.extend(extra_args.clone());
             }
         }
         
         // Apply global args
-        if let Some(extra_args) = &config.extra_args {
+        if let Some(extra_args) = self.get_extra_args(config, file_type) {
             args.extend(extra_args.clone());
         }
     }
     
-    fn add_test_filter(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config) {
+    fn add_test_filter(&self, args: &mut Vec<String>, runnable: &Runnable, config: &Config, file_type: FileType) {
         if let RunnableKind::Test { test_name, .. } = &runnable.kind {
             args.push("--".to_string());
             
@@ -528,21 +588,21 @@ impl TestCommandBuilder {
             args.push("--exact".to_string());
             
             // Apply test binary args
-            if let Some(override_config) = self.get_override(runnable, config) {
+            if let Some(override_config) = self.get_override(runnable, config, file_type) {
                 if let Some(extra_args) = &override_config.extra_test_binary_args {
                     args.extend(extra_args.clone());
                 }
             }
             
-            if let Some(extra_args) = &config.extra_test_binary_args {
+            if let Some(extra_args) = self.get_extra_test_binary_args(config, file_type) {
                 args.extend(extra_args.clone());
             }
         }
     }
     
-    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
+    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply override env vars (highest priority)
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_env) = &override_config.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -555,20 +615,23 @@ impl TestCommandBuilder {
 /// Binary command builder with binary_framework support
 struct BinaryCommandBuilder;
 
+impl ConfigAccess for BinaryCommandBuilder {}
+
 impl CommandBuilderImpl for BinaryCommandBuilder {
     fn build(
         &self,
         runnable: &Runnable,
         package_name: Option<&str>,
         config: &Config,
+        file_type: FileType,
     ) -> Result<CargoCommand> {
         let mut args = vec![];
         
-        debug!("BinaryCommandBuilder: config.binary_framework = {:?}", config.binary_framework);
-        debug!("BinaryCommandBuilder: runnable.module_path = '{}', config.package = {:?}", runnable.module_path, config.package);
+        debug!("BinaryCommandBuilder: binary_framework = {:?}", self.get_binary_framework(config, file_type));
+        debug!("BinaryCommandBuilder: runnable.module_path = '{}', package = {:?}", runnable.module_path, config.cargo.as_ref().and_then(|c| c.package.as_ref()));
         
         // Check for binary framework configuration
-        if let Some(binary_framework) = &config.binary_framework {
+        if let Some(binary_framework) = self.get_binary_framework(config, file_type) {
             // Check if we're using a custom command
             let is_custom_command = binary_framework.command.as_deref().map_or(false, |cmd| cmd != "cargo");
             
@@ -576,7 +639,7 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
             if !is_custom_command {
                 if let Some(channel) = &binary_framework.channel {
                     args.push(format!("+{}", channel));
-                } else if let Some(channel) = &config.channel {
+                } else if let Some(channel) = self.get_channel(config, file_type) {
                     args.push(format!("+{}", channel));
                 }
             }
@@ -599,21 +662,21 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
             }
         } else {
             // Standard cargo run
-            if let Some(channel) = &config.channel {
+            if let Some(channel) = self.get_channel(config, file_type) {
                 args.push(format!("+{}", channel));
             }
             args.push("run".to_string());
         }
         
         // Determine if we're using standard cargo command
-        let is_cargo_command = if let Some(binary_framework) = &config.binary_framework {
+        let is_cargo_command = if let Some(binary_framework) = self.get_binary_framework(config, file_type) {
             binary_framework.command.as_deref() == Some("cargo") || binary_framework.command.is_none()
         } else {
             true
         };
         
         // Determine if we're using standard run subcommand
-        let is_run_subcommand = if let Some(binary_framework) = &config.binary_framework {
+        let is_run_subcommand = if let Some(binary_framework) = self.get_binary_framework(config, file_type) {
             binary_framework.subcommand.as_deref() == Some("run") || binary_framework.subcommand.is_none()
         } else {
             true
@@ -666,7 +729,7 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         
         // Apply configuration overrides
         debug!("BinaryCommandBuilder checking for overrides");
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             debug!("Found override config: {:?}", override_config);
             if let Some(extra_args) = &override_config.extra_args {
                 debug!("Applying extra_args from override: {:?}", extra_args);
@@ -677,13 +740,13 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         }
         
         // Apply global extra args
-        if let Some(extra_args) = &config.extra_args {
+        if let Some(extra_args) = self.get_extra_args(config, file_type) {
             args.extend(extra_args.clone());
         }
         
         // Create command
         // Create the appropriate command type
-        let mut command = if let Some(binary_framework) = &config.binary_framework {
+        let mut command = if let Some(binary_framework) = self.get_binary_framework(config, file_type) {
             if let Some(cmd) = &binary_framework.command {
                 if cmd != "cargo" {
                     // Use Shell command for non-cargo commands
@@ -699,7 +762,7 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         };
         
         // Apply binary framework env
-        if let Some(binary_framework) = &config.binary_framework {
+        if let Some(binary_framework) = self.get_binary_framework(config, file_type) {
             if let Some(extra_env) = &binary_framework.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -707,21 +770,22 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
             }
         }
         
-        self.apply_common_config(&mut command, config);
-        self.apply_env(&mut command, runnable, config);
+        self.apply_common_config(&mut command, config, file_type);
+        self.apply_env(&mut command, runnable, config, file_type);
         
         Ok(command)
     }
     
-    fn create_identity(&self, runnable: &Runnable, config: &Config) -> FunctionIdentity {
+    fn create_identity(&self, runnable: &Runnable, _config: &Config, file_type: FileType) -> FunctionIdentity {
         let identity = FunctionIdentity {
-            package: config.package.clone(),
+            package: _config.cargo.as_ref().and_then(|c| c.package.clone()),
             module_path: if runnable.module_path.is_empty() { None } else { Some(runnable.module_path.clone()) },
             file_path: Some(runnable.file_path.clone()),
             function_name: match &runnable.kind {
                 RunnableKind::Binary { bin_name } => bin_name.clone(),
                 _ => None,
             },
+            file_type: Some(file_type),
         };
         debug!("BinaryCommandBuilder creating identity: {:?}", identity);
         identity
@@ -729,9 +793,9 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
 }
 
 impl BinaryCommandBuilder {
-    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
+    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply override env vars (highest priority)
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_env) = &override_config.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -744,21 +808,24 @@ impl BinaryCommandBuilder {
 /// Module test command builder (runs all tests in a module)
 struct ModuleTestCommandBuilder;
 
+impl ConfigAccess for ModuleTestCommandBuilder {}
+
 impl CommandBuilderImpl for ModuleTestCommandBuilder {
     fn build(
         &self,
         runnable: &Runnable,
         package_name: Option<&str>,
         config: &Config,
+        file_type: FileType,
     ) -> Result<CargoCommand> {
         let mut args = vec![];
         
         // Handle test framework configuration (same as TestCommandBuilder)
-        if let Some(test_framework) = &config.test_framework {
+        if let Some(test_framework) = self.get_test_framework(config, file_type) {
             // Add channel
             if let Some(channel) = &test_framework.channel {
                 args.push(format!("+{}", channel));
-            } else if let Some(channel) = &config.channel {
+            } else if let Some(channel) = self.get_channel(config, file_type) {
                 args.push(format!("+{}", channel));
             }
             
@@ -775,7 +842,7 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
             }
         } else {
             // Standard test command
-            if let Some(channel) = &config.channel {
+            if let Some(channel) = self.get_channel(config, file_type) {
                 args.push(format!("+{}", channel));
             }
             args.push("test".to_string());
@@ -811,14 +878,14 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
         }
         
         // Apply configuration overrides
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_args) = &override_config.extra_args {
                 args.extend(extra_args.clone());
             }
         }
         
         // Apply global extra args
-        if let Some(extra_args) = &config.extra_args {
+        if let Some(extra_args) = self.get_extra_args(config, file_type) {
             args.extend(extra_args.clone());
         }
         
@@ -828,14 +895,14 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
             args.push(module_name.clone());
             
             // Apply test binary args from override
-            if let Some(override_config) = self.get_override(runnable, config) {
+            if let Some(override_config) = self.get_override(runnable, config, file_type) {
                 if let Some(extra_args) = &override_config.extra_test_binary_args {
                     args.extend(extra_args.clone());
                 }
             }
             
             // Apply global test binary args
-            if let Some(extra_args) = &config.extra_test_binary_args {
+            if let Some(extra_args) = self.get_extra_test_binary_args(config, file_type) {
                 args.extend(extra_args.clone());
             }
         }
@@ -843,7 +910,7 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
         let mut command = CargoCommand::new(args);
         
         // Apply test framework env
-        if let Some(test_framework) = &config.test_framework {
+        if let Some(test_framework) = self.get_test_framework(config, file_type) {
             if let Some(extra_env) = &test_framework.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -851,29 +918,30 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
             }
         }
         
-        self.apply_common_config(&mut command, config);
-        self.apply_env(&mut command, runnable, config);
+        self.apply_common_config(&mut command, config, file_type);
+        self.apply_env(&mut command, runnable, config, file_type);
         
         Ok(command)
     }
     
-    fn create_identity(&self, runnable: &Runnable, config: &Config) -> FunctionIdentity {
+    fn create_identity(&self, runnable: &Runnable, _config: &Config, file_type: FileType) -> FunctionIdentity {
         FunctionIdentity {
-            package: config.package.clone(),
+            package: _config.cargo.as_ref().and_then(|c| c.package.clone()),
             module_path: if runnable.module_path.is_empty() { None } else { Some(runnable.module_path.clone()) },
             file_path: Some(runnable.file_path.clone()),
             function_name: match &runnable.kind {
                 RunnableKind::ModuleTests { module_name } => Some(module_name.clone()),
                 _ => None,
             },
+            file_type: Some(file_type),
         }
     }
 }
 
 impl ModuleTestCommandBuilder {
-    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
+    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply override env vars (highest priority)
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_env) = &override_config.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -886,17 +954,20 @@ impl ModuleTestCommandBuilder {
 // Benchmark command builder
 struct BenchmarkCommandBuilder;
 
+impl ConfigAccess for BenchmarkCommandBuilder {}
+
 impl CommandBuilderImpl for BenchmarkCommandBuilder {
     fn build(
         &self,
         runnable: &Runnable,
         package_name: Option<&str>,
         config: &Config,
+        file_type: FileType,
     ) -> Result<CargoCommand> {
         let mut args = vec![];
         
         // Add channel
-        if let Some(channel) = &config.channel {
+        if let Some(channel) = self.get_channel(config, file_type) {
             args.push(format!("+{}", channel));
         }
         
@@ -919,14 +990,14 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
             }
             
             // Apply configuration overrides
-            if let Some(override_config) = self.get_override(runnable, config) {
+            if let Some(override_config) = self.get_override(runnable, config, file_type) {
                 if let Some(extra_args) = &override_config.extra_args {
                     args.extend(extra_args.clone());
                 }
             }
             
             // Apply global extra args
-            if let Some(extra_args) = &config.extra_args {
+            if let Some(extra_args) = self.get_extra_args(config, file_type) {
                 args.extend(extra_args.clone());
             }
             
@@ -935,41 +1006,42 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
             args.push(bench_name.clone());
             
             // Apply test binary args
-            if let Some(override_config) = self.get_override(runnable, config) {
+            if let Some(override_config) = self.get_override(runnable, config, file_type) {
                 if let Some(extra_args) = &override_config.extra_test_binary_args {
                     args.extend(extra_args.clone());
                 }
             }
             
-            if let Some(extra_args) = &config.extra_test_binary_args {
+            if let Some(extra_args) = self.get_extra_test_binary_args(config, file_type) {
                 args.extend(extra_args.clone());
             }
         }
         
         let mut command = CargoCommand::new(args);
-        self.apply_common_config(&mut command, config);
-        self.apply_env(&mut command, runnable, config);
+        self.apply_common_config(&mut command, config, file_type);
+        self.apply_env(&mut command, runnable, config, file_type);
         
         Ok(command)
     }
     
-    fn create_identity(&self, runnable: &Runnable, config: &Config) -> FunctionIdentity {
+    fn create_identity(&self, runnable: &Runnable, _config: &Config, file_type: FileType) -> FunctionIdentity {
         FunctionIdentity {
-            package: config.package.clone(),
+            package: _config.cargo.as_ref().and_then(|c| c.package.clone()),
             module_path: if runnable.module_path.is_empty() { None } else { Some(runnable.module_path.clone()) },
             file_path: Some(runnable.file_path.clone()),
             function_name: match &runnable.kind {
                 RunnableKind::Benchmark { bench_name } => Some(bench_name.clone()),
                 _ => None,
             },
+            file_type: Some(file_type),
         }
     }
 }
 
 impl BenchmarkCommandBuilder {
-    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
+    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply override env vars (highest priority)
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_env) = &override_config.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -982,12 +1054,15 @@ impl BenchmarkCommandBuilder {
 // Rustc command builder for standalone files
 struct RustcCommandBuilder;
 
+impl ConfigAccess for RustcCommandBuilder {}
+
 impl CommandBuilderImpl for RustcCommandBuilder {
     fn build(
         &self,
         runnable: &Runnable,
         _package_name: Option<&str>,
         config: &Config,
+        file_type: FileType,
     ) -> Result<CargoCommand> {
         let file_name = runnable.file_path
             .file_stem()
@@ -1006,16 +1081,16 @@ impl CommandBuilderImpl for RustcCommandBuilder {
                 ];
                 
                 // Apply features
-                self.apply_features(&mut args, runnable, config);
+                self.apply_features(&mut args, runnable, config, file_type);
                 
                 // Apply extra args
-                if let Some(override_config) = self.get_override(runnable, config) {
+                if let Some(override_config) = self.get_override(runnable, config, file_type) {
                     if let Some(extra_args) = &override_config.extra_args {
                         args.extend(extra_args.clone());
                     }
                 }
                 
-                if let Some(extra_args) = &config.extra_args {
+                if let Some(extra_args) = self.get_extra_args(config, file_type) {
                     args.extend(extra_args.clone());
                 }
                 
@@ -1024,8 +1099,8 @@ impl CommandBuilderImpl for RustcCommandBuilder {
                     .with_test_filter(test_name.clone());
                 
                 // Apply env vars
-                self.apply_common_config(&mut command, config);
-                self.apply_env(&mut command, runnable, config);
+                self.apply_common_config(&mut command, config, file_type);
+                self.apply_env(&mut command, runnable, config, file_type);
                 
                 Ok(command)
             }
@@ -1039,24 +1114,24 @@ impl CommandBuilderImpl for RustcCommandBuilder {
                 ];
                 
                 // Apply features
-                self.apply_features(&mut args, runnable, config);
+                self.apply_features(&mut args, runnable, config, file_type);
                 
                 // Apply extra args
-                if let Some(override_config) = self.get_override(runnable, config) {
+                if let Some(override_config) = self.get_override(runnable, config, file_type) {
                     if let Some(extra_args) = &override_config.extra_args {
                         args.extend(extra_args.clone());
                     }
                 }
                 
-                if let Some(extra_args) = &config.extra_args {
+                if let Some(extra_args) = self.get_extra_args(config, file_type) {
                     args.extend(extra_args.clone());
                 }
                 
                 let mut command = CargoCommand::new_rustc(args);
                 
                 // Apply env vars
-                self.apply_common_config(&mut command, config);
-                self.apply_env(&mut command, runnable, config);
+                self.apply_common_config(&mut command, config, file_type);
+                self.apply_env(&mut command, runnable, config, file_type);
                 
                 Ok(command)
             }
@@ -1069,24 +1144,24 @@ impl CommandBuilderImpl for RustcCommandBuilder {
                 ];
                 
                 // Apply features
-                self.apply_features(&mut args, runnable, config);
+                self.apply_features(&mut args, runnable, config, file_type);
                 
                 // Apply extra args
-                if let Some(override_config) = self.get_override(runnable, config) {
+                if let Some(override_config) = self.get_override(runnable, config, file_type) {
                     if let Some(extra_args) = &override_config.extra_args {
                         args.extend(extra_args.clone());
                     }
                 }
                 
-                if let Some(extra_args) = &config.extra_args {
+                if let Some(extra_args) = self.get_extra_args(config, file_type) {
                     args.extend(extra_args.clone());
                 }
                 
                 let mut command = CargoCommand::new_rustc(args);
                 
                 // Apply env vars
-                self.apply_common_config(&mut command, config);
-                self.apply_env(&mut command, runnable, config);
+                self.apply_common_config(&mut command, config, file_type);
+                self.apply_env(&mut command, runnable, config, file_type);
                 
                 Ok(command)
             }
@@ -1094,20 +1169,21 @@ impl CommandBuilderImpl for RustcCommandBuilder {
         }
     }
     
-    fn create_identity(&self, runnable: &Runnable, config: &Config) -> FunctionIdentity {
+    fn create_identity(&self, runnable: &Runnable, _config: &Config, file_type: FileType) -> FunctionIdentity {
         FunctionIdentity {
-            package: config.package.clone(),
+            package: None, // Standalone files don't have packages
             module_path: None,
             file_path: Some(runnable.file_path.clone()),
             function_name: None,
+            file_type: Some(file_type),
         }
     }
 }
 
 impl RustcCommandBuilder {
-    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
+    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply override env vars (highest priority)
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_env) = &override_config.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));
@@ -1120,12 +1196,15 @@ impl RustcCommandBuilder {
 // Single file script builder for cargo script files
 struct SingleFileScriptBuilder;
 
+impl ConfigAccess for SingleFileScriptBuilder {}
+
 impl CommandBuilderImpl for SingleFileScriptBuilder {
     fn build(
         &self,
         runnable: &Runnable,
         _package_name: Option<&str>,
         config: &Config,
+        file_type: FileType,
     ) -> Result<CargoCommand> {
         match &runnable.kind {
             RunnableKind::SingleFileScript { shebang } => {
@@ -1136,24 +1215,24 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                 args.push(runnable.file_path.to_str().unwrap_or("").to_string());
                 
                 // Apply features
-                self.apply_features(&mut args, runnable, config);
+                self.apply_features(&mut args, runnable, config, file_type);
                 
                 // Apply extra args
-                if let Some(override_config) = self.get_override(runnable, config) {
+                if let Some(override_config) = self.get_override(runnable, config, file_type) {
                     if let Some(extra_args) = &override_config.extra_args {
                         args.extend(extra_args.clone());
                     }
                 }
                 
-                if let Some(extra_args) = &config.extra_args {
+                if let Some(extra_args) = self.get_extra_args(config, file_type) {
                     args.extend(extra_args.clone());
                 }
                 
                 let mut command = CargoCommand::new(args);
                 
                 // Apply env vars
-                self.apply_common_config(&mut command, config);
-                self.apply_env(&mut command, runnable, config);
+                self.apply_common_config(&mut command, config, file_type);
+                self.apply_env(&mut command, runnable, config, file_type);
                 
                 Ok(command)
             }
@@ -1162,7 +1241,7 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                 let mut args = Vec::new();
                 
                 // Check for test framework config
-                if let Some(test_framework) = &config.test_framework {
+                if let Some(test_framework) = self.get_test_framework(config, file_type) {
                     // Use test framework channel if specified
                     if let Some(channel) = &test_framework.channel {
                         args.push(format!("+{}", channel));
@@ -1179,24 +1258,24 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                 args.push(runnable.file_path.to_str().unwrap_or("").to_string());
                 
                 // Apply test framework args if configured
-                if let Some(test_framework) = &config.test_framework {
+                if let Some(test_framework) = self.get_test_framework(config, file_type) {
                     if let Some(extra_args) = &test_framework.extra_args {
                         args.extend(extra_args.clone());
                     }
                 }
                 
                 // Apply features
-                self.apply_features(&mut args, runnable, config);
+                self.apply_features(&mut args, runnable, config, file_type);
                 
                 // Apply extra args from overrides
-                if let Some(override_config) = self.get_override(runnable, config) {
+                if let Some(override_config) = self.get_override(runnable, config, file_type) {
                     if let Some(extra_args) = &override_config.extra_args {
                         args.extend(extra_args.clone());
                     }
                 }
                 
                 // Apply global extra args
-                if let Some(extra_args) = &config.extra_args {
+                if let Some(extra_args) = self.get_extra_args(config, file_type) {
                     args.extend(extra_args.clone());
                 }
                 
@@ -1206,20 +1285,20 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                 
                 // Test framework doesn't have extra_test_binary_args, only extra_args
                 
-                if let Some(override_config) = self.get_override(runnable, config) {
+                if let Some(override_config) = self.get_override(runnable, config, file_type) {
                     if let Some(extra_args) = &override_config.extra_test_binary_args {
                         args.extend(extra_args.clone());
                     }
                 }
                 
-                if let Some(extra_args) = &config.extra_test_binary_args {
+                if let Some(extra_args) = self.get_extra_test_binary_args(config, file_type) {
                     args.extend(extra_args.clone());
                 }
                 
                 let mut command = CargoCommand::new_single_file_script_test(args);
                 
                 // Apply test framework env
-                if let Some(test_framework) = &config.test_framework {
+                if let Some(test_framework) = self.get_test_framework(config, file_type) {
                     if let Some(extra_env) = &test_framework.extra_env {
                         for (key, value) in extra_env {
                             command.env.push((key.clone(), value.clone()));
@@ -1227,8 +1306,8 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                     }
                 }
                 
-                self.apply_common_config(&mut command, config);
-                self.apply_env(&mut command, runnable, config);
+                self.apply_common_config(&mut command, config, file_type);
+                self.apply_env(&mut command, runnable, config, file_type);
                 
                 Ok(command)
             }
@@ -1236,20 +1315,21 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
         }
     }
     
-    fn create_identity(&self, runnable: &Runnable, config: &Config) -> FunctionIdentity {
+    fn create_identity(&self, runnable: &Runnable, _config: &Config, file_type: FileType) -> FunctionIdentity {
         FunctionIdentity {
-            package: config.package.clone(),
+            package: None, // Standalone files don't have packages
             module_path: None,
             file_path: Some(runnable.file_path.clone()),
             function_name: None,
+            file_type: Some(file_type),
         }
     }
 }
 
 impl SingleFileScriptBuilder {
-    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config) {
+    fn apply_env(&self, command: &mut CargoCommand, runnable: &Runnable, config: &Config, file_type: FileType) {
         // Apply override env vars (highest priority)
-        if let Some(override_config) = self.get_override(runnable, config) {
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(extra_env) = &override_config.extra_env {
                 for (key, value) in extra_env {
                     command.env.push((key.clone(), value.clone()));

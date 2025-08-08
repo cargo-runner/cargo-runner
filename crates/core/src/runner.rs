@@ -213,7 +213,7 @@ impl CargoRunner {
         let package_name = self.get_package_name(&resolved_path)?;
         let project_root = self.project_root.as_deref();
         
-        debug!("get_fallback_command: config.binary_framework={:?}", self.config.binary_framework);
+        debug!("get_fallback_command: cargo.binary_framework={:?}", self.config.cargo.as_ref().and_then(|c| c.binary_framework.as_ref()));
         
         crate::command::fallback::generate_fallback_command(
             &resolved_path,
@@ -307,14 +307,14 @@ impl CargoRunner {
         let mut merger = ConfigMerger::new();
         merger.load_configs_for_path(file_path)?;
         self.config = merger.get_merged_config();
-        debug!("Reloaded config for path {:?}: binary_framework={:?}", file_path, self.config.binary_framework);
+        debug!("Reloaded config for path {:?}: cargo.binary_framework={:?}", file_path, self.config.cargo.as_ref().and_then(|c| c.binary_framework.as_ref()));
         Ok(())
     }
 
     /// Resolve a file path using linked_projects if necessary
     fn resolve_file_path(&self, file_path: &Path) -> Result<(PathBuf, Option<PathBuf>)> {
         debug!("Resolving file path: {:?}", file_path);
-        debug!("Current config has linked_projects: {:?}", self.config.linked_projects.is_some());
+        debug!("Current config has linked_projects: {:?}", self.config.cargo.as_ref().and_then(|c| c.linked_projects.as_ref()).is_some());
         
         // If it's already an absolute path and exists, use it directly
         if file_path.is_absolute() && file_path.exists() {
@@ -329,7 +329,7 @@ impl CargoRunner {
             let candidate = cwd.join(file_path);
             if candidate.exists() {
                 // Check if we're in a temp directory and have linked_projects
-                if self.config.linked_projects.is_some() && self.project_root.is_some() {
+                if self.config.cargo.as_ref().and_then(|c| c.linked_projects.as_ref()).is_some() && self.project_root.is_some() {
                     // Skip current directory resolution if we have linked projects
                     debug!("Skipping current directory resolution due to linked_projects");
                 } else {
@@ -341,17 +341,18 @@ impl CargoRunner {
         }
 
         // Try to find in linked_projects
-        if let Some(linked_projects) = &self.config.linked_projects {
-            debug!("Checking {} linked projects", linked_projects.len());
-            debug!("Checking {} linked projects", linked_projects.len());
-            for linked_project in linked_projects {
-                let cargo_toml_path = Path::new(linked_project);
-                if let Some(project_dir) = cargo_toml_path.parent() {
-                    let candidate = project_dir.join(file_path);
-                    debug!("Checking candidate: {:?}", candidate);
-                    if candidate.exists() {
-                        debug!("Found match in linked project: {:?}", project_dir);
-                        return Ok((candidate, Some(project_dir.to_path_buf())));
+        if let Some(cargo) = &self.config.cargo {
+            if let Some(linked_projects) = &cargo.linked_projects {
+                debug!("Checking {} linked projects", linked_projects.len());
+                for linked_project in linked_projects {
+                    let cargo_toml_path = Path::new(linked_project);
+                    if let Some(project_dir) = cargo_toml_path.parent() {
+                        let candidate = project_dir.join(file_path);
+                        debug!("Checking candidate: {:?}", candidate);
+                        if candidate.exists() {
+                            debug!("Found match in linked project: {:?}", project_dir);
+                            return Ok((candidate, Some(project_dir.to_path_buf())));
+                        }
                     }
                 }
             }
@@ -369,7 +370,7 @@ impl CargoRunner {
             
             // Even if file doesn't exist, if we have PROJECT_ROOT and no linked_projects,
             // use PROJECT_ROOT as the working directory
-            if self.config.linked_projects.as_ref().map(|lp| lp.is_empty()).unwrap_or(true) {
+            if self.config.cargo.as_ref().and_then(|c| c.linked_projects.as_ref()).as_ref().map(|lp| lp.is_empty()).unwrap_or(true) {
                 return Ok((file_path.to_path_buf(), Some(project_root.clone())));
             }
         }
@@ -438,6 +439,13 @@ impl CargoRunner {
     
     /// Get the override configuration for a specific runnable
     pub fn get_override_for_runnable(&self, runnable: &Runnable) -> Option<&crate::config::Override> {
+        // Determine file type
+        let file_type = match &runnable.kind {
+            RunnableKind::SingleFileScript { .. } => crate::types::FileType::SingleFileScript,
+            RunnableKind::Standalone { .. } => crate::types::FileType::Standalone,
+            _ => crate::types::FileType::CargoProject,
+        };
+        
         // Create a FunctionIdentity from the runnable
         let identity = crate::types::FunctionIdentity {
             package: self.get_package_name(&runnable.file_path).ok().flatten(),
@@ -455,6 +463,7 @@ impl CargoRunner {
                 },
                 _ => None,
             },
+            file_type: Some(file_type),
         };
         
         self.config.get_override_for(&identity)
@@ -498,7 +507,7 @@ impl CargoRunner {
         // Ensure config is loaded for the resolved path
         self.ensure_project_root(&resolved_path)?;
         
-        debug!("After ensure_project_root: config.binary_framework={:?}", self.config.binary_framework);
+        debug!("After ensure_project_root: cargo.binary_framework={:?}", self.config.cargo.as_ref().and_then(|c| c.binary_framework.as_ref()));
 
         let command = if let Some(line_num) = line {
             // Line is already 0-based from the CLI

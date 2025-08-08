@@ -3,37 +3,20 @@ use crate::{
     types::FunctionIdentity,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::{Features, Override, TestFramework};
+use super::{CargoConfig, Override, RustcConfig, SingleFileScriptConfig};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Config {
-    // Global runner configuration
+    // Command-type specific configurations
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
+    pub cargo: Option<CargoConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub subcommand: Option<String>,
+    pub rustc: Option<RustcConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub channel: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub features: Option<Features>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra_args: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra_env: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra_test_binary_args: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub test_framework: Option<TestFramework>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub binary_framework: Option<TestFramework>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub linked_projects: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub package: Option<String>,
+    pub single_file_script: Option<SingleFileScriptConfig>,
 
     // Overrides for specific functions
     #[serde(default)]
@@ -93,15 +76,19 @@ mod tests {
     #[test]
     fn test_config_serialization() {
         let config = Config {
-            command: Some("cargo".to_string()),
-            channel: Some("nightly".to_string()),
-            extra_args: Some(vec!["--release".to_string()]),
+            cargo: Some(CargoConfig {
+                command: Some("cargo".to_string()),
+                channel: Some("nightly".to_string()),
+                extra_args: Some(vec!["--release".to_string()]),
+                ..Default::default()
+            }),
             overrides: vec![Override {
                 identity: FunctionIdentity {
                     package: Some("my_crate".to_string()),
                     module_path: Some("my_crate::tests::unit".to_string()),
                     file_path: None,
                     function_name: Some("test_addition".to_string()),
+                    file_type: None,
                 },
                 features: None,
                 force_replace_features: Some(false),
@@ -117,6 +104,9 @@ mod tests {
                     "debug".to_string(),
                 )])),
                 force_replace_env: Some(false),
+                cargo: None,
+                rustc: None,
+                single_file_script: None,
             }],
             cache_enabled: true,
             cache_dir: Some(PathBuf::from("/tmp/cargo-runner-cache")),
@@ -131,7 +121,7 @@ mod tests {
         assert_eq!(parsed.overrides.len(), 1);
         // cache_enabled is skipped in serialization, so it will be default (false)
         assert!(!parsed.cache_enabled);
-        assert_eq!(parsed.channel, Some("nightly".to_string()));
+        assert_eq!(parsed.cargo.as_ref().unwrap().channel, Some("nightly".to_string()));
     }
 
     #[test]
