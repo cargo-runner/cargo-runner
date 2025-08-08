@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use std::path::Path;
 use std::process::Command;
 use tracing::debug;
 
@@ -33,6 +34,10 @@ enum Commands {
     Analyze {
         /// Path to the Rust file to analyze
         filepath: String,
+        
+        /// Show verbose JSON output
+        #[arg(short = 'v', long = "verbose")]
+        verbose: bool,
     },
     /// Run code at specific location
     Run {
@@ -62,14 +67,14 @@ fn main() -> Result<()> {
             let cargo = Cargo::parse();
             let CargoCommand::Runner(runner) = cargo.command;
             match runner.command {
-                Commands::Analyze { filepath } => analyze_command(&filepath),
+                Commands::Analyze { filepath, verbose } => analyze_command(&filepath, verbose),
                 Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
             }
         } else {
             // Being invoked directly as "cargo-runner"
             let runner = Runner::parse();
             match runner.command {
-                Commands::Analyze { filepath } => analyze_command(&filepath),
+                Commands::Analyze { filepath, verbose } => analyze_command(&filepath, verbose),
                 Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
             }
         }
@@ -77,22 +82,230 @@ fn main() -> Result<()> {
         // Fallback to direct parsing
         let runner = Runner::parse();
         match runner.command {
-            Commands::Analyze { filepath } => analyze_command(&filepath),
+            Commands::Analyze { filepath, verbose } => analyze_command(&filepath, verbose),
             Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
         }
     }
 }
 
-fn analyze_command(filepath: &str) -> Result<()> {
+fn analyze_command(filepath: &str, verbose: bool) -> Result<()> {
     debug!("Analyzing file: {}", filepath);
     
     let mut runner = cargo_runner_core::CargoRunner::new()?;
-    let runnables = runner.analyze(filepath)?;
     
-    // Print the analysis results
-    println!("{runnables}");
+    if verbose {
+        // Show JSON output for verbose mode
+        let runnables = runner.analyze(filepath)?;
+        println!("{runnables}");
+    } else {
+        // Show formatted output
+        print_formatted_analysis(&mut runner, filepath)?;
+    }
     
     Ok(())
+}
+
+fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepath: &str) -> Result<()> {
+    println!("🔍 Analyzing: {}", filepath);
+    println!("{}", "=".repeat(80));
+    
+    // Get file-level command
+    let path = Path::new(filepath);
+    if let Some(cmd) = runner.get_file_command(path)? {
+        println!("📄 File-level command:");
+        print_command_breakdown(&cmd);
+        
+        // Determine file type
+        let file_type = determine_file_type(path);
+        println!("   📦 Type: {}", file_type);
+        
+        // Get file scope info
+        if let Ok(source) = std::fs::read_to_string(path) {
+            let line_count = source.lines().count();
+            println!("   📏 Scope: lines 1-{}", line_count);
+        }
+    }
+    
+    // Get all runnables
+    let runnables = runner.detect_all_runnables(path)?;
+    
+    if runnables.is_empty() {
+        println!("\n❌ No specific runnables found in this file.");
+    } else {
+        println!("\n✅ Found {} runnable(s):\n", runnables.len());
+        
+        for (i, runnable) in runnables.iter().enumerate() {
+            println!("{}. {}", i + 1, runnable.label);
+            
+            // Show scope with 1-based line numbers
+            println!("   📏 Scope: lines {}-{}", 
+                runnable.scope.start.line + 1,
+                runnable.scope.end.line + 1
+            );
+            
+            // Show attributes if present
+            if let Some(ref extended) = runnable.extended_scope {
+                if extended.attribute_lines > 0 {
+                    println!("   🏷️  Attributes: {} lines", extended.attribute_lines);
+                }
+                if extended.has_doc_tests {
+                    println!("   🧪 Contains doc tests");
+                }
+            }
+            
+            // Build and show command
+            if let Some(command) = runner.build_command_for_runnable(runnable)? {
+                print_command_breakdown(&command);
+            }
+            
+            // Show type
+            print!("   📦 Type: ");
+            print_runnable_type(&runnable.kind);
+            
+            // Show module path
+            if !runnable.module_path.is_empty() {
+                println!("   📁 Module path: {}", runnable.module_path);
+            }
+            
+            if i < runnables.len() - 1 {
+                println!();
+            }
+        }
+    }
+    
+    println!("\n{}", "=".repeat(80));
+    Ok(())
+}
+
+fn determine_file_type(path: &Path) -> String {
+    let path_str = path.to_str().unwrap_or("");
+    
+    if path_str.ends_with("/src/lib.rs") || path_str == "src/lib.rs" {
+        "Library (lib.rs)".to_string()
+    } else if path_str.ends_with("/src/main.rs") || path_str == "src/main.rs" {
+        "Binary (main.rs)".to_string()
+    } else if path_str.contains("/src/bin/") {
+        format!("Binary '{}'", path.file_stem().unwrap_or_default().to_str().unwrap_or(""))
+    } else if path_str.contains("/tests/") {
+        format!("Integration test '{}'", path.file_stem().unwrap_or_default().to_str().unwrap_or(""))
+    } else if path_str.contains("/benches/") {
+        format!("Benchmark '{}'", path.file_stem().unwrap_or_default().to_str().unwrap_or(""))
+    } else if path_str.contains("/examples/") {
+        format!("Example '{}'", path.file_stem().unwrap_or_default().to_str().unwrap_or(""))
+    } else if path_str.contains("/src/") || path_str.starts_with("src/") {
+        "Library module".to_string()
+    } else {
+        "Rust file".to_string()
+    }
+}
+
+fn print_command_breakdown(command: &cargo_runner_core::CargoCommand) {
+    // Parse the command arguments
+    let args = &command.args;
+    
+    // Extract components
+    let (subcommand, package, extra_args, test_binary_args) = parse_cargo_command(args);
+    
+    println!("   🔧 Command breakdown:");
+    println!("      • command: cargo");
+    
+    if let Some(subcmd) = subcommand {
+        println!("      • subcommand: {}", subcmd);
+    }
+    
+    if let Some(pkg) = package {
+        println!("      • package: {}", pkg);
+    }
+    
+    if !extra_args.is_empty() {
+        println!("      • extraArgs: {:?}", extra_args);
+    }
+    
+    if !test_binary_args.is_empty() {
+        println!("      • extraTestBinaryArgs: {:?}", test_binary_args);
+    }
+    
+    println!("   🚀 Final command: {}", command.to_shell_command());
+}
+
+fn parse_cargo_command(args: &[String]) -> (Option<String>, Option<String>, Vec<String>, Vec<String>) {
+    let mut subcommand = None;
+    let mut package = None;
+    let mut extra_args = Vec::new();
+    let mut test_binary_args = Vec::new();
+    
+    let mut i = 0;
+    let mut after_separator = false;
+    
+    while i < args.len() {
+        let arg = &args[i];
+        
+        if arg == "--" {
+            after_separator = true;
+            i += 1;
+            continue;
+        }
+        
+        if after_separator {
+            test_binary_args.push(arg.clone());
+        } else if subcommand.is_none() && !arg.starts_with('-') {
+            subcommand = Some(arg.clone());
+        } else if arg == "--package" || arg == "-p" {
+            if i + 1 < args.len() {
+                package = Some(args[i + 1].clone());
+                i += 1;
+            }
+        } else if arg.starts_with("--package=") {
+            package = Some(arg.strip_prefix("--package=").unwrap().to_string());
+        } else if arg.starts_with('-') {
+            // Skip the value if this is a known flag that takes a value
+            if matches!(arg.as_str(), "--bin" | "--example" | "--test" | "--bench") {
+                extra_args.push(arg.clone());
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    i += 1;
+                    extra_args.push(args[i].clone());
+                }
+            } else {
+                extra_args.push(arg.clone());
+            }
+        }
+        
+        i += 1;
+    }
+    
+    (subcommand, package, extra_args, test_binary_args)
+}
+
+fn print_runnable_type(kind: &cargo_runner_core::RunnableKind) {
+    match kind {
+        cargo_runner_core::RunnableKind::Test { test_name, is_async } => {
+            print!("Test function '{}'", test_name);
+            if *is_async {
+                print!(" (async)");
+            }
+            println!();
+        }
+        cargo_runner_core::RunnableKind::DocTest { struct_or_module_name, method_name } => {
+            print!("Doc test for '{}'", struct_or_module_name);
+            if let Some(method) = method_name {
+                print!("::{}", method);
+            }
+            println!();
+        }
+        cargo_runner_core::RunnableKind::Benchmark { bench_name } => {
+            println!("Benchmark '{}'", bench_name);
+        }
+        cargo_runner_core::RunnableKind::Binary { bin_name } => {
+            print!("Binary");
+            if let Some(name) = bin_name {
+                print!(" '{}'", name);
+            }
+            println!();
+        }
+        cargo_runner_core::RunnableKind::ModuleTests { module_name } => {
+            println!("Test module '{}'", module_name);
+        }
+    }
 }
 
 fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
