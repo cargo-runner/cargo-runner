@@ -1,29 +1,14 @@
-[package]
-name = "cargo-runner"
+[workspace]
+members = ["crates/core", "crates/cli"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
+authors = ["Your Name <you@example.com>"]
+license = "MIT OR Apache-2.0"
 
-[[bin]]
-name = "cargo-xx"
-path = "src/bin/cargo-xx.rs"
-
-[[bin]]
-name = "cargo-x"
-path = "src/bin/cargo-x.rs"
-
-[[bin]]
-name = "cargo-runnables"
-path = "src/bin/cargo-runnables.rs"
-
-[[bin]]
-name = "cargo-exec"
-path = "src/bin/cargo-ran.rs"
-
-[[bin]] 
-name = "cargo-r"
-path = "src/bin/cargo-r.rs"
-
-[dependencies]
+[workspace.dependencies]
 tree-sitter = "0.24"
 tree-sitter-rust = "0.23"
 anyhow = "1.0"
@@ -34,7 +19,3 @@ md5 = "0.7"
 cargo_toml = "0.20"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-[dev-dependencies]
-insta = "1.41"
-tempfile = "3.14"

@@ -28,6 +28,16 @@ name = "cargo-runner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cargo-runner-core",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "cargo-runner-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "cargo_toml",
  "insta",
  "md5",
@@ -36,7 +46,6 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
- "tracing-subscriber",
  "tree-sitter",
  "tree-sitter-rust",
 ]

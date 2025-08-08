@@ -23,6 +23,12 @@ pub enum Error {
 
     #[error("Module resolution error: {0}")]
     ModuleError(String),
+
+    #[error("No runnable found at the specified location")]
+    NoRunnableFound,
+
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error),
 }
 
 /// Result type alias for cargo-runner operations

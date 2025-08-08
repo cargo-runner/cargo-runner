@@ -234,6 +234,31 @@ impl CargoRunner {
         }
         Ok(Config::default())
     }
+
+    /// Analyze a file and return all runnables as JSON
+    pub fn analyze(&mut self, file_path: &str) -> Result<String> {
+        let path = Path::new(file_path);
+        let runnables = self.detect_all_runnables(path)?;
+        Ok(serde_json::to_string_pretty(&runnables)?)
+    }
+
+    /// Get command for a specific position in a file
+    pub fn get_command_at_position(&mut self, file_path: &str, line: Option<usize>) -> Result<String> {
+        let path = Path::new(file_path);
+        
+        let command = if let Some(line_num) = line {
+            // Line is already 0-based from the CLI
+            self.build_command(path, line_num as u32)?
+        } else {
+            self.get_file_command(path)?
+        };
+        
+        if let Some(cmd) = command {
+            Ok(cmd.to_shell_command())
+        } else {
+            Err(crate::error::Error::NoRunnableFound)
+        }
+    }
 }
 
 #[cfg(test)]
