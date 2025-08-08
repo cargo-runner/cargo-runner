@@ -1,5 +1,8 @@
-use super::node_to_position;
-use crate::{Error, ExtendedScope, FileScope, Position, Result, Scope, ScopeKind};
+use super::utils::node_to_position;
+use crate::{
+    error::{Error, Result},
+    types::{ExtendedScope, FileScope, Position, Scope, ScopeKind},
+};
 use cargo_toml::Manifest;
 use std::path::Path;
 use tree_sitter::{Node, Tree};

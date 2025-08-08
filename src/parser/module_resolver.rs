@@ -1,4 +1,7 @@
-use crate::{Error, Result, Scope, ScopeKind};
+use crate::{
+    error::{Error, Result},
+    types::{Scope, ScopeKind},
+};
 use std::path::{Path, PathBuf};
 
 pub struct ModuleResolver {

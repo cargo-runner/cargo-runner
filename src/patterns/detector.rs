@@ -1,7 +1,8 @@
 use crate::{
+    error::Result,
     parser::{scope_detector::ScopeDetector, RustParser},
     patterns::{BenchmarkPattern, BinaryPattern, DocTestPattern, ModTestPattern, Pattern, TestFnPattern},
-    Result, Runnable, RunnableKind, RunnableWithScore, Scope, ScopeKind,
+    types::{Runnable, RunnableKind, RunnableWithScore, Scope, ScopeKind},
 };
 use std::path::Path;
 

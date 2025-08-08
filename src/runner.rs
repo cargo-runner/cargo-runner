@@ -1,13 +1,16 @@
+//! Main runner that coordinates parsing, detection, and command generation
+
 use crate::{
     cache::RunnableCache,
     command::{builder::CommandBuilder, CargoCommand},
     config::Config,
+    error::Result,
     parser::{module_resolver::ModuleResolver, RustParser},
     patterns::detector::RunnableDetector,
-    Result, Runnable,
+    types::Runnable,
 };
 use std::path::{Path, PathBuf};
-use tracing::{debug, trace};
+use tracing::debug;
 
 pub struct CargoRunner {
     detector: RunnableDetector,

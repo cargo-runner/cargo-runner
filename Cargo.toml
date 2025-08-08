@@ -21,7 +21,7 @@ path = "src/bin/cargo-ran.rs"
 
 [[bin]] 
 name = "cargo-r"
-path = "src/bin/cargo-runnables.rs"
+path = "src/bin/cargo-r.rs"
 
 [dependencies]
 tree-sitter = "0.24"

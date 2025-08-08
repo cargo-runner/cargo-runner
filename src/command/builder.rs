@@ -1,7 +1,8 @@
 use crate::{
     command::{CargoCommand, Target},
     config::Config,
-    FunctionIdentity, Result, Runnable, RunnableKind,
+    error::Result,
+    types::{FunctionIdentity, Runnable, RunnableKind},
 };
 use std::path::Path;
 use tracing::debug;

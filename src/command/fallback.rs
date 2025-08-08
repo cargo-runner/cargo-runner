@@ -1,4 +1,4 @@
-use crate::{command::CargoCommand, Result};
+use crate::{command::CargoCommand, error::Result};
 use cargo_toml::Manifest;
 use std::path::Path;
 
