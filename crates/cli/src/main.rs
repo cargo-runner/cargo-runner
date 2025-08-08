@@ -278,6 +278,17 @@ fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepat
                     if override_config.subcommand.is_some() {
                         println!("      • subcommand: {:?}", override_config.subcommand);
                     }
+                    if let Some(features) = &override_config.features {
+                        match features {
+                            cargo_runner_core::config::Features::All(s) if s == "all" => {
+                                println!("      • features: all");
+                            }
+                            cargo_runner_core::config::Features::Selected(selected) => {
+                                println!("      • features: {:?}", selected);
+                            }
+                            _ => {}
+                        }
+                    }
                     if override_config.extra_args.is_some() {
                         println!("      • extra_args: {:?}", override_config.extra_args);
                     }
@@ -317,6 +328,23 @@ fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepat
 
 fn determine_file_type(path: &Path) -> String {
     let path_str = path.to_str().unwrap_or("");
+    
+    // Check if it's a standalone file (no Cargo.toml in parents)
+    let has_cargo_toml = path
+        .ancestors()
+        .any(|p| p.join("Cargo.toml").exists());
+    
+    if !has_cargo_toml {
+        // Check if it's a cargo script file
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Some(first_line) = content.lines().next() {
+                if first_line.starts_with("#!") && first_line.contains("cargo") && first_line.contains("-Zscript") {
+                    return "Cargo script file".to_string();
+                }
+            }
+        }
+        return "Standalone Rust file".to_string();
+    }
     
     if path_str.ends_with("/src/lib.rs") || path_str == "src/lib.rs" {
         "Library (lib.rs)".to_string()
@@ -361,6 +389,14 @@ fn print_command_breakdown(command: &cargo_runner_core::CargoCommand) {
     
     if !test_binary_args.is_empty() {
         println!("      • extraTestBinaryArgs: {:?}", test_binary_args);
+    }
+    
+    // Show environment variables
+    if !command.env.is_empty() {
+        println!("      • extraEnv:");
+        for (key, value) in &command.env {
+            println!("         - {}={}", key, value);
+        }
     }
     
     println!("   🚀 Final command: {}", command.to_shell_command());
@@ -448,6 +484,17 @@ fn print_runnable_type(kind: &cargo_runner_core::RunnableKind) {
         cargo_runner_core::RunnableKind::ModuleTests { module_name } => {
             println!("Test module '{}'", module_name);
         }
+        cargo_runner_core::RunnableKind::Standalone { has_tests } => {
+            print!("Standalone Rust file");
+            if *has_tests {
+                print!(" (with tests)");
+            }
+            println!();
+        }
+        cargo_runner_core::RunnableKind::SingleFileScript { shebang } => {
+            println!("Cargo script file");
+            println!("   🔧 Shebang: {}", shebang);
+        }
     }
 }
 
@@ -482,6 +529,12 @@ fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
         println!("{}", command.to_shell_command());
         if let Some(ref dir) = command.working_dir {
             println!("Working directory: {}", dir);
+        }
+        if !command.env.is_empty() {
+            println!("Environment variables:");
+            for (key, value) in &command.env {
+                println!("  {}={}", key, value);
+            }
         }
     } else {
         let shell_cmd = command.to_shell_command();
@@ -788,6 +841,17 @@ fn print_config_details(_runner: &cargo_runner_core::CargoRunner, filepath: &str
     }
     if let Some(channel) = &merged_config.channel {
         println!("      • channel: {}", channel);
+    }
+    if let Some(features) = &merged_config.features {
+        match features {
+            cargo_runner_core::config::Features::All(s) if s == "all" => {
+                println!("      • features: all");
+            }
+            cargo_runner_core::config::Features::Selected(selected) => {
+                println!("      • features: {:?}", selected);
+            }
+            _ => {}
+        }
     }
     if let Some(extra_args) = &merged_config.extra_args {
         if !extra_args.is_empty() {

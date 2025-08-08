@@ -109,6 +109,11 @@ impl ConfigMerger {
         if override_config.package.is_some() {
             base.package = override_config.package;
         }
+        
+        // Merge features
+        if override_config.features.is_some() {
+            base.features = super::Features::merge(base.features.as_ref(), override_config.features.as_ref());
+        }
 
         // Merge extra_args
         if let Some(ref extra_args) = override_config.extra_args {
@@ -187,6 +192,15 @@ impl ConfigMerger {
                 if new_override.test_framework.is_some() {
                     existing.test_framework = new_override.test_framework;
                 }
+                
+                // Handle features merging
+                if new_override.features.is_some() {
+                    if new_override.force_replace_features.unwrap_or(false) {
+                        existing.features = new_override.features;
+                    } else {
+                        existing.features = super::Features::merge(existing.features.as_ref(), new_override.features.as_ref());
+                    }
+                }
 
                 // Handle args merging
                 if let Some(ref args) = new_override.extra_args {
@@ -218,6 +232,9 @@ impl ConfigMerger {
                 // Update force_replace flags
                 if new_override.force_replace_args.is_some() {
                     existing.force_replace_args = new_override.force_replace_args;
+                }
+                if new_override.force_replace_features.is_some() {
+                    existing.force_replace_features = new_override.force_replace_features;
                 }
                 if new_override.force_replace_env.is_some() {
                     existing.force_replace_env = new_override.force_replace_env;
@@ -286,20 +303,21 @@ impl ConfigMerger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_config_merging() {
-        let mut base = Config {
+        let base = Config {
             command: Some("cargo".to_string()),
             extra_args: Some(vec!["--release".to_string()]),
-            env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
+            extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
             ..Default::default()
         };
 
         let override_config = Config {
             channel: Some("nightly".to_string()),
             extra_args: Some(vec!["--features".to_string(), "foo".to_string()]),
-            env: Some(HashMap::from([("RUST_BACKTRACE".to_string(), "1".to_string())])),
+            extra_env: Some(HashMap::from([("RUST_BACKTRACE".to_string(), "1".to_string())])),
             ..Default::default()
         };
 
@@ -312,12 +330,13 @@ mod tests {
             merged.extra_args,
             Some(vec!["--release".to_string(), "--features".to_string(), "foo".to_string()])
         );
+        let env = merged.extra_env.unwrap();
         assert_eq!(
-            merged.env.unwrap().get("RUST_LOG"),
+            env.get("RUST_LOG"),
             Some(&"info".to_string())
         );
         assert_eq!(
-            merged.env.unwrap().get("RUST_BACKTRACE"),
+            env.get("RUST_BACKTRACE"),
             Some(&"1".to_string())
         );
     }
@@ -326,13 +345,13 @@ mod tests {
     fn test_force_replace() {
         let base = Config {
             extra_args: Some(vec!["--release".to_string()]),
-            env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
+            extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
             ..Default::default()
         };
 
         let override_config = Config {
             extra_args: Some(vec!["--debug".to_string()]),
-            env: Some(HashMap::from([("RUST_LOG".to_string(), "debug".to_string())])),
+            extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "debug".to_string())])),
             ..Default::default()
         };
 
@@ -343,7 +362,7 @@ mod tests {
         assert_eq!(merged.extra_args, Some(vec!["--debug".to_string()]));
         // Env should also be replaced
         assert_eq!(
-            merged.env.unwrap().get("RUST_LOG"),
+            merged.extra_env.unwrap().get("RUST_LOG"),
             Some(&"debug".to_string())
         );
     }

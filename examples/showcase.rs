@@ -12,6 +12,7 @@
 /// ```
 struct User {
     name: String,
+    #[allow(dead_code)]
     age: u32,
 }
 

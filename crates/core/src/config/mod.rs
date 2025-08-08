@@ -1,5 +1,6 @@
 //! Configuration management for cargo-runner
 
+mod features;
 mod merge;
 pub mod override_config;
 mod settings;
@@ -7,7 +8,8 @@ pub mod test_framework;
 pub mod utils;
 
 // Re-export main types
-pub use merge::{ConfigMerger, ConfigInfo};
+pub use features::Features;
+pub use merge::{ConfigInfo, ConfigMerger};
 pub use override_config::Override;
 pub use settings::Config;
 pub use test_framework::TestFramework;

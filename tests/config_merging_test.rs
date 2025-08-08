@@ -106,14 +106,14 @@ fn test_config_hierarchy_merging() {
     assert!(extra_args.contains(&"package-feature".to_string())); // From package
     
     // Verify env is merged with overrides
-    let env = merged.env.unwrap();
+    let env = merged.extra_env.unwrap();
     assert_eq!(env.get("RUST_LOG"), Some(&"debug".to_string())); // Package overrides root
     assert_eq!(env.get("WORKSPACE_VAR"), Some(&"workspace-value".to_string())); // From workspace
     assert_eq!(env.get("PACKAGE_VAR"), Some(&"package-value".to_string())); // From package
     
     // Verify test_frameworks from workspace
-    assert!(merged.test_frameworks.is_some());
-    let test_fw = merged.test_frameworks.unwrap();
+    assert!(merged.test_framework.is_some());
+    let test_fw = merged.test_framework.unwrap();
     assert_eq!(test_fw.command, Some("cargo".to_string()));
     assert_eq!(test_fw.subcommand, Some("nextest run".to_string()));
     
@@ -202,7 +202,7 @@ fn test_force_replace_in_overrides() {
     assert_eq!(override_config.extra_args, Some(vec!["--arg3".to_string()]));
     
     // Env should be merged (force_replace_env = false)
-    let env = override_config.env.as_ref().unwrap();
+    let env = override_config.extra_env.as_ref().unwrap();
     assert_eq!(env.get("VAR1"), Some(&"value1".to_string()));
     assert_eq!(env.get("VAR2"), Some(&"value2".to_string()));
     

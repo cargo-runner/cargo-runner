@@ -16,8 +16,11 @@ pub fn generate_fallback_command(
     config: Option<crate::config::Config>,
 ) -> Result<Option<CargoCommand>> {
     debug!("generate_fallback_command: package_name={:?}", package_name);
+    debug!("generate_fallback_command: file_path={:?}", file_path);
     // Create a synthetic runnable based on file location
     let runnable = create_synthetic_runnable(file_path, package_name)?;
+    
+    debug!("Created synthetic runnable: {:?}", runnable.is_some());
     
     if let Some(runnable) = runnable {
         debug!("Synthetic runnable: kind={:?}, file={:?}, module_path='{}'", runnable.kind, runnable.file_path, runnable.module_path);
@@ -34,7 +37,7 @@ pub fn generate_fallback_command(
         debug!("Fallback command config: binary_framework={:?}", config.binary_framework);
         
         // Use the CommandBuilder to build the command with config support
-        let command = crate::command::builder_v2::CommandBuilder::for_runnable(&runnable)
+        let command = crate::command::builder::CommandBuilder::for_runnable(&runnable)
             .with_package(package_name.unwrap_or_default())
             .with_project_root(project_root.unwrap_or_else(|| Path::new(".")))
             .with_config(config)
@@ -45,11 +48,15 @@ pub fn generate_fallback_command(
         Ok(Some(command))
     } else {
         // Check if this might be a standalone Rust file
-        if file_path.extension().and_then(|s| s.to_str()) == Some("rs")
-            && project_root.is_none()
-            && package_name.is_none()
-        {
-            return generate_rustc_command(file_path);
+        if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
+            // Check if there's no Cargo.toml in any parent directory
+            let has_cargo_toml = file_path
+                .ancestors()
+                .any(|p| p.join("Cargo.toml").exists());
+            
+            if !has_cargo_toml {
+                return generate_rustc_command(file_path);
+            }
         }
         
         Ok(None)
@@ -58,6 +65,37 @@ pub fn generate_fallback_command(
 
 /// Create a synthetic runnable based on file path patterns
 fn create_synthetic_runnable(file_path: &Path, package_name: Option<&str>) -> Result<Option<Runnable>> {
+    debug!("create_synthetic_runnable: file_path={:?}", file_path);
+    // First check if this is a cargo script file
+    if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
+        if let Ok(content) = std::fs::read_to_string(file_path) {
+            if let Some(first_line) = content.lines().next() {
+                debug!("First line of file: {:?}", first_line);
+                if first_line.starts_with("#!") && first_line.contains("cargo") && first_line.contains("-Zscript") {
+                    debug!("Detected cargo script file!");
+                    // It's a cargo script file
+                    let scope = Scope {
+                        kind: ScopeKind::Function,
+                        name: Some("main".to_string()),
+                        start: Position { line: 0, character: 0 },
+                        end: Position { line: 0, character: 0 },
+                    };
+                    
+                    return Ok(Some(Runnable {
+                        label: "Run cargo script".to_string(),
+                        scope,
+                        kind: RunnableKind::SingleFileScript { 
+                            shebang: first_line.to_string() 
+                        },
+                        module_path: String::new(),
+                        file_path: file_path.to_path_buf(),
+                        extended_scope: None,
+                    }));
+                }
+            }
+        }
+    }
+    
     // First check if we can find a project root for custom targets
     let project_root = file_path
         .ancestors()
@@ -302,19 +340,65 @@ fn check_cargo_toml_for_runnable(
 
 /// Generate a rustc command for standalone Rust files
 fn generate_rustc_command(file_path: &Path) -> Result<Option<CargoCommand>> {
-    let file_name = file_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| crate::Error::ParseError("Invalid file name".to_string()))?;
-
-    // Create rustc command: rustc file.rs -o file
-    let args = vec![
-        file_path.to_str().unwrap_or("").to_string(),
-        "-o".to_string(),
-        file_name.to_string(),
-    ];
-
-    Ok(Some(CargoCommand::new_rustc(args)))
+    // Read the file content to check for shebang and tests
+    let content = std::fs::read_to_string(file_path)
+        .map_err(|e| crate::Error::IoError(e))?;
+    
+    // Check if it's a cargo script file (has shebang)
+    if let Some(first_line) = content.lines().next() {
+        if first_line.starts_with("#!") && first_line.contains("cargo") && first_line.contains("-Zscript") {
+            // It's a cargo script file
+            let scope = Scope {
+                kind: ScopeKind::Function,
+                name: Some("main".to_string()),
+                start: Position { line: 0, character: 0 },
+                end: Position { line: 0, character: 0 },
+            };
+            
+            let runnable = Runnable {
+                label: "Run cargo script".to_string(),
+                scope,
+                kind: RunnableKind::SingleFileScript { 
+                    shebang: first_line.to_string() 
+                },
+                module_path: String::new(),
+                file_path: file_path.to_path_buf(),
+                extended_scope: None,
+            };
+            
+            // Use the CommandBuilder to build the command
+            let command = crate::command::builder::CommandBuilder::for_runnable(&runnable)
+                .build()?;
+            
+            return Ok(Some(command));
+        }
+    }
+    
+    // Not a cargo script, check if it has tests
+    let has_tests = content.contains("#[test]") || content.contains("#[cfg(test)]");
+    
+    // Create a standalone runnable
+    let scope = Scope {
+        kind: ScopeKind::Function,
+        name: Some("main".to_string()),
+        start: Position { line: 0, character: 0 },
+        end: Position { line: 0, character: 0 },
+    };
+    
+    let runnable = Runnable {
+        label: "Run standalone file".to_string(),
+        scope,
+        kind: RunnableKind::Standalone { has_tests },
+        module_path: String::new(),
+        file_path: file_path.to_path_buf(),
+        extended_scope: None,
+    };
+    
+    // Use the CommandBuilder to build the command
+    let command = crate::command::builder::CommandBuilder::for_runnable(&runnable)
+        .build()?;
+    
+    Ok(Some(command))
 }
 
 #[cfg(test)]

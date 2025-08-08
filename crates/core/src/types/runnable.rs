@@ -37,6 +37,12 @@ pub enum RunnableKind {
     ModuleTests {
         module_name: String,
     },
+    Standalone {
+        has_tests: bool,
+    },
+    SingleFileScript {
+        shebang: String,
+    },
 }
 
 /// Runnable with scoring information for prioritization

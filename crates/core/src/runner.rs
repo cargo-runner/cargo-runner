@@ -191,7 +191,7 @@ impl CargoRunner {
         let package_name = self.get_package_name(&runnable.file_path)?;
         
         // Use the new clean API with the current config from runner
-        let command = crate::command::builder_v2::CommandBuilder::for_runnable(runnable)
+        let command = crate::command::builder::CommandBuilder::for_runnable(runnable)
             .with_package(package_name.unwrap_or_default())
             .with_project_root(self.project_root.as_deref().unwrap_or_else(|| Path::new(".")))
             .with_config(self.config.clone())
@@ -237,6 +237,36 @@ impl CargoRunner {
         if self.config.cache_enabled {
             if let Some(cached) = self.cache.get(file_path) {
                 return Ok(cached.clone());
+            }
+        }
+
+        // First check if this is a cargo script file
+        if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
+            if let Ok(content) = std::fs::read_to_string(file_path) {
+                if let Some(first_line) = content.lines().next() {
+                    if first_line.starts_with("#!") && first_line.contains("cargo") && first_line.contains("-Zscript") {
+                        // It's a cargo script file, create a single runnable for it
+                        let scope = crate::types::Scope {
+                            kind: crate::types::ScopeKind::Function,
+                            name: Some("main".to_string()),
+                            start: crate::types::Position { line: 0, character: 0 },
+                            end: crate::types::Position { line: 0, character: 0 },
+                        };
+                        
+                        let runnable = Runnable {
+                            label: "Run cargo script".to_string(),
+                            scope,
+                            kind: RunnableKind::SingleFileScript { 
+                                shebang: first_line.to_string() 
+                            },
+                            module_path: String::new(),
+                            file_path: file_path.to_path_buf(),
+                            extended_scope: None,
+                        };
+                        
+                        return Ok(vec![runnable]);
+                    }
+                }
             }
         }
 

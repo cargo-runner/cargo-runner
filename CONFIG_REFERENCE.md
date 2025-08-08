@@ -43,6 +43,9 @@ These fields apply to all commands unless overridden:
 - **command** (string): Base command (default: "cargo")
 - **subcommand** (string): Subcommand to run (e.g., "run", "test")
 - **channel** (string): Rust toolchain channel (e.g., "nightly", "stable")
+- **features** (string | array): Feature flags to enable
+  - `"all"`: Enables all features with `--all-features`
+  - `["web", "desktop"]`: Enables specific features with `--features=web,desktop`
 - **extra_args** (array): Additional arguments for cargo commands
 - **extra_env** (object): Environment variables to set
 - **extra_test_binary_args** (array): Arguments passed after `--` to test binaries
@@ -72,6 +75,7 @@ Configure custom test runners:
     "command": "cargo",
     "subcommand": "nextest run",
     "channel": "nightly",
+    "features": ["test-utils"],
     "extra_args": ["-j10"],
     "extra_env": {
       "RUST_BACKTRACE": "full",
@@ -90,6 +94,7 @@ Configure custom binary runners:
   "binary_framework": {
     "command": "dx",
     "subcommand": "serve",
+    "features": ["web"],
     "extra_args": ["--hot-reload"],
     "extra_env": {
       "DIOXUS_LOG": "debug"
@@ -102,6 +107,44 @@ Common binary frameworks:
 - Dioxus: `{"command": "dx", "subcommand": "serve"}`
 - Leptos: `{"command": "cargo", "subcommand": "leptos watch"}`
 - Trunk: `{"command": "trunk", "subcommand": "serve"}`
+
+## Features Configuration
+
+The `features` field can be used at any configuration level to control Cargo feature flags:
+
+### String Format
+```json
+{
+  "features": "all"
+}
+```
+Results in: `cargo test --all-features`
+
+### Array Format
+```json
+{
+  "features": ["web", "desktop", "logging"]
+}
+```
+Results in: `cargo test --features=web,desktop,logging`
+
+### Feature Merging
+
+Features are merged across configuration levels:
+- Root: `["core", "logging"]`
+- Package: `["web"]`
+- Result: `--features=core,logging,web`
+
+Use `force_replace_features` in overrides to replace instead of merge:
+```json
+{
+  "overrides": [{
+    "match": { "file_path": "src/main.rs" },
+    "features": ["minimal"],
+    "force_replace_features": true
+  }]
+}
+```
 
 ## Override Configuration
 
@@ -120,6 +163,7 @@ Override settings for specific functions/modules:
       "command": "cargo",
       "subcommand": "test",
       "channel": "nightly",
+      "features": ["integration-tests"],
       "extra_args": ["--release"],
       "extra_test_binary_args": ["--nocapture"],
       "extra_env": {
@@ -152,6 +196,7 @@ All specified fields must match for the override to apply. Omitted fields match 
 - All global configuration fields can be overridden
 - **test_framework**: Override test framework for matched tests
 - **force_replace_args** (bool): Replace args instead of appending
+- **force_replace_features** (bool): Replace features instead of merging
 - **force_replace_env** (bool): Replace env vars instead of merging
 
 ## Complete Example
@@ -162,6 +207,7 @@ All specified fields must match for the override to apply. Omitted fields match 
   "version": "1.0",
   "cache_enabled": true,
   "cache_ttl": 3600,
+  "features": ["default", "logging"],
   "extra_args": [],
   "extra_env": {
     "CARGO_TARGET_DIR": "target/rust-analyzer",

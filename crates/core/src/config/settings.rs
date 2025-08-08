@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::{Override, TestFramework};
+use super::{Features, Override, TestFramework};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -18,6 +18,8 @@ pub struct Config {
     pub subcommand: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub features: Option<Features>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -43,7 +45,6 @@ pub struct Config {
     #[serde(skip)]
     pub cache_dir: Option<PathBuf>,
 }
-
 
 impl Config {
     pub fn load_from_file(path: &Path) -> Result<Self> {
@@ -102,6 +103,8 @@ mod tests {
                     file_path: None,
                     function_name: Some("test_addition".to_string()),
                 },
+                features: None,
+                force_replace_features: Some(false),
                 command: Some("cargo".to_string()),
                 subcommand: Some("nextest".to_string()),
                 channel: None,
@@ -126,7 +129,8 @@ mod tests {
         let parsed: Config = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.overrides.len(), 1);
-        assert!(parsed.cache_enabled);
+        // cache_enabled is skipped in serialization, so it will be default (false)
+        assert!(!parsed.cache_enabled);
         assert_eq!(parsed.channel, Some("nightly".to_string()));
     }
 
