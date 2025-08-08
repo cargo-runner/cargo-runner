@@ -5,8 +5,8 @@ use std::process::{Command, ExitStatus};
 pub enum CommandType {
     Cargo,
     Rustc,
-    Shell, // For dx, trunk, and other shell commands
-    SingleFileScriptTest, // For cargo script test execution
+    Shell,        // For dx, trunk, and other shell commands
+    RustSFScript, // For cargo script test execution
 }
 
 #[derive(Debug, Clone)]
@@ -54,14 +54,13 @@ impl CargoCommand {
 
     pub fn new_single_file_script_test(args: Vec<String>) -> Self {
         Self {
-            command_type: CommandType::SingleFileScriptTest,
+            command_type: CommandType::RustSFScript,
             args,
             working_dir: None,
             env: Vec::new(),
             test_filter: None,
         }
     }
-
 
     pub fn with_working_dir(mut self, dir: String) -> Self {
         self.working_dir = Some(dir);
@@ -90,12 +89,12 @@ impl CargoCommand {
                         cmd.push_str(arg);
                     }
                 }
-                
+
                 // Extract output name and append run command
                 for i in 0..self.args.len() {
                     if self.args[i] == "-o" && i + 1 < self.args.len() {
                         cmd.push_str(&format!(" && ./{}", self.args[i + 1]));
-                        
+
                         // If this is a test command with a filter, add it
                         if self.args.contains(&"--test".to_string()) {
                             if let Some(ref test_filter) = self.test_filter {
@@ -126,7 +125,7 @@ impl CargoCommand {
                     cmd
                 }
             }
-            CommandType::SingleFileScriptTest | CommandType::Cargo => {
+            CommandType::RustSFScript | CommandType::Cargo => {
                 let mut cmd = String::from("cargo");
                 for arg in &self.args {
                     cmd.push(' ');
@@ -152,50 +151,50 @@ impl CargoCommand {
                         break;
                     }
                 }
-                
+
                 // First compile with rustc
                 let mut rustc_cmd = Command::new("rustc");
                 rustc_cmd.args(&self.args);
-                
+
                 // Set working directory if specified
                 if let Some(ref dir) = self.working_dir {
                     rustc_cmd.current_dir(dir);
                 }
-                
+
                 // Set environment variables
                 for (key, value) in &self.env {
                     eprintln!("Setting env: {}={}", key, value);
                     rustc_cmd.env(key, value);
                 }
-                
+
                 // Compile
                 let compile_status = rustc_cmd.status()?;
                 if !compile_status.success() {
                     return Ok(compile_status);
                 }
-                
+
                 // If compilation succeeded and we have an output name, run it
                 if let Some(output) = output_name {
                     eprintln!("Running: ./{}", output);
                     let mut run_cmd = Command::new(format!("./{}", output));
-                    
+
                     // If this is a test command with a filter, add it as argument
                     if self.args.contains(&"--test".to_string()) {
                         if let Some(ref test_filter) = self.test_filter {
                             run_cmd.arg(test_filter);
                         }
                     }
-                    
+
                     // Set working directory if specified
                     if let Some(ref dir) = self.working_dir {
                         run_cmd.current_dir(dir);
                     }
-                    
+
                     // Set environment variables
                     for (key, value) in &self.env {
                         run_cmd.env(key, value);
                     }
-                    
+
                     run_cmd.status()
                 } else {
                     Ok(compile_status)
@@ -204,42 +203,45 @@ impl CargoCommand {
             CommandType::Shell => {
                 // For shell commands, first arg is the command
                 if self.args.is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "No command specified"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "No command specified",
+                    ));
                 }
-                
+
                 let mut cmd = Command::new(&self.args[0]);
                 if self.args.len() > 1 {
                     cmd.args(&self.args[1..]);
                 }
-                
+
                 // Set working directory if specified
                 if let Some(ref dir) = self.working_dir {
                     cmd.current_dir(dir);
                 }
-                
+
                 // Set environment variables
                 for (key, value) in &self.env {
                     eprintln!("Setting env: {}={}", key, value);
                     cmd.env(key, value);
                 }
-                
+
                 cmd.status()
             }
-            CommandType::SingleFileScriptTest | CommandType::Cargo => {
+            CommandType::RustSFScript | CommandType::Cargo => {
                 let mut cmd = Command::new("cargo");
                 cmd.args(&self.args);
-                
+
                 // Set working directory if specified
                 if let Some(ref dir) = self.working_dir {
                     cmd.current_dir(dir);
                 }
-                
+
                 // Set environment variables
                 for (key, value) in &self.env {
                     eprintln!("Setting env: {}={}", key, value);
                     cmd.env(key, value);
                 }
-                
+
                 cmd.status()
             }
         }
