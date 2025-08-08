@@ -396,12 +396,13 @@ impl ConfigMerger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::CargoConfig;
     use std::collections::HashMap;
 
     #[test]
     fn test_config_merging() {
         let base = Config {
-            cargo: Some(super::CargoConfig {
+            cargo: Some(CargoConfig {
                 command: Some("cargo".to_string()),
                 extra_args: Some(vec!["--release".to_string()]),
                 extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
@@ -411,7 +412,7 @@ mod tests {
         };
 
         let override_config = Config {
-            cargo: Some(super::CargoConfig {
+            cargo: Some(CargoConfig {
                 channel: Some("nightly".to_string()),
                 extra_args: Some(vec!["--features".to_string(), "foo".to_string()]),
                 extra_env: Some(HashMap::from([("RUST_BACKTRACE".to_string(), "1".to_string())])),
@@ -444,7 +445,7 @@ mod tests {
     #[test]
     fn test_force_replace() {
         let base = Config {
-            cargo: Some(super::CargoConfig {
+            cargo: Some(CargoConfig {
                 extra_args: Some(vec!["--release".to_string()]),
                 extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "info".to_string())])),
                 ..Default::default()
@@ -453,7 +454,7 @@ mod tests {
         };
 
         let override_config = Config {
-            cargo: Some(super::CargoConfig {
+            cargo: Some(CargoConfig {
                 extra_args: Some(vec!["--debug".to_string()]),
                 extra_env: Some(HashMap::from([("RUST_LOG".to_string(), "debug".to_string())])),
                 ..Default::default()

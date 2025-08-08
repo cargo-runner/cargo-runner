@@ -72,6 +72,8 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::{FunctionIdentity, FileType};
+    use std::collections::HashMap;
 
     #[test]
     fn test_config_serialization() {
@@ -88,7 +90,7 @@ mod tests {
                     module_path: Some("my_crate::tests::unit".to_string()),
                     file_path: None,
                     function_name: Some("test_addition".to_string()),
-                    file_type: None,
+                    file_type: Some(FileType::CargoProject),
                 },
                 features: None,
                 force_replace_features: Some(false),
@@ -133,6 +135,7 @@ mod tests {
                     module_path: Some("my_crate::tests".to_string()),
                     file_path: None,
                     function_name: Some("test_foo".to_string()),
+                    file_type: Some(FileType::CargoProject),
                 },
                 extra_args: Some(vec!["--nocapture".to_string()]),
                 ..Default::default()
@@ -145,6 +148,7 @@ mod tests {
             module_path: Some("my_crate::tests".to_string()),
             file_path: None,
             function_name: Some("test_foo".to_string()),
+            file_type: Some(FileType::CargoProject),
         };
 
         let override_config = config.get_override_for(&identity);
@@ -160,6 +164,7 @@ mod tests {
             module_path: Some("my_crate::tests".to_string()),
             file_path: None,
             function_name: Some("test_bar".to_string()),
+            file_type: Some(FileType::CargoProject),
         };
 
         let override_config2 = config.get_override_for(&identity2);

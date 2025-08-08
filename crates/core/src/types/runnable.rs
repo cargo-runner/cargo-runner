@@ -45,6 +45,29 @@ pub enum RunnableKind {
     },
 }
 
+impl Runnable {
+    /// Get function name from the runnable kind
+    pub fn get_function_name(&self) -> Option<String> {
+        match &self.kind {
+            RunnableKind::Test { test_name, .. } => Some(test_name.clone()),
+            RunnableKind::DocTest {
+                struct_or_module_name,
+                method_name,
+            } => {
+                if let Some(method) = method_name {
+                    Some(format!("{}::{}", struct_or_module_name, method))
+                } else {
+                    Some(struct_or_module_name.clone())
+                }
+            }
+            RunnableKind::Benchmark { bench_name } => Some(bench_name.clone()),
+            RunnableKind::Binary { bin_name } => bin_name.clone(),
+            RunnableKind::ModuleTests { module_name } => Some(module_name.clone()),
+            _ => None,
+        }
+    }
+}
+
 /// Runnable with scoring information for prioritization
 #[derive(Debug, Clone)]
 pub struct RunnableWithScore {
