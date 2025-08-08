@@ -1,0 +1,34 @@
+[package]
+name = "cargo-runner"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "cargo-xx"
+path = "src/bin/cargo-xx.rs"
+
+[[bin]]
+name = "cargo-x"
+path = "src/bin/cargo-x.rs"
+
+[[bin]]
+name = "cargo-runnables"
+path = "src/bin/cargo-runnables.rs"
+
+[[bin]] 
+name = "cargo-r"
+path = "src/bin/cargo-runnables.rs"
+
+[dependencies]
+tree-sitter = "0.24"
+tree-sitter-rust = "0.23"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+md5 = "0.7"
+cargo_toml = "0.20"
+
+[dev-dependencies]
+insta = "1.41"
+tempfile = "3.14"
