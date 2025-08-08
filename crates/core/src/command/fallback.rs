@@ -49,12 +49,7 @@ pub fn generate_fallback_command(
     } else {
         // Check if this might be a standalone Rust file
         if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
-            // Check if there's no Cargo.toml in any parent directory
-            let has_cargo_toml = file_path
-                .ancestors()
-                .any(|p| p.join("Cargo.toml").exists());
-            
-            if !has_cargo_toml {
+            if is_standalone_rust_file(file_path) {
                 return generate_rustc_command(file_path);
             }
         }
@@ -336,6 +331,60 @@ fn check_cargo_toml_for_runnable(
     }
 
     Ok(None)
+}
+
+/// Check if a file is a standalone Rust file (has main() and not part of Cargo project)
+fn is_standalone_rust_file(file_path: &Path) -> bool {
+    // First check if file has a main function
+    let has_main = if let Ok(content) = std::fs::read_to_string(file_path) {
+        content.contains("fn main(") || content.contains("fn main (")
+    } else {
+        return false; // Can't read file, not standalone
+    };
+    
+    if !has_main {
+        return false; // No main function, not standalone
+    }
+    
+    // Check if file is part of a Cargo project
+    let cargo_root = file_path
+        .ancestors()
+        .find(|p| p.join("Cargo.toml").exists());
+    
+    match cargo_root {
+        None => true, // No Cargo.toml found, definitely standalone
+        Some(root) => {
+            // Check if the file is in a standard Cargo source location
+            if let Ok(relative) = file_path.strip_prefix(root) {
+                let path_str = relative.to_str().unwrap_or("");
+                
+                // Check standard binary locations
+                if path_str == "src/main.rs" || 
+                   path_str.starts_with("src/bin/") ||
+                   path_str.starts_with("examples/") {
+                    return false; // In standard location, not standalone
+                }
+                
+                // Check if it's listed in Cargo.toml as a [[bin]]
+                let cargo_toml_path = root.join("Cargo.toml");
+                if let Ok(manifest) = Manifest::from_path(&cargo_toml_path) {
+                    // Check if this file is explicitly listed as a binary
+                    for bin in &manifest.bin {
+                        if let Some(bin_path) = &bin.path {
+                            if bin_path == path_str {
+                                return false; // Listed in Cargo.toml, not standalone
+                            }
+                        }
+                    }
+                }
+                
+                // Has main(), not in standard location, not in Cargo.toml = standalone
+                true
+            } else {
+                true // Shouldn't happen, but treat as standalone if strip_prefix fails
+            }
+        }
+    }
 }
 
 /// Generate a rustc command for standalone Rust files

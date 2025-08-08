@@ -67,11 +67,59 @@ impl<'a> CommandBuilder<'a> {
         Ok(false)
     }
     
-    /// Check if a file is a standalone file (no Cargo.toml in parents)
+    /// Check if a file is a standalone file (has main() and not part of a Cargo project)
     fn is_standalone_file(&self, file_path: &Path) -> bool {
-        !file_path
+        // First check if file has a main function
+        let has_main = if let Ok(content) = std::fs::read_to_string(file_path) {
+            content.contains("fn main(") || content.contains("fn main (")
+        } else {
+            return false; // Can't read file, not standalone
+        };
+        
+        if !has_main {
+            return false; // No main function, not standalone
+        }
+        
+        // Check if file is part of a Cargo project
+        let cargo_root = file_path
             .ancestors()
-            .any(|p| p.join("Cargo.toml").exists())
+            .find(|p| p.join("Cargo.toml").exists());
+        
+        match cargo_root {
+            None => true, // No Cargo.toml found, definitely standalone
+            Some(root) => {
+                // Check if the file is in a standard Cargo source location
+                if let Ok(relative) = file_path.strip_prefix(root) {
+                    let path_str = relative.to_str().unwrap_or("");
+                    
+                    // Check standard binary locations
+                    if path_str == "src/main.rs" || 
+                       path_str.starts_with("src/bin/") ||
+                       path_str.starts_with("examples/") {
+                        return false; // In standard location, not standalone
+                    }
+                    
+                    // Check if it's listed in Cargo.toml as a [[bin]]
+                    let cargo_toml_path = root.join("Cargo.toml");
+                    if cargo_toml_path.exists() {
+                        // Try to read and parse Cargo.toml
+                        if let Ok(content) = std::fs::read_to_string(&cargo_toml_path) {
+                            // Simple check for [[bin]] entries with this path
+                            // This is a simplified check - could use toml parsing for accuracy
+                            if content.contains(&format!("path = \"{}\"", path_str)) ||
+                               content.contains(&format!("path = '{}'", path_str)) {
+                                return false; // Listed in Cargo.toml, not standalone
+                            }
+                        }
+                    }
+                    
+                    // Has main(), not in standard location, not in Cargo.toml = standalone
+                    true
+                } else {
+                    true // Shouldn't happen, but treat as standalone if strip_prefix fails
+                }
+            }
+        }
     }
     
     /// Build the command
@@ -954,7 +1002,7 @@ impl CommandBuilderImpl for RustcCommandBuilder {
                     "--test".to_string(),
                     runnable.file_path.to_str().unwrap_or("").to_string(),
                     "-o".to_string(),
-                    output_name.clone(),
+                    output_name,
                 ];
                 
                 // Apply features
@@ -971,10 +1019,9 @@ impl CommandBuilderImpl for RustcCommandBuilder {
                     args.extend(extra_args.clone());
                 }
                 
-                // Create a rustc command - we'll need to handle test name specially in execute
-                let mut command = CargoCommand::new_rustc(args);
-                // Store the test name in env for now (hack until we add proper support)
-                command.env.push(("CARGO_RUNNER_TEST_NAME".to_string(), test_name.clone()));
+                // Create a rustc command with test filter
+                let mut command = CargoCommand::new_rustc(args)
+                    .with_test_filter(test_name.clone());
                 
                 // Apply env vars
                 self.apply_common_config(&mut command, config);

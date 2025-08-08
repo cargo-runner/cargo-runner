@@ -15,6 +15,8 @@ pub struct CargoCommand {
     pub args: Vec<String>,
     pub working_dir: Option<String>,
     pub env: Vec<(String, String)>,
+    /// For rustc test commands, the test name to filter
+    pub test_filter: Option<String>,
 }
 
 impl CargoCommand {
@@ -24,6 +26,7 @@ impl CargoCommand {
             args,
             working_dir: None,
             env: Vec::new(),
+            test_filter: None,
         }
     }
 
@@ -33,6 +36,7 @@ impl CargoCommand {
             args,
             working_dir: None,
             env: Vec::new(),
+            test_filter: None,
         }
     }
 
@@ -44,6 +48,7 @@ impl CargoCommand {
             args: all_args,
             working_dir: None,
             env: Vec::new(),
+            test_filter: None,
         }
     }
 
@@ -53,6 +58,7 @@ impl CargoCommand {
             args,
             working_dir: None,
             env: Vec::new(),
+            test_filter: None,
         }
     }
 
@@ -64,6 +70,11 @@ impl CargoCommand {
 
     pub fn with_env(mut self, key: String, value: String) -> Self {
         self.env.push((key, value));
+        self
+    }
+
+    pub fn with_test_filter(mut self, filter: String) -> Self {
+        self.test_filter = Some(filter);
         self
     }
 
@@ -85,11 +96,10 @@ impl CargoCommand {
                     if self.args[i] == "-o" && i + 1 < self.args.len() {
                         cmd.push_str(&format!(" && ./{}", self.args[i + 1]));
                         
-                        // If this is a test command (has --test flag), check for test name
+                        // If this is a test command with a filter, add it
                         if self.args.contains(&"--test".to_string()) {
-                            // Check if we have a test name in env (temporary hack)
-                            if let Some((_, test_name)) = self.env.iter().find(|(k, _)| k == "CARGO_RUNNER_TEST_NAME") {
-                                cmd.push_str(&format!(" {}", test_name));
+                            if let Some(ref test_filter) = self.test_filter {
+                                cmd.push_str(&format!(" {}", test_filter));
                             }
                         }
                         break;
@@ -169,11 +179,10 @@ impl CargoCommand {
                     eprintln!("Running: ./{}", output);
                     let mut run_cmd = Command::new(format!("./{}", output));
                     
-                    // If this is a test command, add test name as argument
+                    // If this is a test command with a filter, add it as argument
                     if self.args.contains(&"--test".to_string()) {
-                        // Check if we have a test name in env (temporary hack)
-                        if let Some((_, test_name)) = self.env.iter().find(|(k, _)| k == "CARGO_RUNNER_TEST_NAME") {
-                            run_cmd.arg(test_name);
+                        if let Some(ref test_filter) = self.test_filter {
+                            run_cmd.arg(test_filter);
                         }
                     }
                     
@@ -184,10 +193,7 @@ impl CargoCommand {
                     
                     // Set environment variables
                     for (key, value) in &self.env {
-                        // Skip our internal test name env var
-                        if key != "CARGO_RUNNER_TEST_NAME" {
-                            run_cmd.env(key, value);
-                        }
+                        run_cmd.env(key, value);
                     }
                     
                     run_cmd.status()
