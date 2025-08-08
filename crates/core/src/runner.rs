@@ -140,7 +140,8 @@ impl CargoRunner {
     pub fn build_command_for_runnable(&self, runnable: &Runnable) -> Result<Option<CargoCommand>> {
         let package_name = self.get_package_name(&runnable.file_path)?;
         let project_root = self
-            .project_root.as_deref()
+            .project_root
+            .as_deref()
             .unwrap_or_else(|| Path::new("."));
 
         let builder = CommandBuilder::new(self.config.clone());

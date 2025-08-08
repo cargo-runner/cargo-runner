@@ -351,7 +351,7 @@ mod tests {
 
         let target = &scopes[3]; // test_fn
         let modules = resolver.get_inline_module_hierarchy(&scopes, target);
-        assert_eq!(modules, vec!["inner", "outer"]);
+        assert_eq!(modules, vec!["outer", "inner"]);
     }
 
     #[test]

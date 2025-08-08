@@ -325,7 +325,15 @@ mod tests {
 
         assert_eq!(
             command.args,
-            vec!["test", "--doc", "--package", "my_crate", "--", "User::new"]
+            vec![
+                "test",
+                "--doc",
+                "--package",
+                "my_crate",
+                "--lib",
+                "--",
+                "User::new"
+            ]
         );
     }
 

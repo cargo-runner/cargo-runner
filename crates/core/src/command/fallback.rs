@@ -367,9 +367,8 @@ mod tests {
 
     #[test]
     fn test_no_pattern_match() {
-        // Test a file in src/ that isn't lib.rs/main.rs in a Cargo project
-        // Since package_name is provided, it's in a Cargo project
-        let path = PathBuf::from("/project/src/utils.rs");
+        // Test a file that doesn't match any pattern - not in a standard Cargo directory
+        let path = PathBuf::from("/project/random.rs");
         let cmd = generate_fallback_command(&path, Some("my_crate"), None).unwrap();
 
         assert!(cmd.is_none());

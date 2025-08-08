@@ -17,5 +17,5 @@ cargo_toml = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-insta = "1.41"
-tempfile = "3.14"
+insta = "1.43.1"
+tempfile = "3.20"

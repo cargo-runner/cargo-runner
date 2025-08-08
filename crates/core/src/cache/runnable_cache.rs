@@ -113,9 +113,8 @@ impl RunnableCache {
             let cache_filename = self.encode_cache_filename(file_path);
             let cache_path = cache_dir.join(format!("{cache_filename}.json"));
 
-            let contents = serde_json::to_string_pretty(entry).map_err(|e| {
-                Error::CacheError(format!("Failed to serialize cache entry: {e}"))
-            })?;
+            let contents = serde_json::to_string_pretty(entry)
+                .map_err(|e| Error::CacheError(format!("Failed to serialize cache entry: {e}")))?;
 
             std::fs::write(cache_path, contents)?;
         }
