@@ -12,7 +12,7 @@ impl Pattern for BenchmarkPattern {
         if let ScopeKind::Benchmark = scope.kind {
             if let Some(name) = &scope.name {
                 let runnable = Runnable {
-                    label: format!("Run benchmark '{}'", name),
+                    label: format!("Run benchmark '{name}'"),
                     scope: scope.clone(),
                     kind: RunnableKind::Benchmark {
                         bench_name: name.clone(),

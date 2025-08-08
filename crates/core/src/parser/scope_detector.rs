@@ -20,6 +20,12 @@ struct ExtendedScopeDetails {
 
 pub struct ScopeDetector;
 
+impl Default for ScopeDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScopeDetector {
     pub fn new() -> Self {
         Self
@@ -157,7 +163,7 @@ impl ScopeDetector {
 
         // Parse Cargo.toml
         let manifest = Manifest::from_path(&cargo_toml_path)
-            .map_err(|e| Error::ParseError(format!("Failed to parse Cargo.toml: {}", e)))?;
+            .map_err(|e| Error::ParseError(format!("Failed to parse Cargo.toml: {e}")))?;
 
         // Get relative path from project root
         let relative_path = file_path.strip_prefix(project_root).unwrap_or(file_path);
@@ -279,7 +285,7 @@ impl ScopeDetector {
 
         let name = name_node
             .utf8_text(source.as_bytes())
-            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in function name: {}", e)))?
+            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in function name: {e}")))?
             .to_string();
 
         // Get extended scope info
@@ -329,7 +335,7 @@ impl ScopeDetector {
 
         let name = name_node
             .utf8_text(source.as_bytes())
-            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in module name: {}", e)))?
+            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in module name: {e}")))?
             .to_string();
 
         // Get extended scope info for modules too (e.g., #[cfg(test)])
@@ -368,7 +374,7 @@ impl ScopeDetector {
 
         let name = name_node
             .utf8_text(source.as_bytes())
-            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in struct name: {}", e)))?
+            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in struct name: {e}")))?
             .to_string();
 
         // Get extended scope info
@@ -407,7 +413,7 @@ impl ScopeDetector {
 
         let name = name_node
             .utf8_text(source.as_bytes())
-            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in enum name: {}", e)))?
+            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in enum name: {e}")))?
             .to_string();
 
         // Get extended scope info
@@ -446,7 +452,7 @@ impl ScopeDetector {
 
         let name = name_node
             .utf8_text(source.as_bytes())
-            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in union name: {}", e)))?
+            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in union name: {e}")))?
             .to_string();
 
         // Get extended scope info
@@ -483,16 +489,16 @@ impl ScopeDetector {
 
         if let Some(type_node) = node.child_by_field_name("type") {
             if let Ok(type_name) = type_node.utf8_text(source.as_bytes()) {
-                name = format!("impl {}", type_name);
+                name = format!("impl {type_name}");
             }
         }
 
         if let Some(trait_node) = node.child_by_field_name("trait") {
             if let Ok(trait_name) = trait_node.utf8_text(source.as_bytes()) {
-                name = format!("{} for", trait_name);
+                name = format!("{trait_name} for");
                 if let Some(type_node) = node.child_by_field_name("type") {
                     if let Ok(type_name) = type_node.utf8_text(source.as_bytes()) {
-                        name = format!("{} for {}", trait_name, type_name);
+                        name = format!("{trait_name} for {type_name}");
                     }
                 }
             }
@@ -632,44 +638,48 @@ impl ScopeDetector {
     }
 
     pub fn find_doc_tests(&self, node: &Node, source: &str) -> Vec<(Position, Position, String)> {
-        let mut doc_tests = Vec::new();
+        find_doc_tests_recursive(node, source)
+    }
+}
 
-        if node.kind() == "line_comment" {
-            if let Ok(comment_text) = node.utf8_text(source.as_bytes()) {
-                if comment_text.starts_with("///") && comment_text.contains("```") {
-                    let start = node_to_position(node, true);
+fn find_doc_tests_recursive(node: &Node, source: &str) -> Vec<(Position, Position, String)> {
+    let mut doc_tests = Vec::new();
 
-                    let mut current = Some(*node);
-                    let mut _end = node_to_position(node, false);
-                    let mut full_text = String::new();
+    if node.kind() == "line_comment" {
+        if let Ok(comment_text) = node.utf8_text(source.as_bytes()) {
+            if comment_text.starts_with("///") && comment_text.contains("```") {
+                let start = node_to_position(node, true);
 
-                    while let Some(n) = current {
-                        if let Ok(text) = n.utf8_text(source.as_bytes()) {
-                            if text.starts_with("///") {
-                                full_text.push_str(&text[3..].trim_start());
-                                full_text.push('\n');
-                                _end = node_to_position(&n, false);
+                let mut current = Some(*node);
+                let mut _end = node_to_position(node, false);
+                let mut full_text = String::new();
 
-                                if text.contains("```") && full_text.matches("```").count() >= 2 {
-                                    doc_tests.push((start, _end, full_text.clone()));
-                                    break;
-                                }
-                            } else {
+                while let Some(n) = current {
+                    if let Ok(text) = n.utf8_text(source.as_bytes()) {
+                        if let Some(stripped) = text.strip_prefix("///") {
+                            full_text.push_str(stripped.trim_start());
+                            full_text.push('\n');
+                            _end = node_to_position(&n, false);
+
+                            if text.contains("```") && full_text.matches("```").count() >= 2 {
+                                doc_tests.push((start, _end, full_text.clone()));
                                 break;
                             }
+                        } else {
+                            break;
                         }
-                        current = n.next_sibling();
                     }
+                    current = n.next_sibling();
                 }
             }
         }
-
-        for child in node.children(&mut node.walk()) {
-            doc_tests.extend(self.find_doc_tests(&child, source));
-        }
-
-        doc_tests
     }
+
+    for child in node.children(&mut node.walk()) {
+        doc_tests.extend(find_doc_tests_recursive(&child, source));
+    }
+
+    doc_tests
 }
 
 #[cfg(test)]

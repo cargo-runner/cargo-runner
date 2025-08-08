@@ -122,9 +122,9 @@ impl RunnableDetector {
 
                 // Create a proper label based on whether it's a method or type
                 let label = if let Some(ref method) = method_name {
-                    format!("Run doc test for '{}::{}'", struct_or_module_name, method)
+                    format!("Run doc test for '{struct_or_module_name}::{method}'")
                 } else {
-                    format!("Run doc test for '{}'", struct_or_module_name)
+                    format!("Run doc test for '{struct_or_module_name}'")
                 };
 
                 let runnable = Runnable {
@@ -175,7 +175,7 @@ impl RunnableDetector {
 
                         if !already_exists {
                             let runnable = Runnable {
-                                label: format!("Run all tests in module '{}'", module_name),
+                                label: format!("Run all tests in module '{module_name}'"),
                                 scope: scope.clone(),
                                 kind: RunnableKind::ModuleTests {
                                     module_name: module_name.clone(),
@@ -236,7 +236,7 @@ fn test_addition() {
 "#;
 
         let mut temp_file = NamedTempFile::new()?;
-        write!(temp_file, "{}", source)?;
+        write!(temp_file, "{source}")?;
 
         let mut detector = RunnableDetector::new()?;
         let runnables = detector.detect_runnables(temp_file.path(), None)?;
@@ -259,7 +259,7 @@ fn main() {
 "#;
 
         let mut temp_file = NamedTempFile::new()?;
-        write!(temp_file, "{}", source)?;
+        write!(temp_file, "{source}")?;
 
         let mut detector = RunnableDetector::new()?;
         let runnables = detector.detect_runnables(temp_file.path(), None)?;
@@ -285,7 +285,7 @@ fn test_two() {
 "#;
 
         let mut temp_file = NamedTempFile::new()?;
-        write!(temp_file, "{}", source)?;
+        write!(temp_file, "{source}")?;
 
         let mut detector = RunnableDetector::new()?;
 

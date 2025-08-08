@@ -15,7 +15,7 @@ impl RustParser {
         let mut parser = Parser::new();
         parser
             .set_language(&tree_sitter_rust::LANGUAGE.into())
-            .map_err(|e| Error::TreeSitterError(format!("Failed to set language: {}", e)))?;
+            .map_err(|e| Error::TreeSitterError(format!("Failed to set language: {e}")))?;
         Ok(Self { parser })
     }
 

@@ -111,10 +111,10 @@ impl RunnableCache {
             std::fs::create_dir_all(cache_dir)?;
 
             let cache_filename = self.encode_cache_filename(file_path);
-            let cache_path = cache_dir.join(format!("{}.json", cache_filename));
+            let cache_path = cache_dir.join(format!("{cache_filename}.json"));
 
             let contents = serde_json::to_string_pretty(entry).map_err(|e| {
-                Error::CacheError(format!("Failed to serialize cache entry: {}", e))
+                Error::CacheError(format!("Failed to serialize cache entry: {e}"))
             })?;
 
             std::fs::write(cache_path, contents)?;
@@ -137,8 +137,7 @@ impl RunnableCache {
         // Simple encoding: replace path separators with double underscores
         file_path
             .to_string_lossy()
-            .replace('/', "__")
-            .replace('\\', "__")
+            .replace(['/', '\\'], "__")
             .replace(':', "_")
     }
 

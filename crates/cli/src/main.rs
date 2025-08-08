@@ -63,7 +63,7 @@ fn analyze_command(args: &[String]) -> Result<()> {
     let runnables = runner.analyze(filepath)?;
 
     // Print the analysis results (similar to cargo-r)
-    println!("{}", runnables);
+    println!("{runnables}");
 
     Ok(())
 }
@@ -114,9 +114,9 @@ fn run_command(args: &[String]) -> Result<()> {
     let command = runner.get_command_at_position(&filepath, line)?;
 
     if dry_run {
-        println!("{}", command);
+        println!("{command}");
     } else {
-        println!("Running: {}", command);
+        println!("Running: {command}");
 
         // Parse and execute the command
         let mut parts = command.split_whitespace();
@@ -126,7 +126,7 @@ fn run_command(args: &[String]) -> Result<()> {
         let status = Command::new(cmd)
             .args(&args)
             .status()
-            .with_context(|| format!("Failed to execute: {}", command))?;
+            .with_context(|| format!("Failed to execute: {command}"))?;
 
         if !status.success() {
             std::process::exit(status.code().unwrap_or(1));

@@ -140,9 +140,7 @@ impl CargoRunner {
     pub fn build_command_for_runnable(&self, runnable: &Runnable) -> Result<Option<CargoCommand>> {
         let package_name = self.get_package_name(&runnable.file_path)?;
         let project_root = self
-            .project_root
-            .as_ref()
-            .map(|p| p.as_path())
+            .project_root.as_deref()
             .unwrap_or_else(|| Path::new("."));
 
         let builder = CommandBuilder::new(self.config.clone());
@@ -295,7 +293,7 @@ fn main() {
 "#;
 
         let mut temp_file = NamedTempFile::new()?;
-        write!(temp_file, "{}", source)?;
+        write!(temp_file, "{source}")?;
 
         let mut runner = CargoRunner::new()?;
 
@@ -335,7 +333,7 @@ fn main() {
 "#;
 
         let mut temp_file = NamedTempFile::new()?;
-        write!(temp_file, "{}", source)?;
+        write!(temp_file, "{source}")?;
 
         let mut runner = CargoRunner::new()?;
         let runnables = runner.detect_all_runnables(temp_file.path())?;

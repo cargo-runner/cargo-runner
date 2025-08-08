@@ -46,13 +46,13 @@ impl Config {
     pub fn load_from_file(path: &Path) -> Result<Self> {
         let contents = std::fs::read_to_string(path)?;
         let config = serde_json::from_str(&contents)
-            .map_err(|e| Error::ConfigError(format!("Failed to parse config: {}", e)))?;
+            .map_err(|e| Error::ConfigError(format!("Failed to parse config: {e}")))?;
         Ok(config)
     }
 
     pub fn save_to_file(&self, path: &Path) -> Result<()> {
         let contents = serde_json::to_string_pretty(self)
-            .map_err(|e| Error::ConfigError(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| Error::ConfigError(format!("Failed to serialize config: {e}")))?;
         std::fs::write(path, contents)?;
         Ok(())
     }
@@ -118,12 +118,12 @@ mod tests {
         };
 
         let json = serde_json::to_string_pretty(&config).unwrap();
-        println!("Serialized config:\n{}", json);
+        println!("Serialized config:\n{json}");
 
         let parsed: Config = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.overrides.len(), 1);
-        assert_eq!(parsed.cache_enabled, true);
+        assert!(parsed.cache_enabled);
         assert_eq!(parsed.channel, Some("nightly".to_string()));
     }
 

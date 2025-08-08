@@ -132,7 +132,7 @@ fn check_cargo_toml_for_target(
     let manifest = Manifest::from_path(&cargo_toml_path).map_err(|e| {
         crate::Error::IoError(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!("Failed to parse Cargo.toml: {}", e),
+            format!("Failed to parse Cargo.toml: {e}"),
         ))
     })?;
 

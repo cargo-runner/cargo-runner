@@ -8,6 +8,12 @@ pub struct ModuleResolver {
     package_name: Option<String>,
 }
 
+impl Default for ModuleResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModuleResolver {
     pub fn new() -> Self {
         Self { package_name: None }
@@ -52,7 +58,7 @@ impl ModuleResolver {
 
                     // Return Type::method format
                     if let Some(method_name) = &target_scope.name {
-                        return Ok(format!("{}::{}", type_name, method_name));
+                        return Ok(format!("{type_name}::{method_name}"));
                     }
                 }
             }
@@ -193,7 +199,7 @@ impl ModuleResolver {
 
         // Use cargo_toml crate for proper parsing
         let manifest = cargo_toml::Manifest::from_str(&contents)
-            .map_err(|e| Error::ParseError(format!("Failed to parse Cargo.toml: {}", e)))?;
+            .map_err(|e| Error::ParseError(format!("Failed to parse Cargo.toml: {e}")))?;
 
         manifest
             .package
@@ -223,11 +229,7 @@ impl ModuleResolver {
         } else {
             // Last resort: try to detect home directory from current path
             // This is a heuristic - if we're in /home/username or /Users/username, stop there
-            if let Some(home) = Self::detect_home_from_path(&abs_path) {
-                home
-            } else {
-                return None;
-            }
+            Self::detect_home_from_path(&abs_path)?
         };
 
         let mut current = if abs_path.is_file() {

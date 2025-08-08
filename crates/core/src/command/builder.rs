@@ -87,7 +87,7 @@ impl CommandBuilder {
             } => {
                 args.push("--".to_string());
                 if let Some(method) = method_name {
-                    args.push(format!("{}::{}", struct_or_module_name, method));
+                    args.push(format!("{struct_or_module_name}::{method}"));
                 } else {
                     args.push(struct_or_module_name.clone());
                 }
@@ -223,7 +223,7 @@ impl CommandBuilder {
 
         // Add channel to the beginning if specified
         if let Some(ch) = channel {
-            args.insert(0, format!("+{}", ch));
+            args.insert(0, format!("+{ch}"));
         }
 
         // Create command with environment variables
@@ -244,7 +244,7 @@ mod tests {
 
     fn create_test_runnable(name: &str, module_path: &str) -> Runnable {
         Runnable {
-            label: format!("Run test '{}'", name),
+            label: format!("Run test '{name}'"),
             scope: Scope {
                 start: Position {
                     line: 1,

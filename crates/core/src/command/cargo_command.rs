@@ -53,7 +53,7 @@ impl CargoCommand {
         for arg in &self.args {
             cmd.push(' ');
             if arg.contains(' ') {
-                cmd.push_str(&format!("'{}'", arg));
+                cmd.push_str(&format!("'{arg}'"));
             } else {
                 cmd.push_str(arg);
             }

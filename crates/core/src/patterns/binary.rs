@@ -18,7 +18,7 @@ impl Pattern for BinaryPattern {
 
                 let runnable = Runnable {
                     label: if let Some(ref name) = bin_name {
-                        format!("Run binary '{}'", name)
+                        format!("Run binary '{name}'")
                     } else {
                         "Run main()".to_string()
                     },

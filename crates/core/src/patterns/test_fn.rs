@@ -12,7 +12,7 @@ impl Pattern for TestFnPattern {
         if let ScopeKind::Test = scope.kind {
             if let Some(name) = &scope.name {
                 let runnable = Runnable {
-                    label: format!("Run test '{}'", name),
+                    label: format!("Run test '{name}'"),
                     scope: scope.clone(),
                     kind: RunnableKind::Test {
                         test_name: name.clone(),
