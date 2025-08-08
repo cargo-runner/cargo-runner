@@ -30,9 +30,10 @@ impl Target {
             Some(Target::Lib)
         } else if path_str.ends_with("/src/main.rs") || path_str == "src/main.rs" {
             Some(Target::Bin("main".to_string()))
-        } else if (path_str.contains("/src/") || path_str.starts_with("src/")) 
-            && !path_str.contains("/src/bin/") 
-            && !path_str.starts_with("src/bin/") {
+        } else if (path_str.contains("/src/") || path_str.starts_with("src/"))
+            && !path_str.contains("/src/bin/")
+            && !path_str.starts_with("src/bin/")
+        {
             // Any other file under src/ is part of the library
             Some(Target::Lib)
         } else {

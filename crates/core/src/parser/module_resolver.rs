@@ -26,16 +26,21 @@ impl ModuleResolver {
         target_scope: &Scope,
     ) -> Result<String> {
         // Special handling for functions inside impl blocks
-        if matches!(target_scope.kind, ScopeKind::Function | ScopeKind::Test | ScopeKind::Benchmark) {
+        if matches!(
+            target_scope.kind,
+            ScopeKind::Function | ScopeKind::Test | ScopeKind::Benchmark
+        ) {
             // Check if this function is inside an impl block
-            if let Some(impl_scope) = scopes.iter()
+            if let Some(impl_scope) = scopes
+                .iter()
                 .filter(|s| matches!(s.kind, ScopeKind::Impl))
                 .find(|s| s.contains_line(target_scope.start.line))
             {
                 // Extract the type name from the impl block
                 if let Some(impl_name) = &impl_scope.name {
                     let type_name = if impl_name.starts_with("impl ") {
-                        impl_name.strip_prefix("impl ")
+                        impl_name
+                            .strip_prefix("impl ")
                             .unwrap_or(impl_name)
                             .split(" for ")
                             .last()
@@ -44,7 +49,7 @@ impl ModuleResolver {
                     } else {
                         impl_name
                     };
-                    
+
                     // Return Type::method format
                     if let Some(method_name) = &target_scope.name {
                         return Ok(format!("{}::{}", type_name, method_name));
@@ -55,19 +60,20 @@ impl ModuleResolver {
 
         // Normal module path resolution for non-impl items
         let mut path_components = Vec::new();
-        
+
         // For test functions and modules, we want a simpler path without package name
         let is_test_or_module = matches!(target_scope.kind, ScopeKind::Test | ScopeKind::Module);
-        
+
         // Check if this is inside a test module
-        let is_in_test_module = scopes.iter()
+        let is_in_test_module = scopes
+            .iter()
             .filter(|s| matches!(s.kind, ScopeKind::Module))
             .filter(|s| s.contains_line(target_scope.start.line))
             .any(|s| s.name.as_deref() == Some("tests"));
 
         // Skip package name for test functions, modules, and items in test modules
         let should_include_package = !is_test_or_module && !is_in_test_module;
-            
+
         if let Some(ref pkg) = self.package_name {
             if should_include_package {
                 path_components.push(pkg.clone());
@@ -111,7 +117,7 @@ impl ModuleResolver {
         } else {
             (None, 0)
         };
-        
+
         if let Some(src_index) = src_index {
             let relative_path = &path_str[src_index + offset..];
             let path_without_ext = relative_path.trim_end_matches(".rs");
@@ -184,14 +190,17 @@ impl ModuleResolver {
 
     pub fn get_package_name_from_cargo_toml(cargo_toml_path: &Path) -> Result<String> {
         let contents = std::fs::read_to_string(cargo_toml_path)?;
-        
+
         // Use cargo_toml crate for proper parsing
         let manifest = cargo_toml::Manifest::from_str(&contents)
             .map_err(|e| Error::ParseError(format!("Failed to parse Cargo.toml: {}", e)))?;
-        
-        manifest.package
+
+        manifest
+            .package
             .as_ref()
-            .ok_or_else(|| Error::ParseError("No [package] section found in Cargo.toml".to_string()))
+            .ok_or_else(|| {
+                Error::ParseError("No [package] section found in Cargo.toml".to_string())
+            })
             .map(|pkg| pkg.name.clone())
     }
 
@@ -202,7 +211,7 @@ impl ModuleResolver {
         } else {
             start_path.to_path_buf()
         };
-        
+
         // Determine the search boundary
         let boundary = if let Ok(project_root) = std::env::var("PROJECT_ROOT") {
             PathBuf::from(project_root)
@@ -220,7 +229,7 @@ impl ModuleResolver {
                 return None;
             }
         };
-        
+
         let mut current = if abs_path.is_file() {
             abs_path.parent()?
         } else {
@@ -241,10 +250,10 @@ impl ModuleResolver {
             current = current.parent()?;
         }
     }
-    
+
     fn detect_home_from_path(path: &Path) -> Option<PathBuf> {
         let mut current = path;
-        
+
         while let Some(parent) = current.parent() {
             if let Some(dir_name) = parent.file_name() {
                 let dir_str = dir_name.to_str()?;
@@ -256,7 +265,7 @@ impl ModuleResolver {
             }
             current = parent;
         }
-        
+
         None
     }
 }
@@ -393,9 +402,6 @@ mod tests {
             .resolve_module_path(file_path, &scopes, target)
             .unwrap();
         // Function names are not included in module paths - they're added by the command builder
-        assert_eq!(
-            module_path,
-            "models::user::tests"
-        );
+        assert_eq!(module_path, "models::user::tests");
     }
 }

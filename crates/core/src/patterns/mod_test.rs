@@ -38,15 +38,21 @@ mod tests {
     fn test_mod_test_pattern() {
         let pattern = ModTestPattern;
         let scope = Scope {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: 10, character: 0 },
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 10,
+                character: 0,
+            },
             kind: ScopeKind::Module,
             name: Some("tests".to_string()),
         };
-        
+
         let result = pattern.detect(&scope, "", Path::new("test.rs")).unwrap();
         assert!(result.is_some());
-        
+
         let runnable = result.unwrap();
         assert_eq!(runnable.label, "Run all tests in module 'tests'");
         match &runnable.kind {
@@ -56,17 +62,23 @@ mod tests {
             _ => panic!("Expected ModuleTests runnable kind"),
         }
     }
-    
+
     #[test]
     fn test_non_test_module_ignored() {
         let pattern = ModTestPattern;
         let scope = Scope {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: 10, character: 0 },
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 10,
+                character: 0,
+            },
             kind: ScopeKind::Module,
             name: Some("utils".to_string()),
         };
-        
+
         let result = pattern.detect(&scope, "", Path::new("test.rs")).unwrap();
         assert!(result.is_none());
     }

@@ -138,14 +138,14 @@ impl CommandBuilder {
         // First apply global config
         let mut channel = self.config.channel.clone();
         let mut extra_env = self.config.extra_env.clone().unwrap_or_default();
-        
+
         // Check for function-specific overrides
         if let Some(override_) = self.config.get_override_for(identity) {
             // Override channel if specified
             if let Some(override_channel) = &override_.channel {
                 channel = Some(override_channel.clone());
             }
-            
+
             // Handle command/subcommand overrides
             if let Some(cmd) = &override_.command {
                 // If command is overridden, replace the base command
@@ -153,14 +153,14 @@ impl CommandBuilder {
                     args[0] = cmd.clone();
                 }
             }
-            
+
             if let Some(subcmd) = &override_.subcommand {
                 // Insert subcommand after the main command
                 if !args.is_empty() {
                     args.insert(1, subcmd.clone());
                 }
             }
-            
+
             // Apply extra args
             if let Some(extra_args) = &override_.extra_args {
                 if override_.force_replace_args.unwrap_or(false) {
@@ -181,7 +181,7 @@ impl CommandBuilder {
                     }
                 }
             }
-            
+
             // Apply extra test binary args (after --)
             if let Some(test_args) = &override_.extra_test_binary_args {
                 if !args.contains(&"--".to_string()) {
@@ -189,7 +189,7 @@ impl CommandBuilder {
                 }
                 args.extend(test_args.clone());
             }
-            
+
             // Handle environment variables
             if let Some(override_env) = &override_.extra_env {
                 if override_.force_replace_env.unwrap_or(false) {
@@ -211,7 +211,7 @@ impl CommandBuilder {
                     None => args.extend(global_args.clone()),
                 }
             }
-            
+
             // Apply global test binary args
             if let Some(test_args) = &self.config.extra_test_binary_args {
                 if !args.contains(&"--".to_string()) {
@@ -220,7 +220,7 @@ impl CommandBuilder {
                 args.extend(test_args.clone());
             }
         }
-        
+
         // Add channel to the beginning if specified
         if let Some(ch) = channel {
             args.insert(0, format!("+{}", ch));

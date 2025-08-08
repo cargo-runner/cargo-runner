@@ -10,7 +10,7 @@ pub struct Override {
     #[serde(rename = "match")]
     #[serde(alias = "function")] // For backward compatibility with FunctionBased
     pub identity: FunctionIdentity,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

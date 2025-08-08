@@ -38,15 +38,21 @@ mod tests {
     fn test_test_fn_pattern() {
         let pattern = TestFnPattern;
         let scope = Scope {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: 5, character: 0 },
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 5,
+                character: 0,
+            },
             kind: ScopeKind::Test,
             name: Some("test_example".to_string()),
         };
-        
+
         let result = pattern.detect(&scope, "", Path::new("test.rs")).unwrap();
         assert!(result.is_some());
-        
+
         let runnable = result.unwrap();
         assert_eq!(runnable.label, "Run test 'test_example'");
         match &runnable.kind {

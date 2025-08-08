@@ -1,4 +1,7 @@
-use crate::{error::{Error, Result}, types::Runnable};
+use crate::{
+    error::{Error, Result},
+    types::Runnable,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

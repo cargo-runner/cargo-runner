@@ -24,7 +24,7 @@ impl CargoCommand {
             env: Vec::new(),
         }
     }
-    
+
     pub fn new_rustc(args: Vec<String>) -> Self {
         Self {
             command_type: CommandType::Rustc,
@@ -60,25 +60,25 @@ impl CargoCommand {
         }
         cmd
     }
-    
+
     pub fn execute(&self) -> io::Result<ExitStatus> {
         let mut cmd = match self.command_type {
             CommandType::Cargo => Command::new("cargo"),
             CommandType::Rustc => Command::new("rustc"),
         };
-        
+
         cmd.args(&self.args);
-        
+
         // Set working directory if specified
         if let Some(ref dir) = self.working_dir {
             cmd.current_dir(dir);
         }
-        
+
         // Set environment variables
         for (key, value) in &self.env {
             cmd.env(key, value);
         }
-        
+
         // Execute and wait for completion
         cmd.status()
     }

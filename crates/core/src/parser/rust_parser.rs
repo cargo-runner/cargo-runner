@@ -29,15 +29,21 @@ impl RustParser {
         let tree = self.parse(source)?;
         let mut detector = ScopeDetector::new();
         let extended_scopes = detector.detect_scopes(&tree, source, file_path)?;
-        Ok(extended_scopes.into_iter().map(|es| es.to_scope()).collect())
+        Ok(extended_scopes
+            .into_iter()
+            .map(|es| es.to_scope())
+            .collect())
     }
-    
-    pub fn get_extended_scopes(&mut self, source: &str, file_path: &Path) -> Result<Vec<ExtendedScope>> {
+
+    pub fn get_extended_scopes(
+        &mut self,
+        source: &str,
+        file_path: &Path,
+    ) -> Result<Vec<ExtendedScope>> {
         let tree = self.parse(source)?;
         let mut detector = ScopeDetector::new();
         detector.detect_scopes(&tree, source, file_path)
     }
-
 }
 
 #[cfg(test)]

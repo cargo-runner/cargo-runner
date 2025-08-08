@@ -10,7 +10,7 @@ fn main() -> Result<()> {
         .init();
 
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         print_help();
         return Ok(());
@@ -58,13 +58,13 @@ fn analyze_command(args: &[String]) -> Result<()> {
 
     let filepath = &args[0];
     debug!("Analyzing file: {}", filepath);
-    
+
     let mut runner = cargo_runner_core::CargoRunner::new()?;
     let runnables = runner.analyze(filepath)?;
-    
+
     // Print the analysis results (similar to cargo-r)
     println!("{}", runnables);
-    
+
     Ok(())
 }
 
@@ -77,7 +77,7 @@ fn run_command(args: &[String]) -> Result<()> {
 
     let mut dry_run = false;
     let mut filepath_arg = None;
-    
+
     for arg in args {
         match arg.as_str() {
             "-d" | "--dry-run" => dry_run = true,
@@ -88,14 +88,14 @@ fn run_command(args: &[String]) -> Result<()> {
             }
         }
     }
-    
+
     let filepath_arg = filepath_arg.context("Missing filepath argument")?;
-    
+
     // Parse filepath and line number
     let (filepath, line) = if let Some(colon_pos) = filepath_arg.rfind(':') {
         let path_part = &filepath_arg[..colon_pos];
         let line_part = &filepath_arg[colon_pos + 1..];
-        
+
         // Check if it's a valid line number
         if let Ok(line_num) = line_part.parse::<usize>() {
             // Convert 1-based to 0-based
@@ -107,31 +107,31 @@ fn run_command(args: &[String]) -> Result<()> {
     } else {
         (filepath_arg, None)
     };
-    
+
     debug!("Running file: {} at line: {:?}", filepath, line);
-    
+
     let mut runner = cargo_runner_core::CargoRunner::new()?;
     let command = runner.get_command_at_position(&filepath, line)?;
-    
+
     if dry_run {
         println!("{}", command);
     } else {
         println!("Running: {}", command);
-        
+
         // Parse and execute the command
         let mut parts = command.split_whitespace();
         let cmd = parts.next().context("Empty command")?;
         let args: Vec<&str> = parts.collect();
-        
+
         let status = Command::new(cmd)
             .args(&args)
             .status()
             .with_context(|| format!("Failed to execute: {}", command))?;
-        
+
         if !status.success() {
             std::process::exit(status.code().unwrap_or(1));
         }
     }
-    
+
     Ok(())
 }

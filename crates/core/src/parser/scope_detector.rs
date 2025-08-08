@@ -25,7 +25,12 @@ impl ScopeDetector {
         Self
     }
 
-    pub fn detect_scopes(&mut self, tree: &Tree, source: &str, file_path: &Path) -> Result<Vec<ExtendedScope>> {
+    pub fn detect_scopes(
+        &mut self,
+        tree: &Tree,
+        source: &str,
+        file_path: &Path,
+    ) -> Result<Vec<ExtendedScope>> {
         let mut scopes = Vec::new();
         let root_node = tree.root_node();
 
@@ -42,64 +47,79 @@ impl ScopeDetector {
 
         Ok(scopes)
     }
-    
+
     fn determine_file_type(&self, file_path: &Path) -> Result<FileScope> {
-        let path_str = file_path.to_str()
+        let path_str = file_path
+            .to_str()
             .ok_or_else(|| Error::ParseError("Invalid file path".to_string()))?;
-        let file_name = file_path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-        
+        let file_name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
         // Check well-known patterns first
-        if path_str.contains("/src/lib.rs") || path_str == "src/lib.rs" || path_str.ends_with("/lib.rs") {
+        if path_str.contains("/src/lib.rs")
+            || path_str == "src/lib.rs"
+            || path_str.ends_with("/lib.rs")
+        {
             return Ok(FileScope::Lib);
         }
-        
-        if path_str.contains("/src/main.rs") || path_str == "src/main.rs" || path_str.ends_with("/main.rs") {
-            return Ok(FileScope::Bin { name: Some("main".to_string()) });
+
+        if path_str.contains("/src/main.rs")
+            || path_str == "src/main.rs"
+            || path_str.ends_with("/main.rs")
+        {
+            return Ok(FileScope::Bin {
+                name: Some("main".to_string()),
+            });
         }
-        
+
         if path_str.contains("/src/bin/") || path_str.starts_with("src/bin/") {
-            let name = file_path.file_stem()
+            let name = file_path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string());
             return Ok(FileScope::Bin { name });
         }
-        
-        if (path_str.contains("/tests/") || path_str.starts_with("tests/")) && !path_str.contains("/src/") {
-            let name = file_path.file_stem()
+
+        if (path_str.contains("/tests/") || path_str.starts_with("tests/"))
+            && !path_str.contains("/src/")
+        {
+            let name = file_path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string());
             return Ok(FileScope::Test { name });
         }
-        
+
         if path_str.contains("/benches/") || path_str.starts_with("benches/") {
-            let name = file_path.file_stem()
+            let name = file_path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string());
             return Ok(FileScope::Bench { name });
         }
-        
+
         if path_str.contains("/examples/") || path_str.starts_with("examples/") {
-            let name = file_path.file_stem()
+            let name = file_path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string());
             return Ok(FileScope::Example { name });
         }
-        
+
         if file_name == "build.rs" {
             return Ok(FileScope::Build);
         }
-        
+
         // Any other .rs file under src/ is part of the library
-        if path_str.contains("/src/") && file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
+        if path_str.contains("/src/")
+            && file_path.extension().and_then(|s| s.to_str()) == Some("rs")
+        {
             return Ok(FileScope::Lib);
         }
-        
+
         // Check Cargo.toml for custom paths
         use crate::parser::module_resolver::ModuleResolver;
         let has_cargo_toml = ModuleResolver::find_cargo_toml(file_path).is_some();
-        
+
         if has_cargo_toml {
             if let Some(file_type) = self.check_cargo_toml_for_file_type(file_path)? {
                 return Ok(file_type);
@@ -107,48 +127,51 @@ impl ScopeDetector {
             // Has Cargo.toml but file doesn't match any patterns
             return Ok(FileScope::Unknown);
         }
-        
+
         // No Cargo.toml found - this is a standalone Rust file
         if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
-            let name = file_path.file_stem()
+            let name = file_path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string());
             return Ok(FileScope::Standalone { name });
         }
-        
+
         Ok(FileScope::Unknown)
     }
-    
+
     fn check_cargo_toml_for_file_type(&self, file_path: &Path) -> Result<Option<FileScope>> {
         use crate::parser::module_resolver::ModuleResolver;
-        
+
         // Find the Cargo.toml file
         let cargo_toml_path = if let Some(path) = ModuleResolver::find_cargo_toml(file_path) {
             path
         } else {
             return Ok(None);
         };
-        
+
         // Get project root
-        let project_root = cargo_toml_path.parent()
+        let project_root = cargo_toml_path
+            .parent()
             .ok_or_else(|| Error::ParseError("Cannot determine project root".to_string()))?;
-        
+
         // Parse Cargo.toml
         let manifest = Manifest::from_path(&cargo_toml_path)
             .map_err(|e| Error::ParseError(format!("Failed to parse Cargo.toml: {}", e)))?;
-        
+
         // Get relative path from project root
-        let relative_path = file_path.strip_prefix(project_root)
-            .unwrap_or(file_path);
-        let relative_str = relative_path.to_str()
+        let relative_path = file_path.strip_prefix(project_root).unwrap_or(file_path);
+        let relative_str = relative_path
+            .to_str()
             .ok_or_else(|| Error::ParseError("Invalid relative path".to_string()))?;
-        
+
         // Check [[bin]] entries
         for bin in &manifest.bin {
             if let Some(path) = &bin.path {
                 if path == relative_str {
                     let name = bin.name.clone().or_else(|| {
-                        file_path.file_stem()
+                        file_path
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .map(|s| s.to_string())
                     });
@@ -156,13 +179,14 @@ impl ScopeDetector {
                 }
             }
         }
-        
+
         // Check [[test]] entries
         for test in &manifest.test {
             if let Some(path) = &test.path {
                 if path == relative_str {
                     let name = test.name.clone().or_else(|| {
-                        file_path.file_stem()
+                        file_path
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .map(|s| s.to_string())
                     });
@@ -170,13 +194,14 @@ impl ScopeDetector {
                 }
             }
         }
-        
+
         // Check [[bench]] entries
         for bench in &manifest.bench {
             if let Some(path) = &bench.path {
                 if path == relative_str {
                     let name = bench.name.clone().or_else(|| {
-                        file_path.file_stem()
+                        file_path
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .map(|s| s.to_string())
                     });
@@ -184,13 +209,14 @@ impl ScopeDetector {
                 }
             }
         }
-        
+
         // Check [[example]] entries
         for example in &manifest.example {
             if let Some(path) = &example.path {
                 if path == relative_str {
                     let name = example.name.clone().or_else(|| {
-                        file_path.file_stem()
+                        file_path
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .map(|s| s.to_string())
                     });
@@ -198,7 +224,7 @@ impl ScopeDetector {
                 }
             }
         }
-        
+
         // Check [lib] entry
         if let Some(lib) = &manifest.lib {
             if let Some(path) = &lib.path {
@@ -207,7 +233,7 @@ impl ScopeDetector {
                 }
             }
         }
-        
+
         Ok(None)
     }
 
@@ -241,7 +267,12 @@ impl ScopeDetector {
         Ok(())
     }
 
-    fn handle_function(&self, node: &Node, source: &str, scopes: &mut Vec<ExtendedScope>) -> Result<()> {
+    fn handle_function(
+        &self,
+        node: &Node,
+        source: &str,
+        scopes: &mut Vec<ExtendedScope>,
+    ) -> Result<()> {
         let name_node = node
             .child_by_field_name("name")
             .ok_or_else(|| Error::ParseError("Function without name".to_string()))?;
@@ -277,7 +308,7 @@ impl ScopeDetector {
             .with_extended_start(extended_start)
             .with_doc_comments(details.doc_comment_lines, details.has_doc_tests)
             .with_attributes(details.attribute_lines);
-        
+
         // Set the correct original start position
         extended_scope.original_start = details.original_start;
 
@@ -286,7 +317,12 @@ impl ScopeDetector {
         Ok(())
     }
 
-    fn handle_module(&self, node: &Node, source: &str, scopes: &mut Vec<ExtendedScope>) -> Result<()> {
+    fn handle_module(
+        &self,
+        node: &Node,
+        source: &str,
+        scopes: &mut Vec<ExtendedScope>,
+    ) -> Result<()> {
         let name_node = node
             .child_by_field_name("name")
             .ok_or_else(|| Error::ParseError("Module without name".to_string()))?;
@@ -311,7 +347,7 @@ impl ScopeDetector {
             .with_extended_start(extended_start)
             .with_doc_comments(details.doc_comment_lines, details.has_doc_tests)
             .with_attributes(details.attribute_lines);
-        
+
         // Set the correct original start position
         extended_scope.original_start = details.original_start;
 
@@ -320,7 +356,12 @@ impl ScopeDetector {
         Ok(())
     }
 
-    fn handle_struct(&self, node: &Node, source: &str, scopes: &mut Vec<ExtendedScope>) -> Result<()> {
+    fn handle_struct(
+        &self,
+        node: &Node,
+        source: &str,
+        scopes: &mut Vec<ExtendedScope>,
+    ) -> Result<()> {
         let name_node = node
             .child_by_field_name("name")
             .ok_or_else(|| Error::ParseError("Struct without name".to_string()))?;
@@ -345,7 +386,7 @@ impl ScopeDetector {
             .with_extended_start(extended_start)
             .with_doc_comments(details.doc_comment_lines, details.has_doc_tests)
             .with_attributes(details.attribute_lines);
-        
+
         // Set the correct original start position
         extended_scope.original_start = details.original_start;
 
@@ -354,7 +395,12 @@ impl ScopeDetector {
         Ok(())
     }
 
-    fn handle_enum(&self, node: &Node, source: &str, scopes: &mut Vec<ExtendedScope>) -> Result<()> {
+    fn handle_enum(
+        &self,
+        node: &Node,
+        source: &str,
+        scopes: &mut Vec<ExtendedScope>,
+    ) -> Result<()> {
         let name_node = node
             .child_by_field_name("name")
             .ok_or_else(|| Error::ParseError("Enum without name".to_string()))?;
@@ -379,7 +425,7 @@ impl ScopeDetector {
             .with_extended_start(extended_start)
             .with_doc_comments(details.doc_comment_lines, details.has_doc_tests)
             .with_attributes(details.attribute_lines);
-        
+
         // Set the correct original start position
         extended_scope.original_start = details.original_start;
 
@@ -388,7 +434,12 @@ impl ScopeDetector {
         Ok(())
     }
 
-    fn handle_union(&self, node: &Node, source: &str, scopes: &mut Vec<ExtendedScope>) -> Result<()> {
+    fn handle_union(
+        &self,
+        node: &Node,
+        source: &str,
+        scopes: &mut Vec<ExtendedScope>,
+    ) -> Result<()> {
         let name_node = node
             .child_by_field_name("name")
             .ok_or_else(|| Error::ParseError("Union without name".to_string()))?;
@@ -413,7 +464,7 @@ impl ScopeDetector {
             .with_extended_start(extended_start)
             .with_doc_comments(details.doc_comment_lines, details.has_doc_tests)
             .with_attributes(details.attribute_lines);
-        
+
         // Set the correct original start position
         extended_scope.original_start = details.original_start;
 
@@ -422,7 +473,12 @@ impl ScopeDetector {
         Ok(())
     }
 
-    fn handle_impl(&self, node: &Node, source: &str, scopes: &mut Vec<ExtendedScope>) -> Result<()> {
+    fn handle_impl(
+        &self,
+        node: &Node,
+        source: &str,
+        scopes: &mut Vec<ExtendedScope>,
+    ) -> Result<()> {
         let mut name = String::from("impl");
 
         if let Some(type_node) = node.child_by_field_name("type") {
@@ -457,7 +513,7 @@ impl ScopeDetector {
             .with_extended_start(extended_start)
             .with_doc_comments(details.doc_comment_lines, details.has_doc_tests)
             .with_attributes(details.attribute_lines);
-        
+
         // Set the correct original start position
         extended_scope.original_start = details.original_start;
 
@@ -516,16 +572,13 @@ impl ScopeDetector {
         let mut attribute_lines = 0u32;
         let mut has_doc_tests = false;
         let mut found_any = false;
-        
-        
+
         // Process siblings in reverse order to find the topmost doc comment or attribute
         let mut siblings_to_process = Vec::new();
         while let Some(sibling) = current_sibling {
-            
             match sibling.kind() {
                 "line_comment" => {
                     if let Ok(text) = sibling.utf8_text(source.as_bytes()) {
-                        
                         if text.starts_with("///") {
                             siblings_to_process.push((sibling, "doc_comment"));
                             if text.contains("```") {
@@ -546,7 +599,7 @@ impl ScopeDetector {
             }
             current_sibling = sibling.prev_sibling();
         }
-        
+
         // Process in forward order to get the correct counts
         for (sibling, kind) in siblings_to_process.iter().rev() {
             let pos = node_to_position(sibling, true);
@@ -554,7 +607,7 @@ impl ScopeDetector {
                 extended_start = pos;
                 found_any = true;
             }
-            
+
             match *kind {
                 "doc_comment" => {
                     doc_comment_lines += 1;
@@ -566,7 +619,7 @@ impl ScopeDetector {
                 _ => {}
             }
         }
-        
+
         let details = ExtendedScopeDetails {
             original_start,
             extended_start,
@@ -574,7 +627,7 @@ impl ScopeDetector {
             attribute_lines,
             has_doc_tests,
         };
-        
+
         (extended_start, details)
     }
 

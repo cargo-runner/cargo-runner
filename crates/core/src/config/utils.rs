@@ -21,7 +21,7 @@ mod tests {
         assert!(is_valid_channel("nightly-2023-01-01"));
         assert!(is_valid_channel("1.75.0"));
         assert!(is_valid_channel("1.76.0-beta.1"));
-        
+
         assert!(!is_valid_channel("invalid"));
         assert!(!is_valid_channel("2.0.0")); // Rust 2.x doesn't exist yet
     }

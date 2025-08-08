@@ -61,7 +61,10 @@ impl CargoRunner {
         file_path: &Path,
         line: u32,
     ) -> Result<Vec<Runnable>> {
-        debug!("detect_runnables_at_line: file={:?}, line={}", file_path, line);
+        debug!(
+            "detect_runnables_at_line: file={:?}, line={}",
+            file_path, line
+        );
         self.ensure_project_root(file_path)?;
 
         // Check cache first
@@ -72,8 +75,15 @@ impl CargoRunner {
                     .iter()
                     .filter(|r| {
                         let contains = r.scope.contains_line(line);
-                        debug!("  Runnable '{}' scope {}-{} contains line {}? {} (module_path: '{}')", 
-                            r.label, r.scope.start.line, r.scope.end.line, line, contains, r.module_path);
+                        debug!(
+                            "  Runnable '{}' scope {}-{} contains line {}? {} (module_path: '{}')",
+                            r.label,
+                            r.scope.start.line,
+                            r.scope.end.line,
+                            line,
+                            contains,
+                            r.module_path
+                        );
                         contains
                     })
                     .cloned()
@@ -140,7 +150,7 @@ impl CargoRunner {
 
         Ok(Some(command))
     }
-    
+
     pub fn get_fallback_command(&mut self, file_path: &Path) -> Result<Option<CargoCommand>> {
         self.ensure_project_root(file_path)?;
         let package_name = self.get_package_name(file_path)?;
@@ -151,7 +161,7 @@ impl CargoRunner {
             project_root,
         )
     }
-    
+
     pub fn get_file_command(&mut self, file_path: &Path) -> Result<Option<CargoCommand>> {
         // This is essentially the same as fallback command, but always returns it
         // regardless of whether there are runnables in the file
@@ -243,16 +253,20 @@ impl CargoRunner {
     }
 
     /// Get command for a specific position in a file
-    pub fn get_command_at_position(&mut self, file_path: &str, line: Option<usize>) -> Result<String> {
+    pub fn get_command_at_position(
+        &mut self,
+        file_path: &str,
+        line: Option<usize>,
+    ) -> Result<String> {
         let path = Path::new(file_path);
-        
+
         let command = if let Some(line_num) = line {
             // Line is already 0-based from the CLI
             self.build_command(path, line_num as u32)?
         } else {
             self.get_file_command(path)?
         };
-        
+
         if let Some(cmd) = command {
             Ok(cmd.to_shell_command())
         } else {

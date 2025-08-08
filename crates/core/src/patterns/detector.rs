@@ -1,7 +1,9 @@
 use crate::{
     error::Result,
     parser::{scope_detector::ScopeDetector, RustParser},
-    patterns::{BenchmarkPattern, BinaryPattern, DocTestPattern, ModTestPattern, Pattern, TestFnPattern},
+    patterns::{
+        BenchmarkPattern, BinaryPattern, DocTestPattern, ModTestPattern, Pattern, TestFnPattern,
+    },
     types::{Runnable, RunnableKind, RunnableWithScore, Scope, ScopeKind},
 };
 use std::path::Path;
@@ -62,9 +64,10 @@ impl RunnableDetector {
                     // The doc test should be within the extended scope
                     let contains = es.scope.contains_line(start.line);
                     // And the doc test should start near the beginning of the extended scope
-                    let at_start = start.line >= es.scope.start.line && 
-                        start.line < es.scope.start.line + es.doc_comment_lines + es.attribute_lines + 2;
-                    
+                    let at_start = start.line >= es.scope.start.line
+                        && start.line
+                            < es.scope.start.line + es.doc_comment_lines + es.attribute_lines + 2;
+
                     contains && at_start
                 })
                 // Prefer the smallest scope (most specific)
@@ -73,43 +76,49 @@ impl RunnableDetector {
 
             if let Some(parent_ext) = parent_extended {
                 let parent = &parent_ext.scope;
-                let (struct_or_module_name, method_name) = if matches!(parent.kind, ScopeKind::Function) {
-                    // For functions inside impl blocks, find the impl name
-                    let impl_scope = extended_scopes
-                        .iter()
-                        .filter(|es| matches!(es.scope.kind, ScopeKind::Impl))
-                        .find(|es| es.scope.contains_line(parent.start.line))
-                        .map(|es| &es.scope);
-                    
-                    if let Some(impl_scope) = impl_scope {
-                        // Extract the type name from "impl Type" or "impl Trait for Type"
-                        let impl_name = impl_scope.name.as_deref().unwrap_or("impl");
+                let (struct_or_module_name, method_name) =
+                    if matches!(parent.kind, ScopeKind::Function) {
+                        // For functions inside impl blocks, find the impl name
+                        let impl_scope = extended_scopes
+                            .iter()
+                            .filter(|es| matches!(es.scope.kind, ScopeKind::Impl))
+                            .find(|es| es.scope.contains_line(parent.start.line))
+                            .map(|es| &es.scope);
+
+                        if let Some(impl_scope) = impl_scope {
+                            // Extract the type name from "impl Type" or "impl Trait for Type"
+                            let impl_name = impl_scope.name.as_deref().unwrap_or("impl");
+                            let type_name = if impl_name.starts_with("impl ") {
+                                impl_name
+                                    .strip_prefix("impl ")
+                                    .unwrap_or(impl_name)
+                                    .split(" for ")
+                                    .last()
+                                    .unwrap_or(impl_name)
+                            } else {
+                                impl_name
+                            };
+                            (type_name.to_string(), parent.name.clone())
+                        } else {
+                            // Standalone function
+                            (parent.name.clone().unwrap_or_default(), None)
+                        }
+                    } else if matches!(parent.kind, ScopeKind::Impl) {
+                        // For impl blocks, extract the type name
+                        let impl_name = parent.name.as_deref().unwrap_or("impl");
                         let type_name = if impl_name.starts_with("impl ") {
-                            impl_name.strip_prefix("impl ").unwrap_or(impl_name)
-                                .split(" for ").last().unwrap_or(impl_name)
+                            let stripped = impl_name.strip_prefix("impl ").unwrap_or(impl_name);
+                            let final_name =
+                                stripped.split(" for ").last().unwrap_or(stripped).trim();
+                            final_name
                         } else {
                             impl_name
                         };
-                        (type_name.to_string(), parent.name.clone())
+                        (type_name.to_string(), None)
                     } else {
-                        // Standalone function
+                        // Struct
                         (parent.name.clone().unwrap_or_default(), None)
-                    }
-                } else if matches!(parent.kind, ScopeKind::Impl) {
-                    // For impl blocks, extract the type name
-                    let impl_name = parent.name.as_deref().unwrap_or("impl");
-                    let type_name = if impl_name.starts_with("impl ") {
-                        let stripped = impl_name.strip_prefix("impl ").unwrap_or(impl_name);
-                        let final_name = stripped.split(" for ").last().unwrap_or(stripped).trim();
-                        final_name
-                    } else {
-                        impl_name
                     };
-                    (type_name.to_string(), None)
-                } else {
-                    // Struct
-                    (parent.name.clone().unwrap_or_default(), None)
-                };
 
                 // Create a proper label based on whether it's a method or type
                 let label = if let Some(ref method) = method_name {
@@ -117,7 +126,7 @@ impl RunnableDetector {
                 } else {
                     format!("Run doc test for '{}'", struct_or_module_name)
                 };
-                
+
                 let runnable = Runnable {
                     label,
                     scope: scope.clone(), // Use the doc test's own scope, not the parent's
@@ -152,18 +161,18 @@ impl RunnableDetector {
                 if let Some(module_name) = &scope.name {
                     // Check if this module contains any test functions
                     let has_tests = extended_scopes.iter().any(|s| {
-                        matches!(s.scope.kind, ScopeKind::Test) 
-                        && s.scope.start.line >= scope.start.line 
-                        && s.scope.end.line <= scope.end.line
+                        matches!(s.scope.kind, ScopeKind::Test)
+                            && s.scope.start.line >= scope.start.line
+                            && s.scope.end.line <= scope.end.line
                     });
-                    
+
                     if has_tests {
                         // Check if we already have a runnable for this module
                         let already_exists = runnables.iter().any(|r| {
                             matches!(&r.kind, RunnableKind::ModuleTests { module_name: existing_name } 
                                 if existing_name == module_name)
                         });
-                        
+
                         if !already_exists {
                             let runnable = Runnable {
                                 label: format!("Run all tests in module '{}'", module_name),
@@ -184,7 +193,7 @@ impl RunnableDetector {
 
         // Sort runnables by their start position to maintain file order
         runnables.sort_by_key(|r| (r.scope.start.line, r.scope.start.character));
-        
+
         // Filter by line if specified
         if let Some(line) = line {
             let mut scored_runnables: Vec<RunnableWithScore> = runnables

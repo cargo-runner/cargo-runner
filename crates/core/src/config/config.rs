@@ -1,4 +1,7 @@
-use crate::{error::{Error, Result}, types::FunctionIdentity};
+use crate::{
+    error::{Error, Result},
+    types::FunctionIdentity,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -23,11 +26,11 @@ pub struct Config {
     pub extra_test_binary_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_framework: Option<TestFramework>,
-    
+
     // Overrides for specific functions
     #[serde(default)]
     pub overrides: Vec<Override>,
-    
+
     // Cache settings
     #[serde(default = "default_cache_enabled")]
     pub cache_enabled: bool,
@@ -103,9 +106,10 @@ mod tests {
                 extra_test_binary_args: Some(vec!["--test-threads=1".to_string()]),
                 test_framework: None,
                 force_replace_args: Some(false),
-                extra_env: Some(HashMap::from([
-                    ("RUST_LOG".to_string(), "debug".to_string()),
-                ])),
+                extra_env: Some(HashMap::from([(
+                    "RUST_LOG".to_string(),
+                    "debug".to_string(),
+                )])),
                 force_replace_env: Some(false),
             }],
             cache_enabled: true,
