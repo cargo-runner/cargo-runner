@@ -157,9 +157,9 @@ impl ModuleResolver {
             })
             .collect();
 
-        // Sort by scope size (smallest first = most specific)
+        // Sort by scope size (largest first = outermost)
         let mut sorted_modules = containing_modules;
-        sorted_modules.sort_by_key(|s| s.end.line - s.start.line);
+        sorted_modules.sort_by_key(|s| std::cmp::Reverse(s.end.line - s.start.line));
 
         for module in sorted_modules {
             if let Some(ref name) = module.name {
