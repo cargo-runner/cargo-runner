@@ -169,7 +169,7 @@ impl RunnableDetector {
                     if has_tests {
                         // Check if we already have a runnable for this module
                         let already_exists = runnables.iter().any(|r| {
-                            matches!(&r.kind, RunnableKind::ModuleTests { module_name: existing_name } 
+                            matches!(&r.kind, RunnableKind::ModuleTests { module_name: existing_name }
                                 if existing_name == module_name)
                         });
 
