@@ -144,6 +144,8 @@ fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepat
     println!("🔍 Analyzing: {}{}", filepath, if let Some(l) = line { format!(":{}", l + 1) } else { String::new() });
     println!("{}", "=".repeat(80));
     
+    let mut final_command: Option<String> = None;
+    
     // Show config details if requested
     if show_config {
         print_config_details(runner, filepath)?;
@@ -151,22 +153,20 @@ fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepat
     
     let path = Path::new(filepath);
     
-    // Only show file-level command when not analyzing a specific line
-    if line.is_none() {
-        // Get file-level command
-        if let Some(cmd) = runner.get_file_command(path)? {
-            println!("📄 File-level command:");
-            print_command_breakdown(&cmd);
-            
-            // Determine file type
-            let file_type = determine_file_type(path);
-            println!("   📦 Type: {}", file_type);
-            
-            // Get file scope info
-            if let Ok(source) = std::fs::read_to_string(path) {
-                let line_count = source.lines().count();
-                println!("   📏 Scope: lines 1-{}", line_count);
-            }
+    // Always show file-level command as it represents the entire file scope
+    // Get file-level command
+    if let Some(cmd) = runner.get_file_command(path)? {
+        println!("📄 File-level command:");
+        print_command_breakdown(&cmd);
+        
+        // Determine file type
+        let file_type = determine_file_type(path);
+        println!("   📦 Type: {}", file_type);
+        
+        // Get file scope info
+        if let Ok(source) = std::fs::read_to_string(path) {
+            let line_count = source.lines().count();
+            println!("   📏 Scope: lines 1-{}", line_count);
         }
     }
     
@@ -213,9 +213,9 @@ fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepat
     
     if runnables.is_empty() {
         if let Some(line_num) = line {
-            println!("\n❌ No runnables found at line {}.", line_num + 1);
+            println!("\n❌ No specific runnables found at line {} (but file-level command above can be used).", line_num + 1);
         } else {
-            println!("\n❌ No runnables found in this file.");
+            println!("\n❌ No specific runnables found in this file (but file-level command above can be used).");
         }
     } else {
         println!("\n✅ Found {} runnable(s):\n", runnables.len());
@@ -263,6 +263,8 @@ fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepat
             // Build and show command
             if let Some(command) = runner.build_command_for_runnable(runnable)? {
                 print_command_breakdown(&command);
+                // Store the final command
+                final_command = Some(command.to_shell_command());
             }
             
             // Show matching override if config details requested
@@ -301,6 +303,12 @@ fn print_formatted_analysis(runner: &mut cargo_runner_core::CargoRunner, filepat
                 println!();
             }
         }
+    }
+    
+    // Display final command at the end
+    if let Some(cmd) = final_command {
+        println!("\n🎯 Command to run:");
+        println!("   {}", cmd);
     }
     
     println!("\n{}", "=".repeat(80));

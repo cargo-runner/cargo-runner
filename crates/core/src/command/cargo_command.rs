@@ -45,12 +45,34 @@ impl CargoCommand {
     }
 
     pub fn to_shell_command(&self) -> String {
-        let executable = match self.command_type {
-            CommandType::Cargo => "cargo",
-            CommandType::Rustc => "rustc",
+        // Check if the first arg is a custom command
+        let (executable, args) = if !self.args.is_empty() && !self.args[0].starts_with('-') && !self.args[0].starts_with('+') {
+            // Check if this might be a custom command like "dx" or "trunk"
+            match self.args[0].as_str() {
+                "dx" | "trunk" => {
+                    // Use the first arg as the command, rest as args
+                    (self.args[0].as_str(), &self.args[1..])
+                }
+                _ => {
+                    // Standard cargo/rustc command
+                    let exec = match self.command_type {
+                        CommandType::Cargo => "cargo",
+                        CommandType::Rustc => "rustc",
+                    };
+                    (exec, &self.args[..])
+                }
+            }
+        } else {
+            // Standard command
+            let exec = match self.command_type {
+                CommandType::Cargo => "cargo",
+                CommandType::Rustc => "rustc",
+            };
+            (exec, &self.args[..])
         };
+        
         let mut cmd = String::from(executable);
-        for arg in &self.args {
+        for arg in args {
             cmd.push(' ');
             if arg.contains(' ') {
                 cmd.push_str(&format!("'{arg}'"));
@@ -62,12 +84,34 @@ impl CargoCommand {
     }
 
     pub fn execute(&self) -> io::Result<ExitStatus> {
-        let mut cmd = match self.command_type {
-            CommandType::Cargo => Command::new("cargo"),
-            CommandType::Rustc => Command::new("rustc"),
+        // Check if the first arg is a custom command
+        let (executable, args) = if !self.args.is_empty() && !self.args[0].starts_with('-') && !self.args[0].starts_with('+') {
+            // Check if this might be a custom command like "dx" or "trunk"
+            match self.args[0].as_str() {
+                "dx" | "trunk" => {
+                    // Use the first arg as the command, rest as args
+                    (self.args[0].as_str(), &self.args[1..])
+                }
+                _ => {
+                    // Standard cargo/rustc command
+                    let exec = match self.command_type {
+                        CommandType::Cargo => "cargo",
+                        CommandType::Rustc => "rustc",
+                    };
+                    (exec, &self.args[..])
+                }
+            }
+        } else {
+            // Standard command
+            let exec = match self.command_type {
+                CommandType::Cargo => "cargo",
+                CommandType::Rustc => "rustc",
+            };
+            (exec, &self.args[..])
         };
-
-        cmd.args(&self.args);
+        
+        let mut cmd = Command::new(executable);
+        cmd.args(args);
 
         // Set working directory if specified
         if let Some(ref dir) = self.working_dir {

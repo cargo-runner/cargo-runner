@@ -25,7 +25,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_test_binary_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub test_frameworks: Option<TestFramework>,
+    pub test_framework: Option<TestFramework>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binary_framework: Option<TestFramework>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linked_projects: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -43,28 +43,31 @@ impl CommandBuilder {
         }
 
         // Determine and add target
-        debug!("Determining target for file path: {:?}", runnable.file_path);
-        if let Some(target) = Target::from_file_path(&runnable.file_path) {
-            debug!("Target determined: {:?}", target);
-            match target {
-                Target::Lib => args.push("--lib".to_string()),
-                Target::Bin(name) => {
-                    if name != "main" {
-                        args.push("--bin".to_string());
+        // Skip target selection for doc tests as --doc cannot be combined with other target options
+        if !matches!(runnable.kind, RunnableKind::DocTest { .. }) {
+            debug!("Determining target for file path: {:?}", runnable.file_path);
+            if let Some(target) = Target::from_file_path(&runnable.file_path) {
+                debug!("Target determined: {:?}", target);
+                match target {
+                    Target::Lib => args.push("--lib".to_string()),
+                    Target::Bin(name) => {
+                        if name != "main" {
+                            args.push("--bin".to_string());
+                            args.push(name);
+                        }
+                    }
+                    Target::Example(name) => {
+                        args.push("--example".to_string());
                         args.push(name);
                     }
-                }
-                Target::Example(name) => {
-                    args.push("--example".to_string());
-                    args.push(name);
-                }
-                Target::Test(name) => {
-                    args.push("--test".to_string());
-                    args.push(name);
-                }
-                Target::Bench(name) => {
-                    args.push("--bench".to_string());
-                    args.push(name);
+                    Target::Test(name) => {
+                        args.push("--test".to_string());
+                        args.push(name);
+                    }
+                    Target::Bench(name) => {
+                        args.push("--bench".to_string());
+                        args.push(name);
+                    }
                 }
             }
         }

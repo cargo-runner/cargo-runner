@@ -2,7 +2,7 @@
 
 use crate::{
     cache::RunnableCache,
-    command::{builder::CommandBuilder, CargoCommand},
+    command::CargoCommand,
     config::{Config, ConfigMerger},
     error::Result,
     parser::{module_resolver::ModuleResolver, RustParser},
@@ -141,51 +141,90 @@ impl CargoRunner {
         file_path: &Path,
         line: u32,
     ) -> Result<Option<Runnable>> {
-        let runnables = self.detect_runnables_at_line(file_path, line)?;
+        let mut runnables = self.detect_runnables_at_line(file_path, line)?;
+        
+        // If we have multiple runnables, pick the most specific one
+        if runnables.len() > 1 {
+            // Sort by scope size (smaller is more specific)
+            runnables.sort_by(|a, b| {
+                // For doc tests, use extended scope size if available
+                let a_size = if matches!(a.kind, RunnableKind::DocTest { .. }) {
+                    if let Some(ref extended) = a.extended_scope {
+                        extended.scope.end.line - extended.scope.start.line
+                    } else {
+                        a.scope.end.line - a.scope.start.line
+                    }
+                } else {
+                    a.scope.end.line - a.scope.start.line
+                };
+                
+                let b_size = if matches!(b.kind, RunnableKind::DocTest { .. }) {
+                    if let Some(ref extended) = b.extended_scope {
+                        extended.scope.end.line - extended.scope.start.line
+                    } else {
+                        b.scope.end.line - b.scope.start.line
+                    }
+                } else {
+                    b.scope.end.line - b.scope.start.line
+                };
+                
+                a_size.cmp(&b_size)
+            });
+        }
+        
         Ok(runnables.into_iter().next())
     }
 
     pub fn build_command(&mut self, file_path: &Path, line: u32) -> Result<Option<CargoCommand>> {
+        debug!("build_command: file_path={:?}, line={}", file_path, line);
         if let Some(runnable) = self.get_best_runnable_at_line(file_path, line)? {
+            debug!("Found runnable at line {}: {:?}", line, runnable.kind);
             self.build_command_for_runnable(&runnable)
         } else {
-            // No runnable found, try fallback command
-            self.ensure_project_root(file_path)?;
-            let package_name = self.get_package_name(file_path)?;
-            let project_root = self.project_root.as_deref();
-            crate::command::fallback::generate_fallback_command(
-                file_path,
-                package_name.as_deref(),
-                project_root,
-            )
+            debug!("No runnable found at line {}, using fallback", line);
+            // No runnable found, use get_fallback_command which handles everything
+            self.get_fallback_command(file_path)
         }
     }
 
     pub fn build_command_for_runnable(&self, runnable: &Runnable) -> Result<Option<CargoCommand>> {
         let package_name = self.get_package_name(&runnable.file_path)?;
-        let project_root = self
-            .project_root
-            .as_deref()
-            .unwrap_or_else(|| Path::new("."));
-
-        let builder = CommandBuilder::new(self.config.clone());
-        let command = builder.build_command(runnable, package_name.as_deref(), project_root)?;
+        
+        // Use the new clean API with the current config from runner
+        let command = crate::command::builder_v2::CommandBuilder::for_runnable(runnable)
+            .with_package(package_name.unwrap_or_default())
+            .with_project_root(self.project_root.as_deref().unwrap_or_else(|| Path::new(".")))
+            .with_config(self.config.clone())
+            .build()?;
 
         Ok(Some(command))
     }
 
     pub fn get_fallback_command(&mut self, file_path: &Path) -> Result<Option<CargoCommand>> {
-        self.ensure_project_root(file_path)?;
-        let package_name = self.get_package_name(file_path)?;
+        debug!("get_fallback_command: file_path={:?}", file_path);
+        
+        // Resolve the actual file path first
+        let (resolved_path, _) = self.resolve_file_path(file_path)?;
+        debug!("get_fallback_command: resolved_path={:?}", resolved_path);
+        
+        // Ensure project root and reload config for the resolved path
+        self.ensure_project_root(&resolved_path)?;
+        
+        let package_name = self.get_package_name(&resolved_path)?;
         let project_root = self.project_root.as_deref();
+        
+        debug!("get_fallback_command: config.binary_framework={:?}", self.config.binary_framework);
+        
         crate::command::fallback::generate_fallback_command(
-            file_path,
+            &resolved_path,
             package_name.as_deref(),
             project_root,
+            Some(self.config.clone()),
         )
     }
 
     pub fn get_file_command(&mut self, file_path: &Path) -> Result<Option<CargoCommand>> {
+        debug!("get_file_command called for: {:?}", file_path);
         // This is essentially the same as fallback command, but always returns it
         // regardless of whether there are runnables in the file
         self.get_fallback_command(file_path)
@@ -227,7 +266,9 @@ impl CargoRunner {
                 self.project_root = cargo_toml.parent().map(|p| p.to_path_buf());
             }
         }
-        // Reload config for the current file path to get proper merged config
+        
+        // Always reload config for the file path to get proper merged config
+        // This is important when the file is in a different project than CWD
         self.reload_config_for_path(file_path)?;
         Ok(())
     }
@@ -236,6 +277,7 @@ impl CargoRunner {
         let mut merger = ConfigMerger::new();
         merger.load_configs_for_path(file_path)?;
         self.config = merger.get_merged_config();
+        debug!("Reloaded config for path {:?}: binary_framework={:?}", file_path, self.config.binary_framework);
         Ok(())
     }
 
@@ -422,6 +464,11 @@ impl CargoRunner {
         // Resolve the actual file path and project directory
         let (resolved_path, project_dir) = self.resolve_file_path(path)?;
         debug!("Resolved path: {:?}, project_dir: {:?}", resolved_path, project_dir);
+        
+        // Ensure config is loaded for the resolved path
+        self.ensure_project_root(&resolved_path)?;
+        
+        debug!("After ensure_project_root: config.binary_framework={:?}", self.config.binary_framework);
 
         let command = if let Some(line_num) = line {
             // Line is already 0-based from the CLI

@@ -137,9 +137,14 @@ impl ConfigMerger {
             }
         }
 
-        // Merge test_frameworks
-        if override_config.test_frameworks.is_some() {
-            base.test_frameworks = override_config.test_frameworks;
+        // Merge test_framework
+        if override_config.test_framework.is_some() {
+            base.test_framework = override_config.test_framework;
+        }
+        
+        // Merge binary_framework
+        if override_config.binary_framework.is_some() {
+            base.binary_framework = override_config.binary_framework;
         }
 
         // Merge overrides - these are function-specific, so we merge the arrays

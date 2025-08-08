@@ -1,0 +1,50 @@
+// Example configurations for binary_framework
+
+// Dioxus configuration
+{
+  "binary_framework": {
+    "command": "dx",
+    "subcommand": "serve",
+    "extra_args": ["--hot-reload", "--port", "3000"],
+    "env": {
+      "RUST_LOG": "debug"
+    }
+  }
+}
+
+// Leptos configuration
+{
+  "binary_framework": {
+    "command": "cargo",
+    "subcommand": "leptos watch",
+    "extra_args": ["--hot-reload"],
+    "env": {
+      "LEPTOS_OUTPUT_NAME": "app"
+    }
+  }
+}
+
+// Trunk configuration
+{
+  "binary_framework": {
+    "command": "trunk",
+    "subcommand": "serve",
+    "extra_args": ["--open"],
+    "env": {
+      "TRUNK_SERVE_PORT": "8080"
+    }
+  }
+}
+
+// Standard cargo with custom settings
+{
+  "binary_framework": {
+    "command": "cargo",
+    "channel": "nightly",
+    "subcommand": "run",
+    "extra_args": ["--release"],
+    "env": {
+      "RUST_BACKTRACE": "1"
+    }
+  }
+}
