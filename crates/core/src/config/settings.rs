@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use super::{Override, TestFramework};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct Config {
     // Global runner configuration
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -21,26 +21,27 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra_env: Option<HashMap<String, String>>,
+    pub env: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_test_binary_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub test_framework: Option<TestFramework>,
+    pub test_frameworks: Option<TestFramework>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub linked_projects: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
 
     // Overrides for specific functions
     #[serde(default)]
     pub overrides: Vec<Override>,
 
-    // Cache settings
-    #[serde(default = "default_cache_enabled")]
+    // Cache settings (internal, not exposed in JSON)
+    #[serde(skip)]
     pub cache_enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip)]
     pub cache_dir: Option<PathBuf>,
 }
 
-fn default_cache_enabled() -> bool {
-    true
-}
 
 impl Config {
     pub fn load_from_file(path: &Path) -> Result<Self> {
@@ -60,7 +61,7 @@ impl Config {
     pub fn get_override_for(&self, identity: &FunctionIdentity) -> Option<&Override> {
         self.overrides
             .iter()
-            .find(|override_| override_.identity == *identity)
+            .find(|override_| override_.identity.matches(identity))
     }
 
     pub fn find_config_file(start_path: &Path) -> Option<PathBuf> {
@@ -106,7 +107,7 @@ mod tests {
                 extra_test_binary_args: Some(vec!["--test-threads=1".to_string()]),
                 test_framework: None,
                 force_replace_args: Some(false),
-                extra_env: Some(HashMap::from([(
+                env: Some(HashMap::from([(
                     "RUST_LOG".to_string(),
                     "debug".to_string(),
                 )])),

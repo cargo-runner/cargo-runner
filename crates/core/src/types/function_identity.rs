@@ -9,3 +9,60 @@ pub struct FunctionIdentity {
     pub file_path: Option<PathBuf>,
     pub function_name: Option<String>,
 }
+
+impl FunctionIdentity {
+    /// Check if this identity matches another identity (partial match)
+    /// Returns true if all non-None fields in `self` match the corresponding fields in `other`
+    pub fn matches(&self, other: &FunctionIdentity) -> bool {
+        // If self has a package requirement, it must match
+        if let Some(ref my_package) = self.package {
+            if let Some(ref other_package) = other.package {
+                if my_package != other_package {
+                    return false;
+                }
+            } else {
+                // Self requires package but other doesn't have one
+                return false;
+            }
+        }
+        
+        // If self has a module_path requirement, it must match
+        if let Some(ref my_module) = self.module_path {
+            if let Some(ref other_module) = other.module_path {
+                if my_module != other_module {
+                    return false;
+                }
+            } else {
+                // Self requires module_path but other doesn't have one
+                return false;
+            }
+        }
+        
+        // If self has a file_path requirement, it must match
+        if let Some(ref my_file) = self.file_path {
+            if let Some(ref other_file) = other.file_path {
+                if my_file != other_file {
+                    return false;
+                }
+            } else {
+                // Self requires file_path but other doesn't have one
+                return false;
+            }
+        }
+        
+        // If self has a function_name requirement, it must match
+        if let Some(ref my_func) = self.function_name {
+            if let Some(ref other_func) = other.function_name {
+                if my_func != other_func {
+                    return false;
+                }
+            } else {
+                // Self requires function_name but other doesn't have one
+                return false;
+            }
+        }
+        
+        // All non-None fields in self match
+        true
+    }
+}

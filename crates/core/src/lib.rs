@@ -20,6 +20,6 @@ pub use error::{Error, Result};
 pub use types::*;
 
 // Re-export main API components
-pub use command::CargoCommand;
+pub use command::{CargoCommand, CommandType};
 pub use config::Config;
 pub use runner::CargoRunner;

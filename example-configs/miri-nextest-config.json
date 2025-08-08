@@ -1,0 +1,28 @@
+{
+  "package": "example-package",
+  "test_frameworks": {
+    "command": "cargo",
+    "subcommand": "miri nextest run",
+    "channel": "nightly",
+    "extra_args": ["-j10"],
+    "env": {
+      "MIRIFLAGS": "-Zmiri-disable-isolation",
+      "RUST_BACKTRACE": "full"
+    }
+  },
+  "extra_args": ["--features", "test-feature"],
+  "env": {
+    "RUST_LOG": "debug"
+  },
+  "overrides": [
+    {
+      "match": {
+        "function_name": "test_integration"
+      },
+      "extra_test_binary_args": ["--test-threads=1"],
+      "env": {
+        "INTEGRATION_TEST": "true"
+      }
+    }
+  ]
+}

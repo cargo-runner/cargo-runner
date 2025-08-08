@@ -198,7 +198,19 @@ impl RunnableDetector {
         if let Some(line) = line {
             let mut scored_runnables: Vec<RunnableWithScore> = runnables
                 .into_iter()
-                .filter(|r| r.scope.contains_line(line))
+                .filter(|r| {
+                    // For doc tests with extended scope, check if line is within the extended scope
+                    if matches!(r.kind, RunnableKind::DocTest { .. }) {
+                        if let Some(ref extended) = r.extended_scope {
+                            // Check if line is within the extended scope (includes doc comments)
+                            line >= extended.scope.start.line && line <= extended.scope.end.line
+                        } else {
+                            r.scope.contains_line(line)
+                        }
+                    } else {
+                        r.scope.contains_line(line)
+                    }
+                })
                 .map(RunnableWithScore::new)
                 .collect();
 

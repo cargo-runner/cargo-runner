@@ -19,3 +19,14 @@ md5 = "0.8.0"
 cargo_toml = "0.22.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Add a virtual package for integration tests
+[package]
+name = "windrunner"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cargo-runner-core = { path = "crates/core" }
+tempfile = "3.0"
+serde_json = "1.0"

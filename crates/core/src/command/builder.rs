@@ -137,7 +137,7 @@ impl CommandBuilder {
     fn apply_overrides(&self, mut args: Vec<String>, identity: &FunctionIdentity) -> CargoCommand {
         // First apply global config
         let mut channel = self.config.channel.clone();
-        let mut extra_env = self.config.extra_env.clone().unwrap_or_default();
+        let mut extra_env = self.config.env.clone().unwrap_or_default();
 
         // Check for function-specific overrides
         if let Some(override_) = self.config.get_override_for(identity) {
@@ -191,7 +191,7 @@ impl CommandBuilder {
             }
 
             // Handle environment variables
-            if let Some(override_env) = &override_.extra_env {
+            if let Some(override_env) = &override_.env {
                 if override_.force_replace_env.unwrap_or(false) {
                     extra_env = override_env.clone();
                 } else {

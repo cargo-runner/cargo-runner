@@ -3,11 +3,11 @@
 use crate::{
     cache::RunnableCache,
     command::{builder::CommandBuilder, CargoCommand},
-    config::Config,
+    config::{Config, ConfigMerger},
     error::Result,
     parser::{module_resolver::ModuleResolver, RustParser},
     patterns::detector::RunnableDetector,
-    types::Runnable,
+    types::{Runnable, RunnableKind},
 };
 use std::path::{Path, PathBuf};
 use tracing::debug;
@@ -30,12 +30,16 @@ impl CargoRunner {
             let _ = cache.load_from_disk();
         }
 
+        let project_root = std::env::var("PROJECT_ROOT")
+            .ok()
+            .map(PathBuf::from);
+
         Ok(Self {
             detector: RunnableDetector::new()?,
             parser: RustParser::new()?,
             cache,
             config,
-            project_root: None,
+            project_root,
         })
     }
 
@@ -74,7 +78,27 @@ impl CargoRunner {
                 let filtered: Vec<Runnable> = cached
                     .iter()
                     .filter(|r| {
-                        let contains = r.scope.contains_line(line);
+                        // For doc tests with extended scope, check if line is within the extended scope
+                        let contains = if matches!(r.kind, RunnableKind::DocTest { .. }) {
+                            if let Some(ref extended) = r.extended_scope {
+                                // Check if line is within the extended scope (includes doc comments)
+                                let in_extended = line >= extended.scope.start.line && line <= extended.scope.end.line;
+                                debug!(
+                                    "  DocTest '{}' extended scope {}-{} contains line {}? {}",
+                                    r.label,
+                                    extended.scope.start.line,
+                                    extended.scope.end.line,
+                                    line,
+                                    in_extended
+                                );
+                                in_extended
+                            } else {
+                                r.scope.contains_line(line)
+                            }
+                        } else {
+                            r.scope.contains_line(line)
+                        };
+                        
                         debug!(
                             "  Runnable '{}' scope {}-{} contains line {}? {} (module_path: '{}')",
                             r.label,
@@ -203,7 +227,83 @@ impl CargoRunner {
                 self.project_root = cargo_toml.parent().map(|p| p.to_path_buf());
             }
         }
+        // Reload config for the current file path to get proper merged config
+        self.reload_config_for_path(file_path)?;
         Ok(())
+    }
+
+    fn reload_config_for_path(&mut self, file_path: &Path) -> Result<()> {
+        let mut merger = ConfigMerger::new();
+        merger.load_configs_for_path(file_path)?;
+        self.config = merger.get_merged_config();
+        Ok(())
+    }
+
+    /// Resolve a file path using linked_projects if necessary
+    fn resolve_file_path(&self, file_path: &Path) -> Result<(PathBuf, Option<PathBuf>)> {
+        debug!("Resolving file path: {:?}", file_path);
+        debug!("Current config has linked_projects: {:?}", self.config.linked_projects.is_some());
+        
+        // If it's already an absolute path and exists, use it directly
+        if file_path.is_absolute() && file_path.exists() {
+            let project_dir = ModuleResolver::find_cargo_toml(file_path)
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+            return Ok((file_path.to_path_buf(), project_dir));
+        }
+
+        // Try relative to current directory first, but only if it's not under PROJECT_ROOT
+        // This prevents finding files in temp dirs when we should use linked_projects
+        if let Ok(cwd) = std::env::current_dir() {
+            let candidate = cwd.join(file_path);
+            if candidate.exists() {
+                // Check if we're in a temp directory and have linked_projects
+                if self.config.linked_projects.is_some() && self.project_root.is_some() {
+                    // Skip current directory resolution if we have linked projects
+                    debug!("Skipping current directory resolution due to linked_projects");
+                } else {
+                    let project_dir = ModuleResolver::find_cargo_toml(&candidate)
+                        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+                    return Ok((candidate, project_dir));
+                }
+            }
+        }
+
+        // Try to find in linked_projects
+        if let Some(linked_projects) = &self.config.linked_projects {
+            debug!("Checking {} linked projects", linked_projects.len());
+            debug!("Checking {} linked projects", linked_projects.len());
+            for linked_project in linked_projects {
+                let cargo_toml_path = Path::new(linked_project);
+                if let Some(project_dir) = cargo_toml_path.parent() {
+                    let candidate = project_dir.join(file_path);
+                    debug!("Checking candidate: {:?}", candidate);
+                    if candidate.exists() {
+                        debug!("Found match in linked project: {:?}", project_dir);
+                        return Ok((candidate, Some(project_dir.to_path_buf())));
+                    }
+                }
+            }
+        }
+
+        // If we have PROJECT_ROOT, try resolving from there
+        if let Some(project_root) = &self.project_root {
+            let candidate = project_root.join(file_path);
+            if candidate.exists() {
+                let project_dir = ModuleResolver::find_cargo_toml(&candidate)
+                    .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+                // If no specific project dir found, use PROJECT_ROOT as working dir
+                return Ok((candidate, project_dir.or_else(|| Some(project_root.clone()))));
+            }
+            
+            // Even if file doesn't exist, if we have PROJECT_ROOT and no linked_projects,
+            // use PROJECT_ROOT as the working directory
+            if self.config.linked_projects.as_ref().map(|lp| lp.is_empty()).unwrap_or(true) {
+                return Ok((file_path.to_path_buf(), Some(project_root.clone())));
+            }
+        }
+
+        // Return the original path if we couldn't resolve it
+        Ok((file_path.to_path_buf(), None))
     }
 
     fn resolve_module_paths(&mut self, file_path: &Path, runnables: &mut [Runnable]) -> Result<()> {
@@ -236,12 +336,18 @@ impl CargoRunner {
     }
 
     fn load_config() -> Result<Config> {
+        // Use the new config merger to load and merge configs
+        let mut merger = ConfigMerger::new();
+        
+        // Always load from current directory to get package-specific configs
         if let Ok(cwd) = std::env::current_dir() {
-            if let Some(config_path) = Config::find_config_file(&cwd) {
-                return Config::load_from_file(&config_path);
-            }
+            merger.load_configs_for_path(&cwd)?;
         }
-        Ok(Config::default())
+        
+        // The merger will automatically pick up PROJECT_ROOT config from env var
+        let config = merger.get_merged_config();
+        
+        Ok(config)
     }
 
     /// Analyze a file and return all runnables as JSON
@@ -249,6 +355,37 @@ impl CargoRunner {
         let path = Path::new(file_path);
         let runnables = self.detect_all_runnables(path)?;
         Ok(serde_json::to_string_pretty(&runnables)?)
+    }
+    
+    /// Analyze a file at a specific line and return runnables as JSON
+    pub fn analyze_at_line(&mut self, file_path: &str, line: usize) -> Result<String> {
+        let path = Path::new(file_path);
+        let runnables = self.detect_runnables_at_line(path, line as u32)?;
+        Ok(serde_json::to_string_pretty(&runnables)?)
+    }
+    
+    /// Get the override configuration for a specific runnable
+    pub fn get_override_for_runnable(&self, runnable: &Runnable) -> Option<&crate::config::Override> {
+        // Create a FunctionIdentity from the runnable
+        let identity = crate::types::FunctionIdentity {
+            package: self.get_package_name(&runnable.file_path).ok().flatten(),
+            module_path: if runnable.module_path.is_empty() { None } else { Some(runnable.module_path.clone()) },
+            file_path: Some(runnable.file_path.clone()),
+            function_name: match &runnable.kind {
+                RunnableKind::Test { test_name, .. } => Some(test_name.clone()),
+                RunnableKind::Benchmark { bench_name } => Some(bench_name.clone()),
+                RunnableKind::DocTest { struct_or_module_name, method_name } => {
+                    if let Some(method) = method_name {
+                        Some(format!("{}::{}", struct_or_module_name, method))
+                    } else {
+                        Some(struct_or_module_name.clone())
+                    }
+                },
+                _ => None,
+            },
+        };
+        
+        self.config.get_override_for(&identity)
     }
 
     /// Get command for a specific position in a file
@@ -268,6 +405,37 @@ impl CargoRunner {
 
         if let Some(cmd) = command {
             Ok(cmd.to_shell_command())
+        } else {
+            Err(crate::error::Error::NoRunnableFound)
+        }
+    }
+
+    /// Get command for a specific position in a file, with proper working directory
+    pub fn get_command_at_position_with_dir(
+        &mut self,
+        file_path: &str,
+        line: Option<usize>,
+    ) -> Result<CargoCommand> {
+        let path = Path::new(file_path);
+        
+        
+        // Resolve the actual file path and project directory
+        let (resolved_path, project_dir) = self.resolve_file_path(path)?;
+        debug!("Resolved path: {:?}, project_dir: {:?}", resolved_path, project_dir);
+
+        let command = if let Some(line_num) = line {
+            // Line is already 0-based from the CLI
+            self.build_command(&resolved_path, line_num as u32)?
+        } else {
+            self.get_file_command(&resolved_path)?
+        };
+
+        if let Some(mut cmd) = command {
+            // Set the working directory to the project root
+            if let Some(dir) = project_dir {
+                cmd.working_dir = Some(dir.to_string_lossy().to_string());
+            }
+            Ok(cmd)
         } else {
             Err(crate::error::Error::NoRunnableFound)
         }
