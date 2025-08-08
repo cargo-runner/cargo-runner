@@ -53,8 +53,8 @@ impl ModuleResolver {
         // Normal module path resolution for non-impl items
         let mut path_components = Vec::new();
         
-        // For test functions, we want a simpler path without package name
-        let is_test_function = matches!(target_scope.kind, ScopeKind::Test);
+        // For test functions and modules, we want a simpler path without package name
+        let is_test_or_module = matches!(target_scope.kind, ScopeKind::Test | ScopeKind::Module);
         
         // Check if this is inside a test module
         let is_in_test_module = scopes.iter()
@@ -62,8 +62,8 @@ impl ModuleResolver {
             .filter(|s| s.contains_line(target_scope.start.line))
             .any(|s| s.name.as_deref() == Some("tests"));
 
-        // Skip package name for test functions and items in test modules
-        let should_include_package = !is_test_function && !is_in_test_module;
+        // Skip package name for test functions, modules, and items in test modules
+        let should_include_package = !is_test_or_module && !is_in_test_module;
             
         if let Some(ref pkg) = self.package_name {
             if should_include_package {

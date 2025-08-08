@@ -88,6 +88,11 @@ impl ScopeDetector {
             return Ok(FileScope::Build);
         }
         
+        // Any other .rs file under src/ is part of the library
+        if path_str.contains("/src/") && file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
+            return Ok(FileScope::Lib);
+        }
+        
         // Check Cargo.toml for custom paths
         use crate::parser::module_resolver::ModuleResolver;
         let has_cargo_toml = ModuleResolver::find_cargo_toml(file_path).is_some();

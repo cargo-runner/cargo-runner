@@ -90,7 +90,12 @@ impl CommandBuilder {
             }
             RunnableKind::ModuleTests { module_name } => {
                 args.push("--".to_string());
-                args.push(module_name.clone());
+                // Build the full path including the module name
+                if !runnable.module_path.is_empty() {
+                    args.push(format!("{}::{}", runnable.module_path, module_name));
+                } else {
+                    args.push(module_name.clone());
+                }
             }
             _ => {}
         }
