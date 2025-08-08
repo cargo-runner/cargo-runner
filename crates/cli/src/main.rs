@@ -9,7 +9,13 @@ fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+    
+    // When invoked as "cargo runner", cargo passes "runner" as the first argument
+    // So we need to skip it if present
+    if args.len() > 1 && args[1] == "runner" {
+        args.remove(1);
+    }
 
     if args.len() < 2 {
         print_help();
