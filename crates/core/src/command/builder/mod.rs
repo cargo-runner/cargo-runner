@@ -142,11 +142,11 @@ impl<'a> CommandBuilder<'a> {
             }
             RunnableKind::SingleFileScript { .. } => Ok(FileType::SingleFileScript),
             _ => {
-                // For non-standalone kinds, check if the file is actually standalone
-                if self.is_standalone_file(&self.runnable.file_path) {
-                    Ok(FileType::Standalone)
-                } else if self.is_cargo_script_file(&self.runnable.file_path)? {
+                // Check cargo script FIRST since it's more specific than standalone
+                if self.is_cargo_script_file(&self.runnable.file_path)? {
                     Ok(FileType::SingleFileScript)
+                } else if self.is_standalone_file(&self.runnable.file_path) {
+                    Ok(FileType::Standalone)
                 } else {
                     Ok(FileType::CargoProject)
                 }

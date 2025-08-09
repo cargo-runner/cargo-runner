@@ -43,12 +43,61 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
 
                 Ok(command)
             }
-            RunnableKind::Test { .. } => {
+            RunnableKind::Test { test_name, .. } => {
                 // Build command for running a test in a cargo script
                 let mut args = vec!["+nightly".to_string(), "-Zscript".to_string()];
 
                 // Add test subcommand
                 args.push("test".to_string());
+
+                // Add --manifest-path with the script file
+                args.push("--manifest-path".to_string());
+                args.push(runnable.file_path.to_str().unwrap_or("").to_string());
+
+                // Apply extra args
+                builder.apply_args(&mut args, runnable, config, file_type);
+
+                // Add test filter
+                args.push("--".to_string());
+                args.push(test_name.clone());
+
+                let mut command = CargoCommand::new(args);
+
+                // Apply env vars
+                builder.apply_common_config(&mut command, config, file_type);
+                builder.apply_env(&mut command, runnable, config, file_type);
+
+                Ok(command)
+            }
+            RunnableKind::ModuleTests { .. } => {
+                // Build command for running all tests in a cargo script
+                let mut args = vec!["+nightly".to_string(), "-Zscript".to_string()];
+
+                // Add test subcommand
+                args.push("test".to_string());
+
+                // Add --manifest-path with the script file
+                args.push("--manifest-path".to_string());
+                args.push(runnable.file_path.to_str().unwrap_or("").to_string());
+
+                // Apply extra args
+                builder.apply_args(&mut args, runnable, config, file_type);
+
+                let mut command = CargoCommand::new(args);
+
+                // Apply env vars
+                builder.apply_common_config(&mut command, config, file_type);
+                builder.apply_env(&mut command, runnable, config, file_type);
+
+                Ok(command)
+            }
+            RunnableKind::Binary { .. } | RunnableKind::Standalone { .. } => {
+                // For binary/main function in cargo script, just run the script
+                // Extract shebang from file
+                let shebang = builder.extract_shebang(&runnable.file_path)?;
+                
+                // Build command for running the script
+                let mut args = builder.parse_shebang_args(&shebang);
 
                 // Add the script file path
                 args.push(runnable.file_path.to_str().unwrap_or("").to_string());
@@ -56,13 +105,33 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                 // Apply extra args
                 builder.apply_args(&mut args, runnable, config, file_type);
 
-                // Add test filter if available
-                if let RunnableKind::Test { test_name, .. } = &runnable.kind {
-                    args.push("--".to_string());
-                    args.push(test_name.clone());
-                }
+                let mut command = CargoCommand::new(args);
 
-                let mut command = CargoCommand::new_rust_sf_script(args);
+                // Apply env vars
+                builder.apply_common_config(&mut command, config, file_type);
+                builder.apply_env(&mut command, runnable, config, file_type);
+
+                Ok(command)
+            }
+            RunnableKind::Benchmark { bench_name } => {
+                // Build command for running a benchmark in a cargo script
+                let mut args = vec!["+nightly".to_string(), "-Zscript".to_string()];
+
+                // Add bench subcommand
+                args.push("bench".to_string());
+
+                // Add --manifest-path with the script file
+                args.push("--manifest-path".to_string());
+                args.push(runnable.file_path.to_str().unwrap_or("").to_string());
+
+                // Apply extra args
+                builder.apply_args(&mut args, runnable, config, file_type);
+
+                // Add benchmark filter
+                args.push("--".to_string());
+                args.push(bench_name.clone());
+
+                let mut command = CargoCommand::new(args);
 
                 // Apply env vars
                 builder.apply_common_config(&mut command, config, file_type);
@@ -111,15 +180,14 @@ impl SingleFileScriptBuilder {
                 0
             };
 
-            // Collect remaining args (should start with "cargo")
-            for part in &parts[start_idx..] {
+            // Collect remaining args, skipping "cargo" since CargoCommand adds it
+            for (i, part) in parts[start_idx..].iter().enumerate() {
+                if i == 0 && *part == "cargo" {
+                    // Skip "cargo" as it's added by CargoCommand
+                    continue;
+                }
                 args.push(part.to_string());
             }
-        }
-
-        // Ensure we have at least "cargo" in args
-        if args.is_empty() || args[0] != "cargo" {
-            args.insert(0, "cargo".to_string());
         }
 
         args

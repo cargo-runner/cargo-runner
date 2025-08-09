@@ -240,20 +240,27 @@ impl CargoRunner {
             }
         }
 
-        // First check if this is a cargo script file
+        // Detect runnables using normal pattern detection
+        let mut runnables = self.detector.detect_runnables(file_path, None)?;
+        
+        // Additionally, check if this is a cargo script file and add a runnable for the whole file
         if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
             if let Ok(content) = std::fs::read_to_string(file_path) {
                 if let Some(first_line) = content.lines().next() {
                     if first_line.starts_with("#!") && first_line.contains("cargo") && first_line.contains("-Zscript") {
-                        // It's a cargo script file, create a single runnable for it
+                        // It's a cargo script file, add a runnable for running the entire script
+                        let line_count = content.lines().count();
                         let scope = crate::types::Scope {
                             kind: crate::types::ScopeKind::Function,
                             name: Some("main".to_string()),
                             start: crate::types::Position { line: 0, character: 0 },
-                            end: crate::types::Position { line: 0, character: 0 },
+                            end: crate::types::Position { 
+                                line: line_count.saturating_sub(1) as u32, 
+                                character: 0 
+                            },
                         };
                         
-                        let runnable = Runnable {
+                        let script_runnable = Runnable {
                             label: "Run cargo script".to_string(),
                             scope,
                             kind: RunnableKind::SingleFileScript { 
@@ -264,14 +271,12 @@ impl CargoRunner {
                             extended_scope: None,
                         };
                         
-                        return Ok(vec![runnable]);
+                        // Insert at the beginning so it appears first
+                        runnables.insert(0, script_runnable);
                     }
                 }
             }
         }
-
-        // Detect runnables
-        let mut runnables = self.detector.detect_runnables(file_path, None)?;
 
         // Resolve module paths
         self.resolve_module_paths(file_path, &mut runnables)?;

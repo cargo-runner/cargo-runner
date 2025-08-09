@@ -39,7 +39,7 @@
     }
   },
   "single_file_script": {
-    "extra_args": []
+    "extra_args": ["sd--cfg", "feature=\"test-feature\""]
   },
   "overrides": [
     {
