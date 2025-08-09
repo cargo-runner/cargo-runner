@@ -1,0 +1,25 @@
+{
+  "command": "cargo",
+  "channel": "stable",
+  "extra_args": ["--release"],
+  "extra_env": {
+    "RUST_LOG": "info"
+  },
+  "overrides": [
+    {
+      "match": {
+        "package": "my_crate",
+        "function_name": "test_legacy"
+      },
+      "command": "cargo",
+      "subcommand": "nextest run",
+      "channel": "nightly",
+      "extra_args": ["--no-fail-fast"],
+      "extra_test_binary_args": ["--nocapture"],
+      "force_replace_args": true,
+      "extra_env": {
+        "TEST_VAR": "legacy_value"
+      }
+    }
+  ]
+}

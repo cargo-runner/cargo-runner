@@ -1,0 +1,95 @@
+{
+  "cargo": {
+    "command": "cargo",
+    "subcommand": "test",
+    "extra_args": ["--workspace"],
+    "extra_env": {
+      "RUST_LOG": "warn"
+    }
+  },
+  "rustc": {
+    "extra_args": ["--edition", "2021"],
+    "extra_env": {
+      "RUST_BACKTRACE": "1"
+    }
+  },
+  "single_file_script": {
+    "extra_args": ["--verbose"]
+  },
+  "overrides": [
+    {
+      "match": {
+        "package": "windrunner-core"
+      },
+      "cargo": {
+        "extra_args": ["--lib"],
+        "features": {
+          "selected": ["async", "serde"]
+        }
+      }
+    },
+    {
+      "match": {
+        "package": "windrunner-core",
+        "module_path": "windrunner_core::command::builder::tests"
+      },
+      "cargo": {
+        "extra_test_binary_args": ["--nocapture"],
+        "extra_env": {
+          "TEST_LOG": "debug"
+        }
+      }
+    },
+    {
+      "match": {
+        "file_type": "Standalone"
+      },
+      "rustc": {
+        "extra_args": ["-W", "warnings"],
+        "test_framework": {
+          "build": {
+            "extra_args": ["--test"]
+          },
+          "exec": {
+            "extra_test_binary_args": ["--test-threads=4"]
+          }
+        }
+      }
+    },
+    {
+      "match": {
+        "file_type": "SingleFileScript"
+      },
+      "single_file_script": {
+        "extra_env": {
+          "SCRIPT_MODE": "development"
+        }
+      }
+    },
+    {
+      "match": {
+        "function_name": "bench_*",
+        "file_type": "CargoProject"
+      },
+      "cargo": {
+        "command": "cargo",
+        "subcommand": "bench",
+        "channel": "nightly",
+        "extra_args": ["--features", "bench"]
+      }
+    },
+    {
+      "match": {
+        "module_path": "*::integration_tests",
+        "file_type": "CargoProject"
+      },
+      "cargo": {
+        "extra_test_binary_args": ["--test-threads=1"],
+        "extra_env": {
+          "DATABASE_URL": "postgres://localhost/test",
+          "REDIS_URL": "redis://localhost:6379"
+        }
+      }
+    }
+  ]
+}

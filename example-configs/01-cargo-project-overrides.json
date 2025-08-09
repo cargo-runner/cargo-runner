@@ -1,0 +1,75 @@
+{
+  "cargo": {
+    "command": "cargo",
+    "subcommand": "test",
+    "channel": "stable",
+    "extra_args": ["--release"],
+    "extra_env": {
+      "RUST_LOG": "info"
+    },
+    "extra_test_binary_args": ["--test-threads=1"]
+  },
+  "overrides": [
+    {
+      "match": {
+        "package": "my_crate"
+      },
+      "cargo": {
+        "channel": "nightly",
+        "extra_args": ["--all-features"],
+        "extra_env": {
+          "RUST_LOG": "debug"
+        }
+      }
+    },
+    {
+      "match": {
+        "package": "my_crate",
+        "file_path": "src/lib.rs"
+      },
+      "cargo": {
+        "command": "cargo",
+        "subcommand": "nextest run",
+        "extra_args": ["--no-fail-fast"]
+      }
+    },
+    {
+      "match": {
+        "package": "my_crate",
+        "module_path": "my_crate::database::tests"
+      },
+      "cargo": {
+        "extra_env": {
+          "DATABASE_URL": "postgres://test:test@localhost/test_db"
+        },
+        "extra_test_binary_args": ["--nocapture"]
+      }
+    },
+    {
+      "match": {
+        "package": "my_crate",
+        "module_path": "my_crate::api::tests",
+        "function_name": "test_auth_endpoint"
+      },
+      "cargo": {
+        "extra_args": ["--features", "mock-auth"],
+        "extra_test_binary_args": ["--exact", "--nocapture"],
+        "extra_env": {
+          "AUTH_SERVICE_URL": "http://localhost:8080"
+        }
+      }
+    },
+    {
+      "match": {
+        "file_type": "CargoProject",
+        "function_name": "bench_*"
+      },
+      "cargo": {
+        "command": "cargo",
+        "subcommand": "bench",
+        "channel": "nightly",
+        "extra_args": ["--features", "bench"]
+      }
+    }
+  ]
+}
