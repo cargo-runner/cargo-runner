@@ -768,7 +768,10 @@ fn init_command(cwd: Option<&str>, force: bool, rustc: bool, single_file_script:
             return Ok(());
         }
         
-        let config = if rustc {
+        let config = if rustc && single_file_script {
+            println!("🦀 Generating combined rustc and single-file-script configuration");
+            create_combined_config()
+        } else if rustc {
             println!("🦀 Generating rustc configuration for standalone files");
             create_rustc_config()
         } else {
@@ -973,53 +976,194 @@ fn get_package_name(cargo_toml: &Path) -> Result<String> {
 }
 
 fn create_rustc_config() -> String {
-    use serde_json::{Map, Value, json};
-    
-    // Create a config with rustc section
-    let mut config = Map::new();
-    
-    // Create rustc config with framework examples
-    let rustc_config = json!({
-        "test_framework": {
-            "build": {
-                "command": "rustc",
-                "extra_args": ["--edition=2021", "-O"],
-                "args": ["{file_path}", "--test", "-o", "{parent_dir}/{file_name}_test"]
-            },
-            "exec": {
-                "command": "{parent_dir}/{file_name}_test",
-                "extra_test_binary_args": ["--nocapture", "--test-threads=1"]
-                // Optional: "pipe": "jq" to pipe output to jq
-            }
-        },
-        "binary_framework": {
-            "build": {
-                "command": "rustc",
-                "extra_args": ["--edition=2021", "-O"],
-                "args": ["{file_path}", "--crate-type", "bin", "--crate-name", "{file_name}", "-o", "{parent_dir}/{file_name}"]
-            },
-            "exec": {
-                "command": "{parent_dir}/{file_name}"
-            }
-        },
-        "benchmark_framework": {
-            "build": {
-                "command": "rustc",
-                "extra_args": ["--edition=2021", "-O"],
-                "args": ["{file_path}", "--test", "-o", "{parent_dir}/{file_name}_bench"]
-            },
-            "exec": {
-                "command": "{parent_dir}/{file_name}_bench",
-                "args": ["--bench"]
-            }
+    // Use raw JSON string to preserve exact field order
+    r#"{
+  "rustc": {
+    "benchmark_framework": {
+      "build": {
+        "command": "rustc",
+        "extra_args": [
+          "--edition=2024",
+          "-O"
+        ],
+        "args": [
+          "{file_path}",
+          "--test",
+          "-o",
+          "{parent_dir}/{file_name}_bench"
+        ],
+        "extra_env": {
+          "CARGO_TARGET_DIR": "target/rust-analyzer"
         }
-    });
-    
-    config.insert("rustc".to_string(), rustc_config);
-    config.insert("overrides".to_string(), json!([]));
-    
-    // Pretty print the JSON
-    serde_json::to_string_pretty(&config).unwrap()
+      },
+      "exec": {
+        "command": "{parent_dir}/{file_name}_bench",
+        "args": [
+          "--bench"
+        ],
+        "extra_env": {
+          "RUST_BACKTRACE": "1"
+        }
+      }
+    },
+    "binary_framework": {
+      "build": {
+        "command": "rustc",
+        "extra_args": [
+          "--edition=2024",
+          "-O"
+        ],
+        "args": [
+          "{file_path}",
+          "--crate-type",
+          "bin",
+          "--crate-name",
+          "{file_name}",
+          "-o",
+          "{parent_dir}/{file_name}"
+        ],
+        "extra_env": {
+          "CARGO_TARGET_DIR": "target/rust-analyzer"
+        }
+      },
+      "exec": {
+        "command": "{parent_dir}/{file_name}",
+        "extra_env": {
+          "RUST_LOG": "debug"
+        }
+      }
+    },
+    "test_framework": {
+      "build": {
+        "command": "rustc",
+        "extra_args": [
+          "--edition=2024",
+          "-O"
+        ],
+        "args": [
+          "{file_path}",
+          "--test",
+          "-o",
+          "{parent_dir}/{file_name}_test"
+        ],
+        "extra_env": {
+          "CARGO_TARGET_DIR": "target/rust-analyzer"
+        }
+      },
+      "exec": {
+        "command": "{parent_dir}/{file_name}_test",
+        "extra_test_binary_args": [
+          "--show-output"
+        ],
+        "extra_env": {
+          "RUST_BACKTRACE": "1"
+        }
+      }
+    }
+  },
+  "overrides": []
+}"#.to_string()
+}
+
+fn create_combined_config() -> String {
+    // Combine both rustc and single-file-script configs
+    r#"{
+  "rustc": {
+    "benchmark_framework": {
+      "build": {
+        "command": "rustc",
+        "extra_args": [
+          "--edition=2024",
+          "-O"
+        ],
+        "args": [
+          "{file_path}",
+          "--test",
+          "-o",
+          "{parent_dir}/{file_name}_bench"
+        ],
+        "extra_env": {
+          "CARGO_TARGET_DIR": "target/rust-analyzer"
+        }
+      },
+      "exec": {
+        "command": "{parent_dir}/{file_name}_bench",
+        "args": [
+          "--bench"
+        ],
+        "extra_env": {
+          "RUST_BACKTRACE": "1"
+        }
+      }
+    },
+    "binary_framework": {
+      "build": {
+        "command": "rustc",
+        "extra_args": [
+          "--edition=2024",
+          "-O"
+        ],
+        "args": [
+          "{file_path}",
+          "--crate-type",
+          "bin",
+          "--crate-name",
+          "{file_name}",
+          "-o",
+          "{parent_dir}/{file_name}"
+        ],
+        "extra_env": {
+          "CARGO_TARGET_DIR": "target/rust-analyzer"
+        }
+      },
+      "exec": {
+        "command": "{parent_dir}/{file_name}",
+        "extra_env": {
+          "RUST_LOG": "debug"
+        }
+      }
+    },
+    "test_framework": {
+      "build": {
+        "command": "rustc",
+        "extra_args": [
+          "--edition=2024",
+          "-O"
+        ],
+        "args": [
+          "{file_path}",
+          "--test",
+          "-o",
+          "{parent_dir}/{file_name}_test"
+        ],
+        "extra_env": {
+          "CARGO_TARGET_DIR": "target/rust-analyzer"
+        }
+      },
+      "exec": {
+        "command": "{parent_dir}/{file_name}_test",
+        "extra_test_binary_args": [
+          "--show-output"
+        ],
+        "extra_env": {
+          "RUST_BACKTRACE": "1"
+        }
+      }
+    }
+  },
+  "single_file_script": {
+    "extra_args": [
+      "-Zscript"
+    ],
+    "extra_env": {
+      "CARGO_TARGET_DIR": "target/rust-analyzer"
+    },
+    "extra_test_binary_args": [
+      "--show-output"
+    ]
+  },
+  "overrides": []
+}"#.to_string()
 }
 
 fn create_single_file_script_config() -> String {
@@ -1030,11 +1174,11 @@ fn create_single_file_script_config() -> String {
     
     // Create single file script config
     let sfs_config = json!({
-        "extra_args": ["--edition=2021"],
+        "extra_args": ["--edition=2024"],
         "extra_env": {
             "RUST_BACKTRACE": "1"
         },
-        "extra_test_binary_args": ["--nocapture"]
+        "extra_test_binary_args": ["--show-output"]
     });
     
     config.insert("single_file_script".to_string(), sfs_config);

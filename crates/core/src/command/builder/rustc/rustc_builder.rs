@@ -271,6 +271,7 @@ impl RustcCommandBuilder {
                 extra_test_binary_args: None,
                 pipe: None,
                 suppress_stderr: None,
+                extra_env: None,
             }),
             exec: Some(RustcPhaseConfig {
                 command: Some("{parent_dir}/{file_name}_test".to_string()),
@@ -279,6 +280,7 @@ impl RustcCommandBuilder {
                 extra_test_binary_args: None,
                 pipe: None,
                 suppress_stderr: None,
+                extra_env: None,
             }),
         }
     }
@@ -300,6 +302,7 @@ impl RustcCommandBuilder {
                 extra_test_binary_args: None,
                 pipe: None,
                 suppress_stderr: None,
+                extra_env: None,
             }),
             exec: Some(RustcPhaseConfig {
                 command: Some("{parent_dir}/{file_name}".to_string()),
@@ -308,6 +311,7 @@ impl RustcCommandBuilder {
                 extra_test_binary_args: None,
                 pipe: None,
                 suppress_stderr: None,
+                extra_env: None,
             }),
         }
     }
@@ -326,6 +330,7 @@ impl RustcCommandBuilder {
                 extra_test_binary_args: None,
                 pipe: None,
                 suppress_stderr: None,
+                extra_env: None,
             }),
             exec: Some(RustcPhaseConfig {
                 command: Some("{parent_dir}/{file_name}_bench".to_string()),
@@ -336,6 +341,7 @@ impl RustcCommandBuilder {
                 extra_test_binary_args: None,
                 pipe: None,
                 suppress_stderr: None,
+                extra_env: None,
             }),
         }
     }
@@ -596,12 +602,53 @@ impl RustcCommandBuilder {
     
     fn apply_env(
         &self,
-        _command: &mut CargoCommand,
-        _runnable: &Runnable,
-        _config: &Config,
+        command: &mut CargoCommand,
+        runnable: &Runnable,
+        config: &Config,
         _file_type: FileType,
     ) {
-        // Note: extra_env is now handled through framework-specific configs
+        tracing::debug!("apply_env called for runnable: {:?}", runnable.kind);
+        
+        // Apply environment variables from the framework config
+        let framework = match &runnable.kind {
+            RunnableKind::Test { .. } | RunnableKind::ModuleTests { .. } => {
+                self.get_test_framework(config)
+            }
+            RunnableKind::Benchmark { .. } => {
+                self.get_benchmark_framework(config)
+            }
+            RunnableKind::Binary { .. } | RunnableKind::Standalone { .. } => {
+                self.get_binary_framework(config)
+            }
+            _ => {
+                tracing::debug!("apply_env: unsupported runnable kind, returning");
+                return;
+            }
+        };
+        
+        // Apply env from build phase
+        if let Some(build) = &framework.build {
+            if let Some(env_map) = &build.extra_env {
+                tracing::debug!("apply_env: applying {} build env vars", env_map.len());
+                for (key, value) in env_map {
+                    tracing::debug!("apply_env: build env {}={}", key, value);
+                    command.env.push((key.clone(), value.clone()));
+                }
+            }
+        }
+        
+        // Apply env from exec phase  
+        if let Some(exec) = &framework.exec {
+            if let Some(env_map) = &exec.extra_env {
+                tracing::debug!("apply_env: applying {} exec env vars", env_map.len());
+                for (key, value) in env_map {
+                    tracing::debug!("apply_env: exec env {}={}", key, value);
+                    command.env.push((key.clone(), value.clone()));
+                }
+            }
+        }
+        
+        tracing::debug!("apply_env: total env vars set: {}", command.env.len());
     }
     
     fn get_file_name(&self, runnable: &Runnable) -> Result<String> {

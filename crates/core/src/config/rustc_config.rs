@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -35,4 +36,6 @@ pub struct RustcPhaseConfig {
     pub pipe: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suppress_stderr: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_env: Option<HashMap<String, String>>,
 }
