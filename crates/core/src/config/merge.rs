@@ -63,9 +63,36 @@ impl ConfigMerger {
             let root_path = PathBuf::from(&project_root);
             let root_config_path = root_path.join(".cargo-runner.json");
             if root_config_path.exists() {
-                debug!("Found root config at: {:?}", root_config_path);
-                self.root_config = Some(Config::load_from_file(&root_config_path)?);
-                self.config_info.root_config_path = Some(root_config_path);
+                // Check if this is the same as package config to avoid loading twice
+                // We need to handle the case where package config might be a relative path
+                let is_same_as_package = if let Some(package_path) = &self.config_info.package_config_path {
+                    // Try to canonicalize both paths
+                    match (package_path.canonicalize(), root_config_path.canonicalize()) {
+                        (Ok(p1), Ok(p2)) => p1 == p2,
+                        _ => {
+                            // If canonicalize fails, try absolute path comparison
+                            let abs_package = if package_path.is_absolute() {
+                                package_path.clone()
+                            } else {
+                                std::env::current_dir().ok()
+                                    .map(|cwd| cwd.join(package_path))
+                                    .unwrap_or_else(|| package_path.clone())
+                            };
+                            abs_package == root_config_path
+                        }
+                    }
+                } else {
+                    false
+                };
+                
+                if !is_same_as_package {
+                    debug!("Found root config at: {:?}", root_config_path);
+                    self.root_config = Some(Config::load_from_file(&root_config_path)?);
+                    self.config_info.root_config_path = Some(root_config_path);
+                } else {
+                    debug!("Root config is same as package config, skipping duplicate load");
+                    self.config_info.root_config_path = self.config_info.package_config_path.clone();
+                }
             }
         }
 
@@ -155,21 +182,29 @@ impl ConfigMerger {
             base.features = super::Features::merge(base.features.as_ref(), override_config.features.as_ref());
         }
 
-        // Merge extra_args
+        // Merge extra_args with deduplication
         if let Some(ref extra_args) = override_config.extra_args {
             if force_replace || base.extra_args.is_none() {
                 base.extra_args = Some(extra_args.clone());
             } else if let Some(ref mut base_args) = base.extra_args {
-                base_args.extend(extra_args.clone());
+                for arg in extra_args {
+                    if !base_args.contains(arg) {
+                        base_args.push(arg.clone());
+                    }
+                }
             }
         }
 
-        // Merge extra_test_binary_args
+        // Merge extra_test_binary_args with deduplication
         if let Some(ref extra_test_args) = override_config.extra_test_binary_args {
             if force_replace || base.extra_test_binary_args.is_none() {
                 base.extra_test_binary_args = Some(extra_test_args.clone());
             } else if let Some(ref mut base_args) = base.extra_test_binary_args {
-                base_args.extend(extra_test_args.clone());
+                for arg in extra_test_args {
+                    if !base_args.contains(arg) {
+                        base_args.push(arg.clone());
+                    }
+                }
             }
         }
 
@@ -199,12 +234,16 @@ impl ConfigMerger {
     }
     
     fn merge_rustc_config(&self, base: &mut super::RustcConfig, override_config: super::RustcConfig, force_replace: bool) {
-        // Merge extra_args
+        // Merge extra_args with deduplication
         if let Some(ref extra_args) = override_config.extra_args {
             if force_replace || base.extra_args.is_none() {
                 base.extra_args = Some(extra_args.clone());
             } else if let Some(ref mut base_args) = base.extra_args {
-                base_args.extend(extra_args.clone());
+                for arg in extra_args {
+                    if !base_args.contains(arg) {
+                        base_args.push(arg.clone());
+                    }
+                }
             }
         }
         
@@ -267,32 +306,44 @@ impl ConfigMerger {
             base.args = override_phase.args;
         }
         
-        // Merge extra_args
+        // Merge extra_args with deduplication
         if let Some(ref extra_args) = override_phase.extra_args {
             if base.extra_args.is_none() {
                 base.extra_args = Some(extra_args.clone());
             } else if let Some(ref mut base_args) = base.extra_args {
-                base_args.extend(extra_args.clone());
+                for arg in extra_args {
+                    if !base_args.contains(arg) {
+                        base_args.push(arg.clone());
+                    }
+                }
             }
         }
         
-        // Merge extra_test_binary_args
+        // Merge extra_test_binary_args with deduplication
         if let Some(ref extra_test_binary_args) = override_phase.extra_test_binary_args {
             if base.extra_test_binary_args.is_none() {
                 base.extra_test_binary_args = Some(extra_test_binary_args.clone());
             } else if let Some(ref mut base_args) = base.extra_test_binary_args {
-                base_args.extend(extra_test_binary_args.clone());
+                for arg in extra_test_binary_args {
+                    if !base_args.contains(arg) {
+                        base_args.push(arg.clone());
+                    }
+                }
             }
         }
     }
     
     fn merge_single_file_script_config(&self, base: &mut super::SingleFileScriptConfig, override_config: super::SingleFileScriptConfig, force_replace: bool) {
-        // Merge extra_args
+        // Merge extra_args with deduplication
         if let Some(ref extra_args) = override_config.extra_args {
             if force_replace || base.extra_args.is_none() {
                 base.extra_args = Some(extra_args.clone());
             } else if let Some(ref mut base_args) = base.extra_args {
-                base_args.extend(extra_args.clone());
+                for arg in extra_args {
+                    if !base_args.contains(arg) {
+                        base_args.push(arg.clone());
+                    }
+                }
             }
         }
         
@@ -338,21 +389,29 @@ impl ConfigMerger {
                     }
                 }
 
-                // Handle args merging
+                // Handle args merging with deduplication
                 if let Some(ref args) = new_override.extra_args {
                     if new_override.force_replace_args.unwrap_or(false) || existing.extra_args.is_none() {
                         existing.extra_args = Some(args.clone());
                     } else if let Some(ref mut existing_args) = existing.extra_args {
-                        existing_args.extend(args.clone());
+                        for arg in args {
+                            if !existing_args.contains(arg) {
+                                existing_args.push(arg.clone());
+                            }
+                        }
                     }
                 }
 
-                // Handle test binary args merging
+                // Handle test binary args merging with deduplication
                 if let Some(ref args) = new_override.extra_test_binary_args {
                     if new_override.force_replace_args.unwrap_or(false) || existing.extra_test_binary_args.is_none() {
                         existing.extra_test_binary_args = Some(args.clone());
                     } else if let Some(ref mut existing_args) = existing.extra_test_binary_args {
-                        existing_args.extend(args.clone());
+                        for arg in args {
+                            if !existing_args.contains(arg) {
+                                existing_args.push(arg.clone());
+                            }
+                        }
                     }
                 }
 

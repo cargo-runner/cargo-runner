@@ -25,17 +25,9 @@ impl<'a> ConfigResolver<'a> {
         let mut merger = ConfigMerger::new();
 
         // Load configs based on the runnable's location
+        // Only call load_configs_for_path once - it already handles the hierarchy
         if let Some(ref file_path) = self.identity.file_path {
             merger.load_configs_for_path(file_path)?;
-            
-            // If we have a project root that's different from the file path, load it too
-            if let Some(root) = self.project_root {
-                if let Some(parent) = file_path.parent() {
-                    if root != parent {
-                        merger.load_configs_for_path(root)?;
-                    }
-                }
-            }
         } else if let Some(root) = self.project_root {
             // No file path but we have project root
             merger.load_configs_for_path(root)?;
