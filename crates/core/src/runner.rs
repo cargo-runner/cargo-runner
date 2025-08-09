@@ -132,7 +132,7 @@ impl CargoRunner {
         debug!("get_fallback_command: file_path={:?}", file_path);
         
         // Resolve the actual file path first
-        let (resolved_path, _) = self.resolve_file_path(file_path)?;
+        let (resolved_path, _) = self.resolve_file_path_internal(file_path)?;
         debug!("get_fallback_command: resolved_path={:?}", resolved_path);
         
         // Ensure project root and reload config for the resolved path
@@ -228,7 +228,7 @@ impl CargoRunner {
     }
 
     /// Resolve a file path using linked_projects if necessary
-    fn resolve_file_path(&self, file_path: &Path) -> Result<(PathBuf, Option<PathBuf>)> {
+    fn resolve_file_path_internal(&self, file_path: &Path) -> Result<(PathBuf, Option<PathBuf>)> {
         debug!("Resolving file path: {:?}", file_path);
         debug!("Current config has linked_projects: {:?}", self.config.cargo.as_ref().and_then(|c| c.linked_projects.as_ref()).is_some());
         
@@ -417,7 +417,7 @@ impl CargoRunner {
         
         
         // Resolve the actual file path and project directory
-        let (resolved_path, project_dir) = self.resolve_file_path(path)?;
+        let (resolved_path, project_dir) = self.resolve_file_path_internal(path)?;
         debug!("Resolved path: {:?}, project_dir: {:?}", resolved_path, project_dir);
         
         // Ensure config is loaded for the resolved path
@@ -441,6 +441,112 @@ impl CargoRunner {
         } else {
             Err(crate::error::Error::NoRunnableFound)
         }
+    }
+
+    /// Public wrapper for resolve_file_path that returns just the resolved path
+    pub fn resolve_file_path(&mut self, file_path: &str) -> Result<PathBuf> {
+        let path = Path::new(file_path);
+        let (resolved, _) = self.resolve_file_path_internal(path)?;
+        Ok(resolved)
+    }
+
+    /// Detect the file type based on the file path and content
+    pub fn detect_file_type(&self, file_path: &Path) -> Result<crate::types::FileType> {
+        
+        // Check for single-file script first (cargo script)
+        if let Ok(content) = std::fs::read_to_string(file_path) {
+            if content.trim_start().starts_with("#!/usr/bin/env -S cargo") ||
+               content.contains("```cargo") ||
+               content.contains("---\ncargo") {
+                return Ok(crate::types::FileType::SingleFileScript);
+            }
+        }
+        
+        // Check if file is part of a Cargo project
+        let cargo_root = file_path
+            .ancestors()
+            .find(|p| p.join("Cargo.toml").exists());
+        
+        match cargo_root {
+            Some(root) => {
+                // Check if the file is in a standard Cargo source location
+                if let Ok(relative) = file_path.strip_prefix(root) {
+                    let path_str = relative.to_str().unwrap_or("");
+                    
+                    // Check standard Cargo project locations
+                    if path_str == "src/main.rs"
+                        || path_str.starts_with("src/bin/")
+                        || path_str.starts_with("src/")
+                        || path_str.starts_with("tests/")
+                        || path_str.starts_with("examples/")
+                        || path_str.starts_with("benches/")
+                    {
+                        Ok(crate::types::FileType::CargoProject)
+                    } else {
+                        // File is in a Cargo project but not in standard location
+                        Ok(crate::types::FileType::Standalone)
+                    }
+                } else {
+                    Ok(crate::types::FileType::CargoProject)
+                }
+            }
+            None => Ok(crate::types::FileType::Standalone),
+        }
+    }
+
+    /// Get the package name for a file path (public wrapper)
+    pub fn get_package_name_str(&self, file_path: &Path) -> Result<String> {
+        use crate::parser::module_resolver::ModuleResolver;
+        
+        if let Some(cargo_toml) = ModuleResolver::find_cargo_toml(file_path) {
+            // Read Cargo.toml and extract package name
+            let content = std::fs::read_to_string(&cargo_toml)?;
+            for line in content.lines() {
+                if let Some(name) = line.strip_prefix("name = ") {
+                    let name = name.trim().trim_matches('"');
+                    return Ok(name.to_string());
+                }
+            }
+            
+            // Fallback to directory name
+            cargo_toml
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string())
+                .ok_or_else(|| crate::error::Error::ParseError("Could not determine package name".to_string()))
+        } else {
+            Err(crate::error::Error::ParseError("No Cargo.toml found".to_string()))
+        }
+    }
+
+    /// Find the config path for a given file
+    pub fn find_config_path(&self, file_path: &Path) -> Result<Option<PathBuf>> {
+        let config_names = [".cargo-runner.json", "cargo-runner.json"];
+        
+        // Search from the file's directory up to the root
+        for ancestor in file_path.ancestors() {
+            for config_name in &config_names {
+                let config_path = ancestor.join(config_name);
+                if config_path.exists() {
+                    return Ok(Some(config_path));
+                }
+            }
+            
+            // Stop at Cargo.toml to avoid going beyond project boundaries
+            if ancestor.join("Cargo.toml").exists() {
+                // Check one more time at this level
+                for config_name in &config_names {
+                    let config_path = ancestor.join(config_name);
+                    if config_path.exists() {
+                        return Ok(Some(config_path));
+                    }
+                }
+                break;
+            }
+        }
+        
+        Ok(None)
     }
 }
 

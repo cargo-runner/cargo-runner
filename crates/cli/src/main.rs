@@ -77,6 +77,19 @@ enum Commands {
         #[arg(long = "clean")]
         clean: bool,
     },
+    /// Create override configuration for a specific file location
+    Override {
+        /// File path with optional line number (e.g., src/main.rs:10)
+        filepath: String,
+
+        /// Save to root config instead of project config
+        #[arg(long = "root")]
+        root: bool,
+
+        /// Arguments to override (after --)
+        #[arg(last = true)]
+        override_args: Vec<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -104,6 +117,7 @@ fn main() -> Result<()> {
                 Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
                 Commands::Init { cwd, force, rustc, single_file_script } => init_command(cwd.as_deref(), force, rustc, single_file_script),
                 Commands::Unset { clean } => unset_command(clean),
+                Commands::Override { filepath, root, override_args } => override_command(&filepath, root, override_args),
             }
         } else {
             // Being invoked directly as "cargo-runner"
@@ -117,6 +131,7 @@ fn main() -> Result<()> {
                 Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
                 Commands::Init { cwd, force, rustc, single_file_script } => init_command(cwd.as_deref(), force, rustc, single_file_script),
                 Commands::Unset { clean } => unset_command(clean),
+                Commands::Override { filepath, root, override_args } => override_command(&filepath, root, override_args),
             }
         }
     } else {
@@ -131,6 +146,7 @@ fn main() -> Result<()> {
             Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
             Commands::Init { cwd, force, rustc, single_file_script } => init_command(cwd.as_deref(), force, rustc, single_file_script),
             Commands::Unset { clean } => unset_command(clean),
+            Commands::Override { filepath, root, override_args } => override_command(&filepath, root, override_args),
         }
     }
 }
@@ -1426,4 +1442,246 @@ fn print_config_details(_runner: &cargo_runner_core::CargoRunner, filepath: &str
 
     println!();
     Ok(())
+}
+
+fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) -> Result<()> {
+    use serde_json::{Map, Value, json};
+    
+    // Parse filepath and line number
+    let (filepath, line) = parse_filepath_with_line(filepath_arg);
+    
+    println!("🔧 Creating override configuration...");
+    println!("   📍 File: {}", filepath);
+    if let Some(line_num) = line {
+        println!("   📍 Line: {}", line_num + 1); // Convert back to 1-based
+    }
+    
+    // Create a runner to detect the runnable at the given location
+    let mut runner = cargo_runner_core::CargoRunner::new()?;
+    
+    // Resolve the file path
+    let resolved_path = runner.resolve_file_path(&filepath)?;
+    
+    // Get the runnable at the specified line
+    let runnable = if let Some(line_num) = line {
+        runner.get_best_runnable_at_line(&resolved_path, line_num as u32)?
+    } else {
+        // If no line specified, try to get any runnable from the file
+        let all_runnables = runner.detect_all_runnables(&resolved_path)?;
+        all_runnables.into_iter().next()
+    };
+    
+    let runnable = runnable.ok_or_else(|| {
+        anyhow::anyhow!("No runnable found at the specified location")
+    })?;
+    
+    println!("   🎯 Found: {:?}", runnable.kind);
+    
+    // Detect file type based on the runnable
+    let file_type = runner.detect_file_type(&resolved_path)?;
+    println!("   📝 File type: {:?}", file_type);
+    
+    // Create function identity for the override
+    let identity = cargo_runner_core::FunctionIdentity {
+        package: runner.get_package_name_str(&resolved_path).ok(),
+        module_path: if runnable.module_path.is_empty() {
+            None
+        } else {
+            Some(runnable.module_path.clone())
+        },
+        file_path: Some(resolved_path.clone()),
+        function_name: runnable.get_function_name(),
+        file_type: Some(file_type),
+    };
+    
+    println!("   🔑 Function identity:");
+    if let Some(pkg) = &identity.package {
+        println!("      - package: {}", pkg);
+    }
+    if let Some(module) = &identity.module_path {
+        println!("      - module_path: {}", module);
+    }
+    if let Some(func) = &identity.function_name {
+        println!("      - function_name: {}", func);
+    }
+    println!("      - file_type: {:?}", file_type);
+    
+    // Create the override configuration based on file type
+    let mut override_config = Map::new();
+    
+    // Add matcher
+    let mut matcher = Map::new();
+    if let Some(pkg) = &identity.package {
+        matcher.insert("package".to_string(), json!(pkg));
+    }
+    if let Some(module) = &identity.module_path {
+        matcher.insert("module_path".to_string(), json!(module));
+    }
+    if let Some(func) = &identity.function_name {
+        matcher.insert("function_name".to_string(), json!(func));
+    }
+    // Always add file_path for precise matching
+    matcher.insert("file_path".to_string(), json!(resolved_path.to_str().unwrap()));
+    
+    override_config.insert("match".to_string(), Value::Object(matcher));
+    
+    // Parse override arguments
+    let parsed_args = parse_override_args(&override_args);
+    
+    // Add configuration based on file type
+    match file_type {
+        cargo_runner_core::FileType::CargoProject => {
+            let mut cargo_config = Map::new();
+            if let Some(extra_args) = parsed_args.get("extra_args") {
+                cargo_config.insert("extra_args".to_string(), json!(extra_args));
+            }
+            if let Some(extra_env) = parsed_args.get("extra_env") {
+                cargo_config.insert("extra_env".to_string(), json!(extra_env));
+            }
+            if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
+                cargo_config.insert("extra_test_binary_args".to_string(), json!(extra_test_binary_args));
+            }
+            override_config.insert("cargo".to_string(), Value::Object(cargo_config));
+        }
+        cargo_runner_core::FileType::Standalone => {
+            // For rustc
+            let mut rustc_config = Map::new();
+            
+            // Determine which framework to configure based on runnable kind
+            let framework_key = match &runnable.kind {
+                cargo_runner_core::RunnableKind::Test { .. } |
+                cargo_runner_core::RunnableKind::ModuleTests { .. } => "test_framework",
+                cargo_runner_core::RunnableKind::Benchmark { .. } => "benchmark_framework",
+                _ => "binary_framework",
+            };
+            
+            let mut framework = Map::new();
+            let mut build = Map::new();
+            let mut exec = Map::new();
+            
+            // Add parsed arguments to appropriate sections
+            if let Some(extra_args) = parsed_args.get("extra_args") {
+                build.insert("extra_args".to_string(), json!(extra_args));
+            }
+            if let Some(extra_env) = parsed_args.get("extra_env") {
+                exec.insert("extra_env".to_string(), json!(extra_env));
+            }
+            if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
+                exec.insert("extra_test_binary_args".to_string(), json!(extra_test_binary_args));
+            }
+            
+            if !build.is_empty() {
+                framework.insert("build".to_string(), Value::Object(build));
+            }
+            if !exec.is_empty() {
+                framework.insert("exec".to_string(), Value::Object(exec));
+            }
+            
+            rustc_config.insert(framework_key.to_string(), Value::Object(framework));
+            override_config.insert("rustc".to_string(), Value::Object(rustc_config));
+        }
+        cargo_runner_core::FileType::SingleFileScript => {
+            let mut script_config = Map::new();
+            if let Some(extra_args) = parsed_args.get("extra_args") {
+                script_config.insert("extra_args".to_string(), json!(extra_args));
+            }
+            if let Some(extra_env) = parsed_args.get("extra_env") {
+                script_config.insert("extra_env".to_string(), json!(extra_env));
+            }
+            if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
+                script_config.insert("extra_test_binary_args".to_string(), json!(extra_test_binary_args));
+            }
+            override_config.insert("single_file_script".to_string(), Value::Object(script_config));
+        }
+    }
+    
+    // Load existing config
+    let config_path = if root {
+        // Use PROJECT_ROOT or current directory for root config
+        let root_path = env::var("PROJECT_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| env::current_dir().unwrap());
+        root_path.join(".cargo-runner.json")
+    } else {
+        // Find the closest project config
+        runner.find_config_path(&resolved_path)?
+            .ok_or_else(|| anyhow::anyhow!("No config file found. Run 'cargo runner init' first"))?
+    };
+    
+    println!("   📄 Config file: {}", config_path.display());
+    
+    // Read existing config or create new one
+    let mut config: Map<String, Value> = if config_path.exists() {
+        let content = fs::read_to_string(&config_path)?;
+        serde_json::from_str(&content)?
+    } else {
+        let mut new_config = Map::new();
+        new_config.insert("overrides".to_string(), json!([]));
+        new_config
+    };
+    
+    // Add the override to the overrides array
+    let overrides = config.get_mut("overrides")
+        .and_then(|v| v.as_array_mut())
+        .ok_or_else(|| anyhow::anyhow!("Invalid config format: missing or invalid 'overrides' array"))?;
+    
+    overrides.push(Value::Object(override_config));
+    
+    // Write the updated config
+    let json = serde_json::to_string_pretty(&config)?;
+    fs::write(&config_path, json)?;
+    
+    println!("✅ Override added successfully!");
+    println!("   • Arguments: {:?}", override_args);
+    
+    Ok(())
+}
+
+fn parse_override_args(args: &[String]) -> serde_json::Map<String, serde_json::Value> {
+    use serde_json::{Map, Value, json};
+    
+    let mut result = Map::new();
+    let mut extra_args = Vec::new();
+    let mut extra_env = Map::new();
+    let mut extra_test_binary_args = Vec::new();
+    
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        
+        // Check for environment variables (KEY=VALUE format)
+        if arg.contains('=') && !arg.starts_with('-') {
+            let parts: Vec<&str> = arg.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                extra_env.insert(parts[0].to_string(), json!(parts[1]));
+            }
+        }
+        // Check for test binary args
+        else if arg == "--test-threads" || arg == "--nocapture" || arg == "--show-output" || arg == "--exact" {
+            extra_test_binary_args.push(arg.clone());
+            // Check if next arg is a value for --test-threads
+            if arg == "--test-threads" && i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                i += 1;
+                extra_test_binary_args.push(args[i].clone());
+            }
+        }
+        // Everything else goes to extra_args
+        else {
+            extra_args.push(arg.clone());
+        }
+        
+        i += 1;
+    }
+    
+    if !extra_args.is_empty() {
+        result.insert("extra_args".to_string(), json!(extra_args));
+    }
+    if !extra_env.is_empty() {
+        result.insert("extra_env".to_string(), Value::Object(extra_env));
+    }
+    if !extra_test_binary_args.is_empty() {
+        result.insert("extra_test_binary_args".to_string(), json!(extra_test_binary_args));
+    }
+    
+    result
 }
