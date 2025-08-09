@@ -1168,9 +1168,7 @@ fn create_combined_config() -> String {
     }
   },
   "single_file_script": {
-    "extra_args": [
-      "-Zscript"
-    ],
+    "extra_args": [],
     "extra_env": {
       "CARGO_TARGET_DIR": "target/rust-analyzer"
     },
@@ -1183,7 +1181,7 @@ fn create_combined_config() -> String {
 }
 
 fn create_single_file_script_config() -> String {
-    use serde_json::{Map, Value, json};
+    use serde_json::{Map, json};
     
     // Create a config with single_file_script section
     let mut config = Map::new();
@@ -1475,11 +1473,33 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
         anyhow::anyhow!("No runnable found at the specified location")
     })?;
     
-    println!("   🎯 Found: {:?}", runnable.kind);
-    
     // Detect file type based on the runnable
     let file_type = runner.detect_file_type(&resolved_path)?;
+    
+    // Determine which framework we're targeting
+    let framework_type = match &runnable.kind {
+        cargo_runner_core::RunnableKind::Test { .. } |
+        cargo_runner_core::RunnableKind::ModuleTests { .. } => "test_framework",
+        cargo_runner_core::RunnableKind::Benchmark { .. } => "benchmark_framework",
+        cargo_runner_core::RunnableKind::Binary { .. } |
+        cargo_runner_core::RunnableKind::Standalone { .. } => "binary_framework",
+        _ => "unknown",
+    };
+    
+    println!("   🎯 Found: {:?}", runnable.kind);
     println!("   📝 File type: {:?}", file_type);
+    
+    // Determine configuration section based on file type
+    let config_section = match file_type {
+        cargo_runner_core::FileType::CargoProject => "cargo",
+        cargo_runner_core::FileType::Standalone => "rustc",
+        cargo_runner_core::FileType::SingleFileScript => "single_file_script",
+    };
+    
+    println!("   🎨 Config section: {}", config_section);
+    if config_section == "rustc" {
+        println!("      └─ Framework: {}", framework_type);
+    }
     
     // Create function identity for the override
     let identity = cargo_runner_core::FunctionIdentity {
@@ -1528,18 +1548,84 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
     // Parse override arguments
     let parsed_args = parse_override_args(&override_args);
     
+    // Check if we should remove the entire override
+    if override_args.len() == 1 && override_args[0] == "-" {
+        // Load config and remove matching override
+        let config_path = if root {
+            let root_path = env::var("PROJECT_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| env::current_dir().unwrap());
+            root_path.join(".cargo-runner.json")
+        } else {
+            runner.find_config_path(&resolved_path)?
+                .ok_or_else(|| anyhow::anyhow!("No config file found"))?
+        };
+        
+        if config_path.exists() {
+            let content = fs::read_to_string(&config_path)?;
+            let mut config: Map<String, Value> = serde_json::from_str(&content)?;
+            
+            if let Some(overrides) = config.get_mut("overrides").and_then(|v| v.as_array_mut()) {
+                // Find and remove matching override
+                overrides.retain(|o| {
+                    if let Some(obj) = o.as_object() {
+                        if let Some(match_obj) = obj.get("match").and_then(|m| m.as_object()) {
+                            // Check if this override matches our identity
+                            let matches = match_obj.get("file_path")
+                                .and_then(|v| v.as_str())
+                                .map(|p| p == resolved_path.to_str().unwrap())
+                                .unwrap_or(false);
+                            
+                            if matches && identity.function_name.is_some() {
+                                let func_matches = match_obj.get("function_name")
+                                    .and_then(|v| v.as_str())
+                                    .map(|f| Some(f.to_string()) == identity.function_name)
+                                    .unwrap_or(false);
+                                return !func_matches;
+                            }
+                            
+                            return !matches;
+                        }
+                    }
+                    true
+                });
+                
+                let json = serde_json::to_string_pretty(&config)?;
+                fs::write(&config_path, json)?;
+                
+                println!("✅ Override removed successfully!");
+                return Ok(());
+            }
+        }
+        
+        println!("❌ No matching override found to remove");
+        return Ok(());
+    }
+    
     // Add configuration based on file type
     match file_type {
         cargo_runner_core::FileType::CargoProject => {
             let mut cargo_config = Map::new();
+            
+            // Handle command and subcommand
+            if let Some(command) = parsed_args.get("command") {
+                cargo_config.insert("command".to_string(), command.clone());
+            }
+            if let Some(subcommand) = parsed_args.get("subcommand") {
+                cargo_config.insert("subcommand".to_string(), subcommand.clone());
+            }
+            if let Some(channel) = parsed_args.get("channel") {
+                cargo_config.insert("channel".to_string(), channel.clone());
+            }
+            
             if let Some(extra_args) = parsed_args.get("extra_args") {
-                cargo_config.insert("extra_args".to_string(), json!(extra_args));
+                cargo_config.insert("extra_args".to_string(), extra_args.clone());
             }
             if let Some(extra_env) = parsed_args.get("extra_env") {
-                cargo_config.insert("extra_env".to_string(), json!(extra_env));
+                cargo_config.insert("extra_env".to_string(), extra_env.clone());
             }
             if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
-                cargo_config.insert("extra_test_binary_args".to_string(), json!(extra_test_binary_args));
+                cargo_config.insert("extra_test_binary_args".to_string(), extra_test_binary_args.clone());
             }
             override_config.insert("cargo".to_string(), Value::Object(cargo_config));
         }
@@ -1559,15 +1645,23 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
             let mut build = Map::new();
             let mut exec = Map::new();
             
+            // Handle command for build phase (rustc can have custom command)
+            if let Some(command) = parsed_args.get("command") {
+                build.insert("command".to_string(), command.clone());
+            }
+            
+            // Note: channel is not yet supported in rustc configs
+            // TODO: Add channel support to RustcPhaseConfig
+            
             // Add parsed arguments to appropriate sections
             if let Some(extra_args) = parsed_args.get("extra_args") {
-                build.insert("extra_args".to_string(), json!(extra_args));
+                build.insert("extra_args".to_string(), extra_args.clone());
             }
             if let Some(extra_env) = parsed_args.get("extra_env") {
-                exec.insert("extra_env".to_string(), json!(extra_env));
+                exec.insert("extra_env".to_string(), extra_env.clone());
             }
             if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
-                exec.insert("extra_test_binary_args".to_string(), json!(extra_test_binary_args));
+                exec.insert("extra_test_binary_args".to_string(), extra_test_binary_args.clone());
             }
             
             if !build.is_empty() {
@@ -1582,14 +1676,26 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
         }
         cargo_runner_core::FileType::SingleFileScript => {
             let mut script_config = Map::new();
+            
+            // Handle command and subcommand
+            if let Some(command) = parsed_args.get("command") {
+                script_config.insert("command".to_string(), command.clone());
+            }
+            if let Some(subcommand) = parsed_args.get("subcommand") {
+                script_config.insert("subcommand".to_string(), subcommand.clone());
+            }
+            if let Some(channel) = parsed_args.get("channel") {
+                script_config.insert("channel".to_string(), channel.clone());
+            }
+            
             if let Some(extra_args) = parsed_args.get("extra_args") {
-                script_config.insert("extra_args".to_string(), json!(extra_args));
+                script_config.insert("extra_args".to_string(), extra_args.clone());
             }
             if let Some(extra_env) = parsed_args.get("extra_env") {
-                script_config.insert("extra_env".to_string(), json!(extra_env));
+                script_config.insert("extra_env".to_string(), extra_env.clone());
             }
             if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
-                script_config.insert("extra_test_binary_args".to_string(), json!(extra_test_binary_args));
+                script_config.insert("extra_test_binary_args".to_string(), extra_test_binary_args.clone());
             }
             override_config.insert("single_file_script".to_string(), Value::Object(script_config));
         }
@@ -1620,19 +1726,195 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
         new_config
     };
     
-    // Add the override to the overrides array
+    // Get or create the overrides array
     let overrides = config.get_mut("overrides")
         .and_then(|v| v.as_array_mut())
         .ok_or_else(|| anyhow::anyhow!("Invalid config format: missing or invalid 'overrides' array"))?;
     
-    overrides.push(Value::Object(override_config));
+    // Check if an override already exists for this identity
+    let existing_index = overrides.iter().position(|o| {
+        if let Some(obj) = o.as_object() {
+            if let Some(match_obj) = obj.get("match").and_then(|m| m.as_object()) {
+                // Check if this override matches our identity
+                let file_matches = match_obj.get("file_path")
+                    .and_then(|v| v.as_str())
+                    .map(|p| p == resolved_path.to_str().unwrap())
+                    .unwrap_or(false);
+                
+                if file_matches && identity.function_name.is_some() {
+                    let func_matches = match_obj.get("function_name")
+                        .and_then(|v| v.as_str())
+                        .map(|f| Some(f.to_string()) == identity.function_name)
+                        .unwrap_or(false);
+                    return func_matches;
+                }
+                
+                return file_matches;
+            }
+        }
+        false
+    });
+    
+    // Handle removal operations on existing override
+    if let Some(idx) = existing_index {
+        let existing = &mut overrides[idx];
+        if let Some(existing_obj) = existing.as_object_mut() {
+            // Get the appropriate config section
+            let config_section = match file_type {
+                cargo_runner_core::FileType::CargoProject => existing_obj.get_mut("cargo"),
+                cargo_runner_core::FileType::Standalone => existing_obj.get_mut("rustc"),
+                cargo_runner_core::FileType::SingleFileScript => existing_obj.get_mut("single_file_script"),
+            };
+            
+            if let Some(section) = config_section.and_then(|v| v.as_object_mut()) {
+                // Apply removals
+                if parsed_args.get("remove_command").is_some() {
+                    section.remove("command");
+                }
+                if parsed_args.get("remove_subcommand").is_some() {
+                    section.remove("subcommand");
+                }
+                if parsed_args.get("remove_channel").is_some() {
+                    section.remove("channel");
+                }
+                if parsed_args.get("remove_args").is_some() {
+                    section.remove("extra_args");
+                }
+                if parsed_args.get("remove_env").is_some() {
+                    section.remove("extra_env");
+                }
+                if parsed_args.get("remove_test_args").is_some() {
+                    section.remove("extra_test_binary_args");
+                }
+                
+                // Remove specific env vars
+                if let Some(env_keys) = parsed_args.get("remove_env_keys").and_then(|v| v.as_array()) {
+                    if let Some(extra_env) = section.get_mut("extra_env").and_then(|v| v.as_object_mut()) {
+                        for key in env_keys {
+                            if let Some(key_str) = key.as_str() {
+                                extra_env.remove(key_str);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Merge in the new override config
+            if let Some(new_section) = override_config.get(match file_type {
+                cargo_runner_core::FileType::CargoProject => "cargo",
+                cargo_runner_core::FileType::Standalone => "rustc",
+                cargo_runner_core::FileType::SingleFileScript => "single_file_script",
+            }) {
+                existing_obj.insert(
+                    match file_type {
+                        cargo_runner_core::FileType::CargoProject => "cargo",
+                        cargo_runner_core::FileType::Standalone => "rustc",
+                        cargo_runner_core::FileType::SingleFileScript => "single_file_script",
+                    }.to_string(),
+                    new_section.clone()
+                );
+            }
+            
+            println!("✅ Override updated successfully!");
+        }
+    } else {
+        // Add new override
+        overrides.push(Value::Object(override_config));
+        println!("✅ Override added successfully!");
+    }
     
     // Write the updated config
     let json = serde_json::to_string_pretty(&config)?;
     fs::write(&config_path, json)?;
     
-    println!("✅ Override added successfully!");
     println!("   • Arguments: {:?}", override_args);
+    
+    // Show what was applied
+    if !parsed_args.is_empty() {
+        println!("\n   📋 Applied changes to {}:", match file_type {
+            cargo_runner_core::FileType::CargoProject => "cargo configuration",
+            cargo_runner_core::FileType::Standalone => {
+                match &runnable.kind {
+                    cargo_runner_core::RunnableKind::Test { .. } |
+                    cargo_runner_core::RunnableKind::ModuleTests { .. } => "rustc.test_framework configuration",
+                    cargo_runner_core::RunnableKind::Benchmark { .. } => "rustc.benchmark_framework configuration",
+                    _ => "rustc.binary_framework configuration",
+                }
+            },
+            cargo_runner_core::FileType::SingleFileScript => "single_file_script configuration",
+        });
+        if parsed_args.contains_key("command") {
+            println!("      • command: {}", parsed_args["command"]);
+        }
+        if parsed_args.contains_key("subcommand") {
+            println!("      • subcommand: {}", parsed_args["subcommand"]);
+        }
+        if parsed_args.contains_key("channel") {
+            println!("      • channel: {}", parsed_args["channel"]);
+        }
+        if parsed_args.contains_key("extra_args") {
+            if let Some(args) = parsed_args["extra_args"].as_array() {
+                let args_str: Vec<String> = args.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect();
+                if file_type == cargo_runner_core::FileType::Standalone {
+                    println!("      • build.extra_args: {:?}", args_str);
+                } else {
+                    println!("      • extra_args: {:?}", args_str);
+                }
+            }
+        }
+        if parsed_args.contains_key("extra_env") {
+            if let Some(env) = parsed_args["extra_env"].as_object() {
+                for (k, v) in env {
+                    if file_type == cargo_runner_core::FileType::Standalone {
+                        println!("      • exec.extra_env: {}={}", k, v);
+                    } else {
+                        println!("      • env: {}={}", k, v);
+                    }
+                }
+            }
+        }
+        if parsed_args.contains_key("extra_test_binary_args") {
+            if let Some(args) = parsed_args["extra_test_binary_args"].as_array() {
+                let args_str: Vec<String> = args.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect();
+                if file_type == cargo_runner_core::FileType::Standalone {
+                    println!("      • exec.extra_test_binary_args: {:?}", args_str);
+                } else {
+                    println!("      • extra_test_binary_args: {:?}", args_str);
+                }
+            }
+        }
+        
+        // Show removals
+        if parsed_args.contains_key("remove_command") {
+            println!("      • ❌ removed: command");
+        }
+        if parsed_args.contains_key("remove_subcommand") {
+            println!("      • ❌ removed: subcommand");
+        }
+        if parsed_args.contains_key("remove_channel") {
+            println!("      • ❌ removed: channel");
+        }
+        if parsed_args.contains_key("remove_args") {
+            println!("      • ❌ removed: extra_args");
+        }
+        if parsed_args.contains_key("remove_env") {
+            println!("      • ❌ removed: extra_env");
+        }
+        if parsed_args.contains_key("remove_test_args") {
+            println!("      • ❌ removed: extra_test_binary_args");
+        }
+        if let Some(env_keys) = parsed_args.get("remove_env_keys").and_then(|v| v.as_array()) {
+            for key in env_keys {
+                if let Some(key_str) = key.as_str() {
+                    println!("      • ❌ removed env: {}", key_str);
+                }
+            }
+        }
+    }
     
     Ok(())
 }
@@ -1644,25 +1926,97 @@ fn parse_override_args(args: &[String]) -> serde_json::Map<String, serde_json::V
     let mut extra_args = Vec::new();
     let mut extra_env = Map::new();
     let mut extra_test_binary_args = Vec::new();
+    let mut command = None;
+    let mut subcommand = None;
+    let mut channel = None;
+    
+    // Fields to remove
+    let mut remove_command = false;
+    let mut remove_subcommand = false;
+    let mut remove_channel = false;
+    let mut remove_args = false;
+    let mut remove_env = false;
+    let mut remove_test_args = false;
+    let mut env_to_remove = Vec::new();
     
     let mut i = 0;
     while i < args.len() {
         let arg = &args[i];
         
-        // Check for environment variables (KEY=VALUE format)
-        if arg.contains('=') && !arg.starts_with('-') {
-            let parts: Vec<&str> = arg.splitn(2, '=').collect();
-            if parts.len() == 2 {
-                extra_env.insert(parts[0].to_string(), json!(parts[1]));
+        // Check for removal tokens
+        if arg.starts_with('-') && !arg.starts_with("--") {
+            match arg.as_str() {
+                "-command" | "-cmd" => remove_command = true,
+                "-subcommand" | "-sub" => remove_subcommand = true,
+                "-channel" | "-ch" => remove_channel = true,
+                "-arg" => remove_args = true,
+                "-env" => remove_env = true,
+                "-test" | "-/" => remove_test_args = true,
+                _ => {
+                    // Check if it's an env var removal like -RUST_LOG
+                    let env_name = &arg[1..];
+                    if env_name.chars().all(|c| c.is_uppercase() || c == '_') && !env_name.is_empty() {
+                        env_to_remove.push(env_name.to_string());
+                    }
+                }
             }
         }
-        // Check for test binary args
-        else if arg == "--test-threads" || arg == "--nocapture" || arg == "--show-output" || arg == "--exact" {
-            extra_test_binary_args.push(arg.clone());
-            // Check if next arg is a value for --test-threads
-            if arg == "--test-threads" && i + 1 < args.len() && !args[i + 1].starts_with('-') {
+        // Check for command token @command:subcommand
+        else if arg.starts_with('@') {
+            let token = &arg[1..];
+            let parts: Vec<&str> = token.split(':').collect();
+            
+            if !parts.is_empty() {
+                let cmd = parts[0];
+                
+                // Special handling for @cargo:subcommand format
+                if cmd == "cargo" && parts.len() > 1 {
+                    // Don't set command to cargo (it's the default)
+                    // Just set the subcommand
+                    subcommand = Some(parts[1..].join(" "));
+                } else {
+                    // For other commands like @dx, @trunk, etc.
+                    command = Some(cmd.to_string());
+                    if parts.len() > 1 {
+                        subcommand = Some(parts[1..].join(" "));
+                    }
+                }
+            }
+        }
+        // Check for channel token +channel
+        else if arg.starts_with('+') && arg.len() > 1 {
+            channel = Some(arg[1..].to_string());
+        }
+        // Check for test binary args starting with /
+        else if arg.starts_with('/') && arg.len() > 1 {
+            // Collect all following args until we hit another token
+            let mut test_args = Vec::new();
+            let args_str = &arg[1..]; // Remove the / prefix
+            
+            // If there's content after /, add it
+            if !args_str.is_empty() {
+                test_args.push(args_str.to_string());
+            }
+            
+            // Collect following args that don't start with special tokens
+            while i + 1 < args.len() {
+                let next_arg = &args[i + 1];
+                if next_arg.starts_with('@') || next_arg.starts_with('+') || 
+                   next_arg.starts_with('/') || next_arg.starts_with('-') ||
+                   (next_arg.chars().all(|c| c.is_uppercase() || c == '_') && next_arg.contains('=')) {
+                    break;
+                }
                 i += 1;
-                extra_test_binary_args.push(args[i].clone());
+                test_args.push(args[i].clone());
+            }
+            
+            extra_test_binary_args.extend(test_args);
+        }
+        // Check for environment variables (SCREAMING_CASE=value)
+        else if arg.chars().take_while(|&c| c != '=').all(|c| c.is_uppercase() || c == '_') && arg.contains('=') {
+            let parts: Vec<&str> = arg.splitn(2, '=').collect();
+            if parts.len() == 2 && !parts[0].is_empty() {
+                extra_env.insert(parts[0].to_string(), json!(parts[1]));
             }
         }
         // Everything else goes to extra_args
@@ -1673,14 +2027,51 @@ fn parse_override_args(args: &[String]) -> serde_json::Map<String, serde_json::V
         i += 1;
     }
     
-    if !extra_args.is_empty() {
+    // Build result based on what was parsed and removal flags
+    if let Some(cmd) = command {
+        if !remove_command {
+            result.insert("command".to_string(), json!(cmd));
+        }
+    } else if remove_command {
+        result.insert("remove_command".to_string(), json!(true));
+    }
+    
+    if let Some(sub) = subcommand {
+        if !remove_subcommand {
+            result.insert("subcommand".to_string(), json!(sub));
+        }
+    } else if remove_subcommand {
+        result.insert("remove_subcommand".to_string(), json!(true));
+    }
+    
+    if let Some(ch) = channel {
+        if !remove_channel {
+            result.insert("channel".to_string(), json!(ch));
+        }
+    } else if remove_channel {
+        result.insert("remove_channel".to_string(), json!(true));
+    }
+    
+    if !extra_args.is_empty() && !remove_args {
         result.insert("extra_args".to_string(), json!(extra_args));
+    } else if remove_args {
+        result.insert("remove_args".to_string(), json!(true));
     }
-    if !extra_env.is_empty() {
+    
+    if !extra_env.is_empty() && !remove_env {
         result.insert("extra_env".to_string(), Value::Object(extra_env));
+    } else if remove_env {
+        result.insert("remove_env".to_string(), json!(true));
     }
-    if !extra_test_binary_args.is_empty() {
+    
+    if !env_to_remove.is_empty() {
+        result.insert("remove_env_keys".to_string(), json!(env_to_remove));
+    }
+    
+    if !extra_test_binary_args.is_empty() && !remove_test_args {
         result.insert("extra_test_binary_args".to_string(), json!(extra_test_binary_args));
+    } else if remove_test_args {
+        result.insert("remove_test_args".to_string(), json!(true));
     }
     
     result

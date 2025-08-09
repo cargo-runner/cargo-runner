@@ -69,9 +69,22 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                 // Apply extra args
                 builder.apply_args(&mut args, runnable, config, file_type);
 
-                // Add test filter
+                // Add test filter with module path
                 args.push("--".to_string());
-                args.push(test_name.clone());
+                
+                // Build the full test path including module
+                let full_test_path = if !runnable.module_path.is_empty() {
+                    format!("{}::{}", runnable.module_path, test_name)
+                } else {
+                    test_name.clone()
+                };
+                args.push(full_test_path);
+                
+                // Add --exact flag for individual test
+                args.push("--exact".to_string());
+
+                // Apply test binary args
+                builder.apply_test_binary_args(&mut args, runnable, config, file_type);
 
                 let mut command = CargoCommand::new(args);
 
@@ -81,7 +94,7 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
 
                 Ok(command)
             }
-            RunnableKind::ModuleTests { .. } => {
+            RunnableKind::ModuleTests { module_name } => {
                 // Build command for running all tests in a cargo script
                 let mut args = vec!["+nightly".to_string(), "-Zscript".to_string()];
 
@@ -94,6 +107,19 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
 
                 // Apply extra args
                 builder.apply_args(&mut args, runnable, config, file_type);
+
+                // Add module filter
+                args.push("--".to_string());
+                
+                // Use the full module path if available, otherwise just the module name
+                if !runnable.module_path.is_empty() {
+                    args.push(runnable.module_path.clone());
+                } else {
+                    args.push(module_name.clone());
+                }
+
+                // Apply test binary args (but NOT --exact for module tests)
+                builder.apply_test_binary_args(&mut args, runnable, config, file_type);
 
                 let mut command = CargoCommand::new(args);
 
@@ -271,6 +297,28 @@ impl SingleFileScriptBuilder {
             file_path: Some(runnable.file_path.clone()),
             function_name: runnable.get_function_name(),
             file_type: Some(file_type),
+        }
+    }
+
+    fn apply_test_binary_args(
+        &self,
+        args: &mut Vec<String>,
+        runnable: &Runnable,
+        config: &Config,
+        file_type: FileType,
+    ) {
+        // Apply override test binary args
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
+            if let Some(override_sfs) = &override_config.single_file_script {
+                if let Some(extra_args) = &override_sfs.extra_test_binary_args {
+                    args.extend(extra_args.clone());
+                }
+            }
+        }
+
+        // Apply global test binary args
+        if let Some(extra_args) = self.get_extra_test_binary_args(config, file_type) {
+            args.extend(extra_args.clone());
         }
     }
 

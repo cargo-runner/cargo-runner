@@ -25,6 +25,7 @@ impl CommandBuilderImpl for TestCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
+        tracing::debug!("TestCommandBuilder::build called for {:?}, package={:?}", runnable.file_path, package);
         let builder = TestCommandBuilder;
         let mut args = vec![];
 
@@ -67,8 +68,12 @@ impl CommandBuilderImpl for TestCommandBuilder {
             args.push(pkg.to_string());
         }
 
-        // Add target
-        builder.add_target(&mut args, &runnable.file_path, package)?;
+        // Get test framework for checking if we're using default cargo test
+        let test_framework = builder.get_test_framework(config, file_type);
+        
+        // Add target/bin/lib (for tests in specific files)
+        tracing::debug!("Calling add_target for file: {:?}", runnable.file_path);
+        builder.add_target(&mut args, &runnable.file_path, package, test_framework)?;
 
         // Apply configuration
         builder.apply_args(&mut args, runnable, config, file_type);
@@ -104,9 +109,25 @@ impl TestCommandBuilder {
         &self,
         args: &mut Vec<String>,
         file_path: &Path,
-        _package: Option<&str>,
+        package: Option<&str>,
+        test_framework: Option<&crate::config::TestFramework>,
     ) -> Result<()> {
-        // For integration tests, add --test flag
+        let path_str = file_path.to_str().unwrap_or("");
+        tracing::debug!("add_target called with path: {}, args before: {:?}", path_str, args);
+        
+        // Check if we're using default cargo test command
+        let is_default_test = args.contains(&"test".to_string()) && {
+            if let Some(tf) = &test_framework {
+                // If we have a test framework, check if it's using default cargo test
+                tf.command.as_ref().map(|c| c == "cargo").unwrap_or(true) &&
+                tf.subcommand.is_none()
+            } else {
+                // No test framework means we're using default cargo
+                true
+            }
+        };
+        
+        // For integration tests in tests/ directory, add --test flag
         if let Some(parent) = file_path.parent() {
             if parent.ends_with("tests") || parent.to_str().map_or(false, |s| s.contains("/tests/"))
             {
@@ -114,8 +135,53 @@ impl TestCommandBuilder {
                     args.push("--test".to_string());
                     args.push(stem.to_string_lossy().to_string());
                 }
+                return Ok(());
             }
         }
+        
+        // For tests in library source files (src/**/*.rs, excluding main.rs and bin/), add --lib flag
+        // Only if using default cargo test command
+        if is_default_test && path_str.contains("/src/") && 
+           !path_str.ends_with("/src/main.rs") && 
+           !path_str.contains("/src/bin/") {
+            tracing::debug!("Adding --lib for tests in library source file: {}", path_str);
+            args.push("--lib".to_string());
+            return Ok(());
+        }
+        
+        // For tests in example files (examples/*.rs), add --example flag
+        // Only if using default cargo test command
+        tracing::debug!("Checking example: is_default_test={}, path_str={}, contains_examples={}", 
+                      is_default_test, path_str, path_str.contains("/examples/") || path_str.starts_with("examples/"));
+        if is_default_test && (path_str.contains("/examples/") || path_str.starts_with("examples/")) {
+            if let Some(stem) = file_path.file_stem() {
+                let example_name = stem.to_string_lossy();
+                tracing::debug!("Adding --example {} for tests in examples/{}.rs", example_name, example_name);
+                args.push("--example".to_string());
+                args.push(example_name.to_string());
+            }
+            return Ok(());
+        }
+        
+        // For tests in binary files (src/main.rs, src/bin/*.rs), add --bin flag
+        // Only if using default cargo test command
+        if is_default_test && (path_str.ends_with("/src/main.rs") || path_str.contains("/src/bin/")) {
+            if path_str.ends_with("/src/main.rs") {
+                // For src/main.rs, use package name as binary name
+                if let Some(pkg) = package {
+                    tracing::debug!("Adding --bin {} for tests in src/main.rs", pkg);
+                    args.push("--bin".to_string());
+                    args.push(pkg.to_string());
+                }
+            } else if let Some(stem) = file_path.file_stem() {
+                // For src/bin/*.rs, use file stem as binary name
+                let bin_name = stem.to_string_lossy();
+                tracing::debug!("Adding --bin {} for tests in src/bin/{}.rs", bin_name, bin_name);
+                args.push("--bin".to_string());
+                args.push(bin_name.to_string());
+            }
+        }
+        
         Ok(())
     }
 
@@ -128,7 +194,18 @@ impl TestCommandBuilder {
     ) {
         if let RunnableKind::Test { test_name, .. } = &runnable.kind {
             args.push("--".to_string());
-            args.push(test_name.clone());
+            
+            // Build the full test path including module
+            let full_test_path = if !runnable.module_path.is_empty() {
+                format!("{}::{}", runnable.module_path, test_name)
+            } else {
+                test_name.clone()
+            };
+            
+            args.push(full_test_path);
+            
+            // Add --exact flag for individual test functions
+            args.push("--exact".to_string());
 
             // Apply test binary args
             self.apply_test_binary_args(args, runnable, config, file_type);

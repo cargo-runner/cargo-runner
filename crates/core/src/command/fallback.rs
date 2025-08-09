@@ -37,6 +37,7 @@ pub fn generate_fallback_command(
         debug!("Fallback command config: cargo.binary_framework={:?}", config.cargo.as_ref().and_then(|c| c.binary_framework.as_ref()));
         
         // Use the CommandBuilder to build the command with config support
+        debug!("Calling CommandBuilder::for_runnable with package_name={:?}", package_name);
         let command = crate::command::builder::CommandBuilder::for_runnable(&runnable)
             .with_package(package_name.unwrap_or_default())
             .with_project_root(project_root.unwrap_or_else(|| Path::new(".")))
