@@ -3,16 +3,14 @@
 ## Overview
 
 cargo-runner supports a hierarchical configuration system that allows you to define settings at different levels:
-- **Root level** (at PROJECT_ROOT)
-- **Workspace level** (where `[workspace]` is defined in Cargo.toml)
+- **Root level** (at CARGO_RUNNER_ROOT) - Affects all projects in the workspace
 - **Package level** (individual package directories)
 
 ## Merging Hierarchy
 
 Configurations are merged in the following order:
-1. Root config (from PROJECT_ROOT)
-2. Workspace config (if applicable)
-3. Package config
+1. Root config (from CARGO_RUNNER_ROOT)
+2. Package config
 
 Later configurations override earlier ones, but by default, arrays and maps are **merged** rather than replaced.
 
@@ -40,7 +38,7 @@ All config files use snake_case naming and only include fields with actual value
 ## Special Fields
 
 ### linked_projects
-- **Only allowed at root level** (PROJECT_ROOT)
+- **Only allowed at root level** (CARGO_RUNNER_ROOT)
 - Lists all Cargo.toml files in the workspace
 - Automatically populated by `cargo runner init`
 
@@ -89,7 +87,7 @@ Overrides support `force_replace` flags to replace instead of merge:
 ## Example Hierarchy
 
 ```
-PROJECT_ROOT/
+CARGO_RUNNER_ROOT/
 ├── .cargo-runner.json          # Root config with linked_projects
 ├── Cargo.toml                  # [workspace] definition
 ├── my-crate/
@@ -101,7 +99,7 @@ PROJECT_ROOT/
 ```
 
 When running from `my-crate/src/lib.rs`:
-1. Load root config (if PROJECT_ROOT is set)
+1. Load root config (if CARGO_RUNNER_ROOT is set)
 2. Load workspace config (if different from root)
 3. Load my-crate's config
 4. Merge all configs in order

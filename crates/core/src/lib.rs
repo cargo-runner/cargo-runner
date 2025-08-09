@@ -3,10 +3,7 @@
 //! This crate provides functionality to:
 //! - Parse Rust source files and detect runnable items (tests, benchmarks, binaries)
 //! - Generate appropriate cargo commands for running specific items
-//! - Cache results for improved performance
 //! - Support various project structures and configurations
-
-pub mod cache;
 pub mod command;
 pub mod config;
 pub mod error;

@@ -21,12 +21,6 @@ pub struct Config {
     // Overrides for specific functions
     #[serde(default)]
     pub overrides: Vec<Override>,
-
-    // Cache settings (internal, not exposed in JSON)
-    #[serde(skip)]
-    pub cache_enabled: bool,
-    #[serde(skip)]
-    pub cache_dir: Option<PathBuf>,
 }
 
 impl Config {
@@ -106,8 +100,6 @@ mod tests {
                 rustc: None,
                 single_file_script: None,
             }],
-            cache_enabled: true,
-            cache_dir: Some(PathBuf::from("/tmp/cargo-runner-cache")),
             ..Default::default()
         };
 
@@ -117,8 +109,6 @@ mod tests {
         let parsed: Config = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.overrides.len(), 1);
-        // cache_enabled is skipped in serialization, so it will be default (false)
-        assert!(!parsed.cache_enabled);
         assert_eq!(parsed.cargo.as_ref().unwrap().channel, Some("nightly".to_string()));
     }
 

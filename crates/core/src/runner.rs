@@ -1,7 +1,6 @@
 //! Main runner that coordinates parsing, detection, and command generation
 
 use crate::{
-    cache::RunnableCache,
     command::CargoCommand,
     config::{Config, ConfigMerger},
     error::Result,
@@ -15,7 +14,6 @@ use tracing::debug;
 pub struct CargoRunner {
     detector: RunnableDetector,
     parser: RustParser,
-    cache: RunnableCache,
     config: Config,
     project_root: Option<PathBuf>,
 }
@@ -23,12 +21,6 @@ pub struct CargoRunner {
 impl CargoRunner {
     pub fn new() -> Result<Self> {
         let config = Self::load_config()?;
-        let cache_dir = config.cache_dir.clone();
-        let mut cache = RunnableCache::new(cache_dir);
-
-        if config.cache_enabled {
-            let _ = cache.load_from_disk();
-        }
 
         let project_root = std::env::var("PROJECT_ROOT")
             .ok()
@@ -37,24 +29,15 @@ impl CargoRunner {
         Ok(Self {
             detector: RunnableDetector::new()?,
             parser: RustParser::new()?,
-            cache,
             config,
             project_root,
         })
     }
 
     pub fn with_config(config: Config) -> Result<Self> {
-        let cache_dir = config.cache_dir.clone();
-        let mut cache = RunnableCache::new(cache_dir);
-
-        if config.cache_enabled {
-            let _ = cache.load_from_disk();
-        }
-
         Ok(Self {
             detector: RunnableDetector::new()?,
             parser: RustParser::new()?,
-            cache,
             config,
             project_root: None,
         })
@@ -71,67 +54,12 @@ impl CargoRunner {
         );
         self.ensure_project_root(file_path)?;
 
-        // Check cache first
-        if self.config.cache_enabled {
-            if let Some(cached) = self.cache.get(file_path) {
-                debug!("Checking {} cached runnables", cached.len());
-                let filtered: Vec<Runnable> = cached
-                    .iter()
-                    .filter(|r| {
-                        // For doc tests with extended scope, check if line is within the extended scope
-                        let contains = if matches!(r.kind, RunnableKind::DocTest { .. }) {
-                            if let Some(ref extended) = r.extended_scope {
-                                // Check if line is within the extended scope (includes doc comments)
-                                let in_extended = line >= extended.scope.start.line && line <= extended.scope.end.line;
-                                debug!(
-                                    "  DocTest '{}' extended scope {}-{} contains line {}? {}",
-                                    r.label,
-                                    extended.scope.start.line,
-                                    extended.scope.end.line,
-                                    line,
-                                    in_extended
-                                );
-                                in_extended
-                            } else {
-                                r.scope.contains_line(line)
-                            }
-                        } else {
-                            r.scope.contains_line(line)
-                        };
-                        
-                        debug!(
-                            "  Runnable '{}' scope {}-{} contains line {}? {} (module_path: '{}')",
-                            r.label,
-                            r.scope.start.line,
-                            r.scope.end.line,
-                            line,
-                            contains,
-                            r.module_path
-                        );
-                        contains
-                    })
-                    .cloned()
-                    .collect();
-                if !filtered.is_empty() {
-                    debug!("Found {} runnables in cache", filtered.len());
-                    return Ok(filtered);
-                }
-            }
-        }
-
         // Detect runnables
         debug!("Detecting runnables from file");
         let mut runnables = self.detector.detect_runnables(file_path, Some(line))?;
 
         // Resolve module paths
         self.resolve_module_paths(file_path, &mut runnables)?;
-
-        // Update cache
-        if self.config.cache_enabled {
-            let mut all_runnables = self.detector.detect_runnables(file_path, None)?;
-            self.resolve_module_paths(file_path, &mut all_runnables)?;
-            let _ = self.cache.insert(file_path.to_path_buf(), all_runnables);
-        }
 
         Ok(runnables)
     }
@@ -233,13 +161,6 @@ impl CargoRunner {
     pub fn detect_all_runnables(&mut self, file_path: &Path) -> Result<Vec<Runnable>> {
         self.ensure_project_root(file_path)?;
 
-        // Check cache first
-        if self.config.cache_enabled {
-            if let Some(cached) = self.cache.get(file_path) {
-                return Ok(cached.clone());
-            }
-        }
-
         // Detect runnables using normal pattern detection
         let mut runnables = self.detector.detect_runnables(file_path, None)?;
         
@@ -281,19 +202,9 @@ impl CargoRunner {
         // Resolve module paths
         self.resolve_module_paths(file_path, &mut runnables)?;
 
-        // Update cache
-        if self.config.cache_enabled {
-            let _ = self
-                .cache
-                .insert(file_path.to_path_buf(), runnables.clone());
-        }
-
         Ok(runnables)
     }
 
-    pub fn clear_cache(&mut self) {
-        self.cache.clear();
-    }
 
     fn ensure_project_root(&mut self, file_path: &Path) -> Result<()> {
         if self.project_root.is_none() {

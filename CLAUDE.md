@@ -55,12 +55,8 @@ cargo check
    - Override system for cargo args, exec args, and environment variables
    - Glob pattern support for flexible matching
 
-5. **Cache Module** (`src/cache/`)
-   - File-based caching with MD5 hash validation
-   - Automatic invalidation on file changes
-   - Optional disk persistence
 
-6. **Runner Module** (`src/runner.rs`)
+5. **Runner Module** (`src/runner.rs`)
    - Main API entry point (`CargoRunner`)
    - Coordinates all components
    - Provides high-level methods for runnable detection and command building
@@ -71,7 +67,7 @@ cargo check
 - `Runnable`: Detected runnable item with scope, kind, and module path
 - `RunnableKind`: Enum for different runnable types
 - `FunctionIdentity`: Used for configuration matching
-- `Config`: Configuration with overrides and cache settings
+- `Config`: Configuration with overrides
 
 ## Usage Example
 
@@ -106,9 +102,7 @@ Create a `cargo-runner.json` or `.cargo-runner.json` file:
       "cargo_args": ["--release"],
       "exec_args": ["--nocapture"]
     }
-  ],
-  "cache_enabled": true,
-  "cache_dir": "/tmp/cargo-runner-cache"
+  ]
 }
 ```
 
@@ -128,4 +122,3 @@ The codebase includes comprehensive tests for all components. Key test areas:
 - Module path resolution
 - Command building with various targets
 - Configuration override system
-- Cache functionality
