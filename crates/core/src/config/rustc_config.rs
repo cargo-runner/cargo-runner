@@ -31,4 +31,8 @@ pub struct RustcPhaseConfig {
     pub extra_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_test_binary_args: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipe: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suppress_stderr: Option<bool>,
 }

@@ -93,7 +93,14 @@ impl CargoCommand {
                 // Extract output name and append run command
                 for i in 0..self.args.len() {
                     if self.args[i] == "-o" && i + 1 < self.args.len() {
-                        cmd.push_str(&format!(" && ./{}", self.args[i + 1]));
+                        let output = &self.args[i + 1];
+                        // Check if output is an absolute path
+                        let exec_path = if output.starts_with('/') || output.starts_with("./") {
+                            output.to_string()
+                        } else {
+                            format!("./{}", output)
+                        };
+                        cmd.push_str(&format!(" && {}", exec_path));
 
                         // If this is a test command with a filter, add it
                         if self.args.contains(&"--test".to_string()) {
@@ -119,6 +126,12 @@ impl CargoCommand {
                                 }
                             }
                         }
+                        
+                        // Add pipe command if present
+                        if let Some((_, pipe_cmd)) = self.env.iter().find(|(k, _)| k == "_RUSTC_PIPE_COMMAND") {
+                            cmd.push_str(&format!(" | {}", pipe_cmd));
+                        }
+                        
                         break;
                     }
                 }
@@ -181,7 +194,7 @@ impl CargoCommand {
 
                 // Set environment variables
                 for (key, value) in &self.env {
-                    eprintln!("Setting env: {}={}", key, value);
+                    tracing::debug!("Setting env: {}={}", key, value);
                     rustc_cmd.env(key, value);
                 }
 
@@ -193,29 +206,85 @@ impl CargoCommand {
 
                 // If compilation succeeded and we have an output name, run it
                 if let Some(output) = output_name {
-                    let mut run_cmd = Command::new(format!("./{}", output));
+                    // Check if we need to pipe the output
+                    let pipe_cmd = self.env.iter()
+                        .find(|(k, _)| k == "_RUSTC_PIPE_COMMAND")
+                        .map(|(_, v)| v.clone());
+                    
+                    // Check if output is an absolute path
+                    let exec_path = if output.starts_with('/') || output.starts_with("./") {
+                        output.to_string()
+                    } else {
+                        format!("./{}", output)
+                    };
+                    
+                    let mut run_cmd = if pipe_cmd.is_some() {
+                        // If we have a pipe command, we need to use shell
+                        let mut cmd = Command::new("sh");
+                        cmd.arg("-c");
+                        cmd
+                    } else {
+                        Command::new(exec_path.clone())
+                    };
 
-                    // If this is a test command with a filter, add it as argument
-                    if self.args.contains(&"--test".to_string()) {
-                        // Check if we have exec phase args (like --bench)
-                        if let Some((_, exec_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_EXEC_ARGS") {
-                            // Add exec args BEFORE the test filter
-                            for arg in exec_args.split_whitespace() {
-                                if arg != "{bench_name}" && arg != "{test_name}" {
-                                    run_cmd.arg(arg);
+                    // Build args based on whether we're using shell or not
+                    if let Some(ref pipe_to) = pipe_cmd {
+                        // Build the full shell command
+                        let mut shell_cmd = exec_path;
+                        
+                        // Add test args if this is a test command
+                        if self.args.contains(&"--test".to_string()) {
+                            // Check if we have exec phase args (like --bench)
+                            if let Some((_, exec_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_EXEC_ARGS") {
+                                // Add exec args BEFORE the test filter
+                                for arg in exec_args.split_whitespace() {
+                                    if arg != "{bench_name}" && arg != "{test_name}" {
+                                        shell_cmd.push_str(&format!(" {}", arg));
+                                    }
+                                }
+                            }
+                            
+                            if let Some(ref test_filter) = self.test_filter {
+                                shell_cmd.push_str(&format!(" {}", test_filter));
+                            }
+                            
+                            // Add extra test binary args if present
+                            if let Some((_, extra_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS") {
+                                // No separator needed for test binaries - args are mixed with test names
+                                for arg in extra_args.split_whitespace() {
+                                    shell_cmd.push_str(&format!(" {}", arg));
                                 }
                             }
                         }
                         
-                        if let Some(ref test_filter) = self.test_filter {
-                            run_cmd.arg(test_filter);
-                        }
+                        // Add the pipe command
+                        shell_cmd.push_str(&format!(" | {}", pipe_to));
                         
-                        // Add extra test binary args if present
-                        if let Some((_, extra_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS") {
-                            // No separator needed for test binaries - args are mixed with test names
-                            for arg in extra_args.split_whitespace() {
-                                run_cmd.arg(arg);
+                        // Set the shell command as argument
+                        run_cmd.arg(shell_cmd);
+                    } else {
+                        // Normal execution without shell
+                        if self.args.contains(&"--test".to_string()) {
+                            // Check if we have exec phase args (like --bench)
+                            if let Some((_, exec_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_EXEC_ARGS") {
+                                // Add exec args BEFORE the test filter
+                                for arg in exec_args.split_whitespace() {
+                                    if arg != "{bench_name}" && arg != "{test_name}" {
+                                        run_cmd.arg(arg);
+                                    }
+                                }
+                            }
+                            
+                            if let Some(ref test_filter) = self.test_filter {
+                                run_cmd.arg(test_filter);
+                            }
+                            
+                            // Add extra test binary args if present
+                            if let Some((_, extra_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS") {
+                                // No separator needed for test binaries - args are mixed with test names
+                                for arg in extra_args.split_whitespace() {
+                                    run_cmd.arg(arg);
+                                }
                             }
                         }
                     }
@@ -259,7 +328,7 @@ impl CargoCommand {
 
                 // Set environment variables
                 for (key, value) in &self.env {
-                    eprintln!("Setting env: {}={}", key, value);
+                    tracing::debug!("Setting env: {}={}", key, value);
                     cmd.env(key, value);
                 }
 
@@ -276,7 +345,7 @@ impl CargoCommand {
 
                 // Set environment variables
                 for (key, value) in &self.env {
-                    eprintln!("Setting env: {}={}", key, value);
+                    tracing::debug!("Setting env: {}={}", key, value);
                     cmd.env(key, value);
                 }
 

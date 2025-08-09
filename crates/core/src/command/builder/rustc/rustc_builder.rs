@@ -19,7 +19,7 @@ impl CommandBuilderImpl for RustcCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        eprintln!("DEBUG: RustcCommandBuilder::build called for {:?}", runnable.kind);
+        tracing::debug!("RustcCommandBuilder::build called for {:?}", runnable.kind);
         let builder = RustcCommandBuilder;
         
         match &runnable.kind {
@@ -54,7 +54,7 @@ impl RustcCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        eprintln!("DEBUG: build_test_command called for test: {}", test_name);
+        tracing::debug!("build_test_command called for test: {}", test_name);
         let framework = self.get_test_framework(config);
         let file_name = self.get_file_name(runnable)?;
         let output_name = format!("{}_test", file_name);
@@ -263,18 +263,22 @@ impl RustcCommandBuilder {
                 command: Some("rustc".to_string()),
                 args: Some(vec![
                     "--test".to_string(),
-                    "{source_file}".to_string(),
+                    "{file_path}".to_string(),
                     "-o".to_string(),
-                    "{output_name}".to_string(),
+                    "{parent_dir}/{file_name}_test".to_string(),
                 ]),
                 extra_args: None,
                 extra_test_binary_args: None,
+                pipe: None,
+                suppress_stderr: None,
             }),
             exec: Some(RustcPhaseConfig {
-                command: Some("./{output_name}".to_string()),
+                command: Some("{parent_dir}/{file_name}_test".to_string()),
                 args: None,  // Test name is added separately with module path
                 extra_args: None,
                 extra_test_binary_args: None,
+                pipe: None,
+                suppress_stderr: None,
             }),
         }
     }
@@ -287,19 +291,23 @@ impl RustcCommandBuilder {
                     "--crate-type".to_string(),
                     "bin".to_string(),
                     "--crate-name".to_string(),
-                    "{crate_name}".to_string(),
-                    "{source_file}".to_string(),
+                    "{file_name}".to_string(),
+                    "{file_path}".to_string(),
                     "-o".to_string(),
-                    "{output_name}".to_string(),
+                    "{parent_dir}/{file_name}".to_string(),
                 ]),
                 extra_args: None,
                 extra_test_binary_args: None,
+                pipe: None,
+                suppress_stderr: None,
             }),
             exec: Some(RustcPhaseConfig {
-                command: Some("./{output_name}".to_string()),
+                command: Some("{parent_dir}/{file_name}".to_string()),
                 args: None,
                 extra_args: None,
                 extra_test_binary_args: None,
+                pipe: None,
+                suppress_stderr: None,
             }),
         }
     }
@@ -310,20 +318,24 @@ impl RustcCommandBuilder {
                 command: Some("rustc".to_string()),
                 args: Some(vec![
                     "--test".to_string(),
-                    "{source_file}".to_string(),
+                    "{file_path}".to_string(),
                     "-o".to_string(),
-                    "{output_name}".to_string(),
+                    "{parent_dir}/{file_name}_bench".to_string(),
                 ]),
                 extra_args: None,  // No extra build args by default
                 extra_test_binary_args: None,
+                pipe: None,
+                suppress_stderr: None,
             }),
             exec: Some(RustcPhaseConfig {
-                command: Some("./{output_name}".to_string()),
+                command: Some("{parent_dir}/{file_name}_bench".to_string()),
                 args: Some(vec![
                     "--bench".to_string(),
                 ]),
                 extra_args: None,
                 extra_test_binary_args: None,
+                pipe: None,
+                suppress_stderr: None,
             }),
         }
     }
@@ -427,12 +439,29 @@ impl RustcCommandBuilder {
         crate_name: &str,
         test_name: &str,
     ) -> String {
+        let file_name = source_file
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+            
+        let parent_dir = source_file
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or(".");
+            
         template
+            // Primary placeholders
+            .replace("{file_path}", source_file.to_str().unwrap_or(""))
+            .replace("{file_name}", file_name)
+            .replace("{parent_dir}", parent_dir)
+            
+            // Legacy placeholders for compatibility
             .replace("{source_file}", source_file.to_str().unwrap_or(""))
             .replace("{output_name}", output_name)
             .replace("{crate_name}", crate_name)
             .replace("{test_name}", test_name)
             .replace("{bench_name}", test_name)  // bench_name uses same param as test_name
+            .replace("{binary_name}", output_name) // binary_name is same as output_name
     }
     
     fn apply_build_config(
@@ -542,6 +571,26 @@ impl RustcCommandBuilder {
                 "_RUSTC_TEST_EXTRA_ARGS".to_string(),
                 exec_args.join(" "),
             ));
+        }
+        
+        // Store pipe command if present
+        if let Some(exec) = &framework.exec {
+            if let Some(pipe_cmd) = &exec.pipe {
+                command.env.push((
+                    "_RUSTC_PIPE_COMMAND".to_string(),
+                    pipe_cmd.clone(),
+                ));
+            }
+            
+            // Store stderr suppression flag if present
+            if let Some(suppress) = &exec.suppress_stderr {
+                if *suppress {
+                    command.env.push((
+                        "_RUSTC_SUPPRESS_STDERR".to_string(),
+                        "true".to_string(),
+                    ));
+                }
+            }
         }
     }
     

@@ -62,6 +62,14 @@ enum Commands {
         /// Force overwrite existing configuration files
         #[arg(short = 'f', long = "force")]
         force: bool,
+
+        /// Generate rustc configuration for standalone files
+        #[arg(long = "rustc")]
+        rustc: bool,
+
+        /// Generate single-file-script configuration (for cargo scripts)
+        #[arg(long = "single-file-script")]
+        single_file_script: bool,
     },
     /// Unset PROJECT_ROOT and clean up configuration
     Unset {
@@ -94,7 +102,7 @@ fn main() -> Result<()> {
                     config,
                 } => analyze_command(&filepath, verbose, config),
                 Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
-                Commands::Init { cwd, force } => init_command(cwd.as_deref(), force),
+                Commands::Init { cwd, force, rustc, single_file_script } => init_command(cwd.as_deref(), force, rustc, single_file_script),
                 Commands::Unset { clean } => unset_command(clean),
             }
         } else {
@@ -107,7 +115,7 @@ fn main() -> Result<()> {
                     config,
                 } => analyze_command(&filepath, verbose, config),
                 Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
-                Commands::Init { cwd, force } => init_command(cwd.as_deref(), force),
+                Commands::Init { cwd, force, rustc, single_file_script } => init_command(cwd.as_deref(), force, rustc, single_file_script),
                 Commands::Unset { clean } => unset_command(clean),
             }
         }
@@ -121,7 +129,7 @@ fn main() -> Result<()> {
                 config,
             } => analyze_command(&filepath, verbose, config),
             Commands::Run { filepath, dry_run } => run_command(&filepath, dry_run),
-            Commands::Init { cwd, force } => init_command(cwd.as_deref(), force),
+            Commands::Init { cwd, force, rustc, single_file_script } => init_command(cwd.as_deref(), force, rustc, single_file_script),
             Commands::Unset { clean } => unset_command(clean),
         }
     }
@@ -717,9 +725,9 @@ fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
         }
     } else {
         let shell_cmd = command.to_shell_command();
-        println!("Running: {}", shell_cmd);
+        info!("Running: {}", shell_cmd);
         if let Some(ref dir) = command.working_dir {
-            println!("Working directory: {}", dir);
+            info!("Working directory: {}", dir);
         }
 
         // Execute using the CargoCommand's execute method which handles working_dir
@@ -735,7 +743,7 @@ fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
     Ok(())
 }
 
-fn init_command(cwd: Option<&str>, force: bool) -> Result<()> {
+fn init_command(cwd: Option<&str>, force: bool, rustc: bool, single_file_script: bool) -> Result<()> {
     use walkdir::WalkDir;
 
     // Determine the project root
@@ -749,6 +757,45 @@ fn init_command(cwd: Option<&str>, force: bool) -> Result<()> {
         .canonicalize()
         .context("Failed to canonicalize project root")?;
 
+    // Handle special config types
+    if rustc || single_file_script {
+        // Generate a single config file in the current directory
+        let config_path = project_root.join(".cargo-runner.json");
+        
+        if config_path.exists() && !force {
+            println!("❌ Config already exists at: {}", config_path.display());
+            println!("   Use --force to overwrite");
+            return Ok(());
+        }
+        
+        let config = if rustc {
+            println!("🦀 Generating rustc configuration for standalone files");
+            create_rustc_config()
+        } else {
+            println!("📜 Generating single-file-script configuration");
+            create_single_file_script_config()
+        };
+        
+        fs::write(&config_path, config)
+            .with_context(|| format!("Failed to write config to {}", config_path.display()))?;
+        
+        println!("✅ Created config: {}", config_path.display());
+        
+        // Print example usage
+        if rustc {
+            println!("\n📌 Example rustc config usage:");
+            println!("   Add your rustc-specific settings to the 'rustc' section");
+            println!("   Configure test_framework, binary_framework, etc.");
+        } else {
+            println!("\n📌 Example single-file-script config usage:");
+            println!("   Add cargo script settings to the 'single_file_script' section");
+            println!("   Configure extra_args, extra_env, etc.");
+        }
+        
+        return Ok(());
+    }
+
+    // Normal cargo project initialization
     println!(
         "🚀 Initializing cargo-runner in: {}",
         project_root.display()
@@ -923,6 +970,78 @@ fn get_package_name(cargo_toml: &Path) -> Result<String> {
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
         .to_string())
+}
+
+fn create_rustc_config() -> String {
+    use serde_json::{Map, Value, json};
+    
+    // Create a config with rustc section
+    let mut config = Map::new();
+    
+    // Create rustc config with framework examples
+    let rustc_config = json!({
+        "test_framework": {
+            "build": {
+                "command": "rustc",
+                "extra_args": ["--edition=2021", "-O"],
+                "args": ["{file_path}", "--test", "-o", "{parent_dir}/{file_name}_test"]
+            },
+            "exec": {
+                "command": "{parent_dir}/{file_name}_test",
+                "extra_test_binary_args": ["--nocapture", "--test-threads=1"]
+                // Optional: "pipe": "jq" to pipe output to jq
+            }
+        },
+        "binary_framework": {
+            "build": {
+                "command": "rustc",
+                "extra_args": ["--edition=2021", "-O"],
+                "args": ["{file_path}", "--crate-type", "bin", "--crate-name", "{file_name}", "-o", "{parent_dir}/{file_name}"]
+            },
+            "exec": {
+                "command": "{parent_dir}/{file_name}"
+            }
+        },
+        "benchmark_framework": {
+            "build": {
+                "command": "rustc",
+                "extra_args": ["--edition=2021", "-O"],
+                "args": ["{file_path}", "--test", "-o", "{parent_dir}/{file_name}_bench"]
+            },
+            "exec": {
+                "command": "{parent_dir}/{file_name}_bench",
+                "args": ["--bench"]
+            }
+        }
+    });
+    
+    config.insert("rustc".to_string(), rustc_config);
+    config.insert("overrides".to_string(), json!([]));
+    
+    // Pretty print the JSON
+    serde_json::to_string_pretty(&config).unwrap()
+}
+
+fn create_single_file_script_config() -> String {
+    use serde_json::{Map, Value, json};
+    
+    // Create a config with single_file_script section
+    let mut config = Map::new();
+    
+    // Create single file script config
+    let sfs_config = json!({
+        "extra_args": ["--edition=2021"],
+        "extra_env": {
+            "RUST_BACKTRACE": "1"
+        },
+        "extra_test_binary_args": ["--nocapture"]
+    });
+    
+    config.insert("single_file_script".to_string(), sfs_config);
+    config.insert("overrides".to_string(), json!([]));
+    
+    // Pretty print the JSON
+    serde_json::to_string_pretty(&config).unwrap()
 }
 
 fn create_workspace_config() -> String {

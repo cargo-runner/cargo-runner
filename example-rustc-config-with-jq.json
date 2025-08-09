@@ -1,0 +1,27 @@
+{
+  "overrides": [],
+  "rustc": {
+    "test_framework": {
+      "build": {
+        "command": "rustc",
+        "channel": "nightly",
+        "extra_args": ["--edition=2024", "-O"],
+        "args": ["{file_path}", "--test", "-o", "{parent_dir}/{file_name}_test"]
+      },
+      "exec": {
+        "command": "{parent_dir}/{file_name}_test",
+        "extra_test_binary_args": [
+          "-Z", "unstable-options",
+          "--report-time",
+          "--format=json",
+          "--test",
+          "--quiet",
+          "--show-output",
+          "--no-capture",
+          "--test-threads=1"
+        ],
+        "pipe": "jq -R 'try fromjson catch empty'"
+      }
+    }
+  }
+}
