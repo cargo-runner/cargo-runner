@@ -216,6 +216,74 @@ impl ConfigMerger {
                 base_env.extend(env.clone());
             }
         }
+        
+        // Merge test_framework
+        if let Some(test_framework) = override_config.test_framework {
+            if force_replace || base.test_framework.is_none() {
+                base.test_framework = Some(test_framework);
+            } else if let Some(ref mut base_framework) = base.test_framework {
+                self.merge_rustc_framework(base_framework, test_framework);
+            }
+        }
+        
+        // Merge binary_framework
+        if let Some(binary_framework) = override_config.binary_framework {
+            if force_replace || base.binary_framework.is_none() {
+                base.binary_framework = Some(binary_framework);
+            } else if let Some(ref mut base_framework) = base.binary_framework {
+                self.merge_rustc_framework(base_framework, binary_framework);
+            }
+        }
+    }
+    
+    fn merge_rustc_framework(&self, base: &mut super::RustcFramework, override_framework: super::RustcFramework) {
+        // Merge build phase
+        if let Some(build) = override_framework.build {
+            if base.build.is_none() {
+                base.build = Some(build);
+            } else if let Some(ref mut base_build) = base.build {
+                self.merge_rustc_phase_config(base_build, build);
+            }
+        }
+        
+        // Merge exec phase
+        if let Some(exec) = override_framework.exec {
+            if base.exec.is_none() {
+                base.exec = Some(exec);
+            } else if let Some(ref mut base_exec) = base.exec {
+                self.merge_rustc_phase_config(base_exec, exec);
+            }
+        }
+    }
+    
+    fn merge_rustc_phase_config(&self, base: &mut super::RustcPhaseConfig, override_phase: super::RustcPhaseConfig) {
+        // Override command if provided
+        if override_phase.command.is_some() {
+            base.command = override_phase.command;
+        }
+        
+        // Override args if provided (don't merge, replace)
+        if override_phase.args.is_some() {
+            base.args = override_phase.args;
+        }
+        
+        // Merge extra_args
+        if let Some(ref extra_args) = override_phase.extra_args {
+            if base.extra_args.is_none() {
+                base.extra_args = Some(extra_args.clone());
+            } else if let Some(ref mut base_args) = base.extra_args {
+                base_args.extend(extra_args.clone());
+            }
+        }
+        
+        // Merge extra_test_binary_args
+        if let Some(ref extra_test_binary_args) = override_phase.extra_test_binary_args {
+            if base.extra_test_binary_args.is_none() {
+                base.extra_test_binary_args = Some(extra_test_binary_args.clone());
+            } else if let Some(ref mut base_args) = base.extra_test_binary_args {
+                base_args.extend(extra_test_binary_args.clone());
+            }
+        }
     }
     
     fn merge_single_file_script_config(&self, base: &mut super::SingleFileScriptConfig, override_config: super::SingleFileScriptConfig, force_replace: bool) {

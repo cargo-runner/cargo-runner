@@ -7,6 +7,40 @@
       "RUST_LOG": "debug"
     }
   },
+  "rustc": {
+    "extra_args": ["--edition", "2021"],
+    "extra_env": {
+      "RUST_BACKTRACE": "1"
+    },
+    "test_framework": {
+      "build": {
+        "command": "rustc",
+        "args": ["--test", "{source_file}", "-o", "{output_name}"],
+        "extra_args": ["--cfg", "test"]
+      },
+      "exec": {
+        "command": "./{output_name}",
+        "args": ["{test_name}"],
+        "extra_args": [],
+        "extra_test_binary_args": ["--nocapture", "--test-threads=1"]
+      }
+    },
+    "binary_framework": {
+      "build": {
+        "command": "rustc",
+        "args": ["--crate-type", "bin", "--crate-name", "{crate_name}", "{source_file}", "-o", "{output_name}"],
+        "extra_args": []
+      },
+      "exec": {
+        "command": "./{output_name}",
+        "args": [],
+        "extra_args": []
+      }
+    }
+  },
+  "single_file_script": {
+    "extra_args": []
+  },
   "overrides": [
     {
       "match": {

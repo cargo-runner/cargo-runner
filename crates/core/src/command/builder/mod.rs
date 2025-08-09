@@ -178,58 +178,111 @@ impl<'a> CommandBuilder<'a> {
             ConfigResolver::new(self.project_root, &identity).resolve()?
         };
 
-        // Delegate to specific builders based on kind
-        match &self.runnable.kind {
-            RunnableKind::DocTest { .. } => DocTestCommandBuilder::build(
+        // Delegate to specific builders based on file type first, then kind
+        match (file_type, &self.runnable.kind) {
+            // Standalone files use rustc directly
+            (FileType::Standalone, RunnableKind::Test { .. }) => RustcCommandBuilder::build(
                 &self.runnable,
                 self.package_name.as_deref(),
                 &config,
                 file_type,
             ),
-            RunnableKind::Test { .. } => TestCommandBuilder::build(
+            (FileType::Standalone, RunnableKind::Binary { .. }) => RustcCommandBuilder::build(
                 &self.runnable,
                 self.package_name.as_deref(),
                 &config,
                 file_type,
             ),
-            RunnableKind::Binary { .. } => BinaryCommandBuilder::build(
+            (FileType::Standalone, RunnableKind::ModuleTests { .. }) => RustcCommandBuilder::build(
                 &self.runnable,
                 self.package_name.as_deref(),
                 &config,
                 file_type,
             ),
-            RunnableKind::ModuleTests { .. } => ModuleTestCommandBuilder::build(
+            (FileType::Standalone, RunnableKind::Benchmark { .. }) => RustcCommandBuilder::build(
                 &self.runnable,
                 self.package_name.as_deref(),
                 &config,
                 file_type,
             ),
-            RunnableKind::Benchmark { .. } => BenchmarkCommandBuilder::build(
+            (FileType::Standalone, RunnableKind::Standalone { .. }) => RustcCommandBuilder::build(
                 &self.runnable,
                 self.package_name.as_deref(),
                 &config,
                 file_type,
             ),
-            RunnableKind::Standalone { .. } => match file_type {
-                FileType::SingleFileScript => SingleFileScriptBuilder::build(
-                    &self.runnable,
-                    self.package_name.as_deref(),
-                    &config,
-                    file_type,
-                ),
-                _ => RustcCommandBuilder::build(
-                    &self.runnable,
-                    self.package_name.as_deref(),
-                    &config,
-                    file_type,
-                ),
+            (FileType::Standalone, RunnableKind::DocTest { .. }) => {
+                // Doc tests in standalone files aren't supported
+                Err(crate::error::Error::ParseError(
+                    "Doc tests are not supported in standalone files".to_string()
+                ))
             },
-            RunnableKind::SingleFileScript { .. } => SingleFileScriptBuilder::build(
+            (FileType::Standalone, RunnableKind::SingleFileScript { .. }) => {
+                // This shouldn't happen - single file script should be FileType::SingleFileScript
+                SingleFileScriptBuilder::build(
+                    &self.runnable,
+                    self.package_name.as_deref(),
+                    &config,
+                    file_type,
+                )
+            },
+            
+            // Single file scripts
+            (FileType::SingleFileScript, _) => SingleFileScriptBuilder::build(
                 &self.runnable,
                 self.package_name.as_deref(),
                 &config,
                 file_type,
             ),
+            
+            // Cargo projects use cargo commands
+            (FileType::CargoProject, RunnableKind::DocTest { .. }) => DocTestCommandBuilder::build(
+                &self.runnable,
+                self.package_name.as_deref(),
+                &config,
+                file_type,
+            ),
+            (FileType::CargoProject, RunnableKind::Test { .. }) => TestCommandBuilder::build(
+                &self.runnable,
+                self.package_name.as_deref(),
+                &config,
+                file_type,
+            ),
+            (FileType::CargoProject, RunnableKind::Binary { .. }) => BinaryCommandBuilder::build(
+                &self.runnable,
+                self.package_name.as_deref(),
+                &config,
+                file_type,
+            ),
+            (FileType::CargoProject, RunnableKind::ModuleTests { .. }) => ModuleTestCommandBuilder::build(
+                &self.runnable,
+                self.package_name.as_deref(),
+                &config,
+                file_type,
+            ),
+            (FileType::CargoProject, RunnableKind::Benchmark { .. }) => BenchmarkCommandBuilder::build(
+                &self.runnable,
+                self.package_name.as_deref(),
+                &config,
+                file_type,
+            ),
+            (FileType::CargoProject, RunnableKind::Standalone { .. }) => {
+                // This shouldn't happen, but fallback to rustc
+                RustcCommandBuilder::build(
+                    &self.runnable,
+                    self.package_name.as_deref(),
+                    &config,
+                    file_type,
+                )
+            },
+            (FileType::CargoProject, RunnableKind::SingleFileScript { .. }) => {
+                SingleFileScriptBuilder::build(
+                    &self.runnable,
+                    self.package_name.as_deref(),
+                    &config,
+                    file_type,
+                )
+            },
         }
     }
 }

@@ -1,8 +1,8 @@
-//! Rustc command builder for standalone files
+//! Rustc command builder for standalone files with typestate pattern
 
 use crate::{
     command::{builder::{CommandBuilderImpl, ConfigAccess}, CargoCommand},
-    config::Config,
+    config::{Config, RustcFramework, RustcPhaseConfig},
     error::Result,
     types::{FileType, FunctionIdentity, Runnable, RunnableKind},
 };
@@ -20,77 +20,24 @@ impl CommandBuilderImpl for RustcCommandBuilder {
         file_type: FileType,
     ) -> Result<CargoCommand> {
         let builder = RustcCommandBuilder;
-        let file_name = runnable
-            .file_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| crate::error::Error::ParseError("Invalid file name".to_string()))?;
-
+        
         match &runnable.kind {
-            RunnableKind::Test { .. } => {
-                // Run all tests with rustc --test
-                let output_name = format!("{}_test", file_name);
-                let mut args = vec![
-                    "--test".to_string(),
-                    runnable.file_path.to_str().unwrap_or("").to_string(),
-                    "-o".to_string(),
-                    output_name.clone(),
-                ];
-
-                // Apply extra args
-                builder.apply_args(&mut args, runnable, config, file_type);
-
-                // Get test filter if available
-                let test_filter = runnable.get_function_name();
-
-                // Create a rustc command with test filter
-                let mut command = CargoCommand::new_rustc(args)
-                    .with_test_filter(test_filter.unwrap_or_default());
-
-                // Apply env vars
-                builder.apply_common_config(&mut command, config, file_type);
-                builder.apply_env(&mut command, runnable, config, file_type);
-
-                Ok(command)
+            RunnableKind::Test { test_name, .. } => {
+                builder.build_test_command(runnable, test_name, config, file_type)
             }
             RunnableKind::ModuleTests { .. } => {
-                // Run all tests in module with rustc --test
-                let mut args = vec![
-                    "--test".to_string(),
-                    runnable.file_path.to_str().unwrap_or("").to_string(),
-                    "-o".to_string(),
-                    format!("{}_test", file_name),
-                ];
-
-                // Apply extra args
-                builder.apply_args(&mut args, runnable, config, file_type);
-
-                let mut command = CargoCommand::new_rustc(args);
-
-                // Apply env vars
-                builder.apply_common_config(&mut command, config, file_type);
-                builder.apply_env(&mut command, runnable, config, file_type);
-
-                Ok(command)
+                builder.build_module_tests_command(runnable, config, file_type)
             }
-            RunnableKind::Binary { .. } | RunnableKind::Standalone { .. } => {
-                // Run main binary
-                let mut args = vec![
-                    runnable.file_path.to_str().unwrap_or("").to_string(),
-                    "-o".to_string(),
-                    file_name.to_string(),
-                ];
-
-                // Apply extra args
-                builder.apply_args(&mut args, runnable, config, file_type);
-
-                let mut command = CargoCommand::new_rustc(args);
-
-                // Apply env vars
-                builder.apply_common_config(&mut command, config, file_type);
-                builder.apply_env(&mut command, runnable, config, file_type);
-
-                Ok(command)
+            RunnableKind::Binary { bin_name } => {
+                builder.build_binary_command(runnable, bin_name.as_deref(), config, file_type)
+            }
+            RunnableKind::Standalone { .. } => {
+                // Standalone is just a binary without explicit name
+                builder.build_binary_command(runnable, None, config, file_type)
+            }
+            RunnableKind::Benchmark { bench_name } => {
+                // For now, benchmarks in standalone files work like tests
+                builder.build_test_command(runnable, bench_name, config, file_type)
             }
             _ => Err(crate::error::Error::ParseError(
                 "Unsupported runnable type for rustc".to_string(),
@@ -100,13 +47,263 @@ impl CommandBuilderImpl for RustcCommandBuilder {
 }
 
 impl RustcCommandBuilder {
-    fn apply_args(
+    fn build_test_command(
+        &self,
+        runnable: &Runnable,
+        test_name: &str,
+        config: &Config,
+        file_type: FileType,
+    ) -> Result<CargoCommand> {
+        let framework = self.get_test_framework(config);
+        let file_name = self.get_file_name(runnable)?;
+        let output_name = format!("{}_test", file_name);
+        
+        // Build phase
+        let mut build_args = self.create_build_args(
+            &framework,
+            &runnable.file_path,
+            &output_name,
+            true, // is_test
+        );
+        
+        // Apply configuration
+        self.apply_build_config(&mut build_args, runnable, config, file_type, &framework);
+        
+        // Create the command
+        let mut command = CargoCommand::new_rustc(build_args);
+        command = command.with_test_filter(test_name.to_string());
+        
+        // Apply exec configuration (stored in env for later use)
+        self.apply_exec_config(&mut command, runnable, config, file_type, &framework);
+        
+        // Apply environment variables
+        self.apply_env(&mut command, runnable, config, file_type);
+        
+        Ok(command)
+    }
+    
+    fn build_module_tests_command(
+        &self,
+        runnable: &Runnable,
+        config: &Config,
+        file_type: FileType,
+    ) -> Result<CargoCommand> {
+        let framework = self.get_test_framework(config);
+        let file_name = self.get_file_name(runnable)?;
+        let output_name = format!("{}_test", file_name);
+        
+        // Build phase
+        let mut build_args = self.create_build_args(
+            &framework,
+            &runnable.file_path,
+            &output_name,
+            true, // is_test
+        );
+        
+        // Apply configuration
+        self.apply_build_config(&mut build_args, runnable, config, file_type, &framework);
+        
+        // Create the command (no test filter for module tests)
+        let mut command = CargoCommand::new_rustc(build_args);
+        
+        // Apply exec configuration
+        self.apply_exec_config(&mut command, runnable, config, file_type, &framework);
+        
+        // Apply environment variables
+        self.apply_env(&mut command, runnable, config, file_type);
+        
+        Ok(command)
+    }
+    
+    fn build_binary_command(
+        &self,
+        runnable: &Runnable,
+        bin_name: Option<&str>,
+        config: &Config,
+        file_type: FileType,
+    ) -> Result<CargoCommand> {
+        let framework = self.get_binary_framework(config);
+        let file_name = self.get_file_name(runnable)?;
+        let crate_name = bin_name.unwrap_or(&file_name);
+        let output_name = crate_name;
+        
+        // Build phase
+        let mut build_args = self.create_binary_build_args(
+            &framework,
+            &runnable.file_path,
+            crate_name,
+            output_name,
+        );
+        
+        // Apply configuration
+        self.apply_build_config(&mut build_args, runnable, config, file_type, &framework);
+        
+        // Create the command
+        let mut command = CargoCommand::new_rustc(build_args);
+        
+        // Apply exec configuration
+        self.apply_exec_config(&mut command, runnable, config, file_type, &framework);
+        
+        // Apply environment variables
+        self.apply_env(&mut command, runnable, config, file_type);
+        
+        Ok(command)
+    }
+    
+    fn get_test_framework(&self, config: &Config) -> RustcFramework {
+        config.rustc.as_ref()
+            .and_then(|r| r.test_framework.clone())
+            .unwrap_or_else(|| self.default_test_framework())
+    }
+    
+    fn get_binary_framework(&self, config: &Config) -> RustcFramework {
+        config.rustc.as_ref()
+            .and_then(|r| r.binary_framework.clone())
+            .unwrap_or_else(|| self.default_binary_framework())
+    }
+    
+    fn default_test_framework(&self) -> RustcFramework {
+        RustcFramework {
+            build: Some(RustcPhaseConfig {
+                command: Some("rustc".to_string()),
+                args: Some(vec![
+                    "--test".to_string(),
+                    "{source_file}".to_string(),
+                    "-o".to_string(),
+                    "{output_name}".to_string(),
+                ]),
+                extra_args: None,
+                extra_test_binary_args: None,
+            }),
+            exec: Some(RustcPhaseConfig {
+                command: Some("./{output_name}".to_string()),
+                args: Some(vec!["{test_name}".to_string()]),
+                extra_args: None,
+                extra_test_binary_args: None,
+            }),
+        }
+    }
+    
+    fn default_binary_framework(&self) -> RustcFramework {
+        RustcFramework {
+            build: Some(RustcPhaseConfig {
+                command: Some("rustc".to_string()),
+                args: Some(vec![
+                    "--crate-type".to_string(),
+                    "bin".to_string(),
+                    "--crate-name".to_string(),
+                    "{crate_name}".to_string(),
+                    "{source_file}".to_string(),
+                    "-o".to_string(),
+                    "{output_name}".to_string(),
+                ]),
+                extra_args: None,
+                extra_test_binary_args: None,
+            }),
+            exec: Some(RustcPhaseConfig {
+                command: Some("./{output_name}".to_string()),
+                args: None,
+                extra_args: None,
+                extra_test_binary_args: None,
+            }),
+        }
+    }
+    
+    fn create_build_args(
+        &self,
+        framework: &RustcFramework,
+        source_file: &std::path::Path,
+        output_name: &str,
+        is_test: bool,
+    ) -> Vec<String> {
+        if let Some(build) = &framework.build {
+            if let Some(args) = &build.args {
+                let mut result = Vec::new();
+                for arg in args {
+                    let expanded = self.expand_template(arg, source_file, output_name, "", "");
+                    result.push(expanded);
+                }
+                return result;
+            }
+        }
+        
+        // Fallback to defaults
+        if is_test {
+            vec![
+                "--test".to_string(),
+                source_file.to_str().unwrap_or("").to_string(),
+                "-o".to_string(),
+                output_name.to_string(),
+            ]
+        } else {
+            vec![
+                source_file.to_str().unwrap_or("").to_string(),
+                "-o".to_string(),
+                output_name.to_string(),
+            ]
+        }
+    }
+    
+    fn create_binary_build_args(
+        &self,
+        framework: &RustcFramework,
+        source_file: &std::path::Path,
+        crate_name: &str,
+        output_name: &str,
+    ) -> Vec<String> {
+        if let Some(build) = &framework.build {
+            if let Some(args) = &build.args {
+                let mut result = Vec::new();
+                for arg in args {
+                    let expanded = self.expand_template(arg, source_file, output_name, crate_name, "");
+                    result.push(expanded);
+                }
+                return result;
+            }
+        }
+        
+        // Fallback to defaults
+        vec![
+            "--crate-type".to_string(),
+            "bin".to_string(),
+            "--crate-name".to_string(),
+            crate_name.to_string(),
+            source_file.to_str().unwrap_or("").to_string(),
+            "-o".to_string(),
+            output_name.to_string(),
+        ]
+    }
+    
+    fn expand_template(
+        &self,
+        template: &str,
+        source_file: &std::path::Path,
+        output_name: &str,
+        crate_name: &str,
+        test_name: &str,
+    ) -> String {
+        template
+            .replace("{source_file}", source_file.to_str().unwrap_or(""))
+            .replace("{output_name}", output_name)
+            .replace("{crate_name}", crate_name)
+            .replace("{test_name}", test_name)
+    }
+    
+    fn apply_build_config(
         &self,
         args: &mut Vec<String>,
         runnable: &Runnable,
         config: &Config,
         file_type: FileType,
+        framework: &RustcFramework,
     ) {
+        // Apply framework extra_args
+        if let Some(build) = &framework.build {
+            if let Some(extra_args) = &build.extra_args {
+                args.extend(extra_args.clone());
+            }
+        }
+        
         // Apply override args
         if let Some(override_config) = self.get_override(runnable, config, file_type) {
             if let Some(override_rustc) = &override_config.rustc {
@@ -115,13 +312,57 @@ impl RustcCommandBuilder {
                 }
             }
         }
-
-        // Apply global args
-        if let Some(extra_args) = self.get_extra_args(config, file_type) {
-            args.extend(extra_args.clone());
+        
+        // Apply global rustc args
+        if let Some(rustc_config) = &config.rustc {
+            if let Some(extra_args) = &rustc_config.extra_args {
+                args.extend(extra_args.clone());
+            }
         }
     }
-
+    
+    fn apply_exec_config(
+        &self,
+        command: &mut CargoCommand,
+        runnable: &Runnable,
+        config: &Config,
+        file_type: FileType,
+        framework: &RustcFramework,
+    ) {
+        let mut exec_args = Vec::new();
+        
+        // Collect exec phase extra_test_binary_args
+        if let Some(exec) = &framework.exec {
+            if let Some(extra_test_binary_args) = &exec.extra_test_binary_args {
+                exec_args.extend(extra_test_binary_args.clone());
+            }
+        }
+        
+        // Apply override test binary args
+        if let Some(override_config) = self.get_override(runnable, config, file_type) {
+            if let Some(override_cargo) = &override_config.cargo {
+                if let Some(extra_test_binary_args) = &override_cargo.extra_test_binary_args {
+                    exec_args.extend(extra_test_binary_args.clone());
+                }
+            }
+        }
+        
+        // Apply global test binary args from cargo config
+        if let Some(cargo_config) = &config.cargo {
+            if let Some(extra_test_binary_args) = &cargo_config.extra_test_binary_args {
+                exec_args.extend(extra_test_binary_args.clone());
+            }
+        }
+        
+        // Store exec args in env for later use by execute()
+        if !exec_args.is_empty() {
+            command.env.push((
+                "_RUSTC_TEST_EXTRA_ARGS".to_string(),
+                exec_args.join(" "),
+            ));
+        }
+    }
+    
     fn apply_env(
         &self,
         command: &mut CargoCommand,
@@ -139,8 +380,26 @@ impl RustcCommandBuilder {
                 }
             }
         }
+        
+        // Apply global rustc env vars
+        if let Some(rustc_config) = &config.rustc {
+            if let Some(extra_env) = &rustc_config.extra_env {
+                for (key, value) in extra_env {
+                    command.env.push((key.clone(), value.clone()));
+                }
+            }
+        }
     }
-
+    
+    fn get_file_name(&self, runnable: &Runnable) -> Result<String> {
+        runnable
+            .file_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| crate::error::Error::ParseError("Invalid file name".to_string()))
+    }
+    
     fn get_override<'a>(
         &self,
         runnable: &Runnable,
@@ -150,7 +409,7 @@ impl RustcCommandBuilder {
         let identity = self.create_identity(runnable, config, file_type);
         config.get_override_for(&identity)
     }
-
+    
     fn create_identity(
         &self,
         runnable: &Runnable,
@@ -159,24 +418,14 @@ impl RustcCommandBuilder {
     ) -> FunctionIdentity {
         FunctionIdentity {
             package: None, // Standalone files don't have packages
-            module_path: None,
+            module_path: if runnable.module_path.is_empty() {
+                None
+            } else {
+                Some(runnable.module_path.clone())
+            },
             file_path: Some(runnable.file_path.clone()),
             function_name: runnable.get_function_name(),
             file_type: Some(file_type),
-        }
-    }
-
-    fn apply_common_config(
-        &self,
-        command: &mut CargoCommand,
-        config: &Config,
-        file_type: FileType,
-    ) {
-        // Apply environment variables based on file type
-        if let Some(extra_env) = self.get_extra_env(config, file_type) {
-            for (key, value) in extra_env {
-                command.env.push((key.clone(), value.clone()));
-            }
         }
     }
 }

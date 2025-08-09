@@ -100,6 +100,14 @@ impl CargoCommand {
                             if let Some(ref test_filter) = self.test_filter {
                                 cmd.push_str(&format!(" {}", test_filter));
                             }
+                            
+                            // Add extra test binary args if present
+                            if let Some((_, extra_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS") {
+                                cmd.push_str(" --");
+                                for arg in extra_args.split_whitespace() {
+                                    cmd.push_str(&format!(" {}", arg));
+                                }
+                            }
                         }
                         break;
                     }
@@ -182,6 +190,16 @@ impl CargoCommand {
                     if self.args.contains(&"--test".to_string()) {
                         if let Some(ref test_filter) = self.test_filter {
                             run_cmd.arg(test_filter);
+                        }
+                        
+                        // Add extra test binary args if present
+                        if let Some((_, extra_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS") {
+                            // Add separator
+                            run_cmd.arg("--");
+                            // Add each extra arg
+                            for arg in extra_args.split_whitespace() {
+                                run_cmd.arg(arg);
+                            }
                         }
                     }
 
