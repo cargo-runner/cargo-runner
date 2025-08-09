@@ -40,6 +40,8 @@ pub struct RustcConfig {
     pub test_framework: Option<RustcFramework>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub binary_framework: Option<RustcFramework>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub benchmark_framework: Option<RustcFramework>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

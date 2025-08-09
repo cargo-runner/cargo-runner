@@ -1,0 +1,54 @@
+{
+  "rustc": {
+    "extra_args": ["--edition", "2021", "-O"],
+    "extra_env": {
+      "RUST_BACKTRACE": "1"
+    },
+    "extra_test_args": ["--cfg", "test"],
+    "extra_test_binary_args": ["--nocapture", "--test-threads=1"]
+  },
+  "overrides": [
+    {
+      "match": {
+        "file_type": "Standalone",
+        "file_path": "/Users/uriah/Code/nodes/test.rs"
+      },
+      "rustc": {
+        "extra_args": ["--verbose"],
+        "extra_env": {
+          "RUST_LOG": "debug"
+        }
+      }
+    },
+    {
+      "match": {
+        "file_type": "Standalone",
+        "file_path": "/Users/uriah/Code/nodes/test.rs",
+        "module_path": "tests"
+      },
+      "rustc": {
+        "extra_test_args": ["--cfg", "integration_test"],
+        "extra_test_binary_args": ["--show-output"]
+      }
+    },
+    {
+      "match": {
+        "file_type": "Standalone",
+        "file_path": "/Users/uriah/Code/nodes/test.rs",
+        "function_name": "test_alpha"
+      },
+      "rustc": {
+        "extra_test_binary_args": ["--exact"]
+      }
+    },
+    {
+      "match": {
+        "file_type": "Standalone",
+        "file_path": "/Users/uriah/Code/nodes/bench.rs"
+      },
+      "rustc": {
+        "extra_args": ["-C", "opt-level=3", "-C", "target-cpu=native"]
+      }
+    }
+  ]
+}

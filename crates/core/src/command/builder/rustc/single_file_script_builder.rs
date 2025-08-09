@@ -31,6 +31,18 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
 
                 // Add the script file path
                 args.push(runnable.file_path.to_str().unwrap_or("").to_string());
+                
+                // Check if the file contains benchmarks
+                if let Ok(content) = std::fs::read_to_string(&runnable.file_path) {
+                    let has_benchmarks = content.contains("#[bench]") || 
+                                       content.contains("criterion_group!") || 
+                                       content.contains("criterion_main!");
+                    
+                    if has_benchmarks {
+                        // Add --bench flag for running benchmarks
+                        args.push("--bench".to_string());
+                    }
+                }
 
                 // Apply extra args
                 builder.apply_args(&mut args, runnable, config, file_type);
@@ -115,19 +127,22 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
             }
             RunnableKind::Benchmark { bench_name } => {
                 // Build command for running a benchmark in a cargo script
-                let mut args = vec!["+nightly".to_string(), "-Zscript".to_string()];
+                // Extract shebang from file
+                let shebang = builder.extract_shebang(&runnable.file_path)?;
+                
+                // Build command for running the script
+                let mut args = builder.parse_shebang_args(&shebang);
 
-                // Add bench subcommand
-                args.push("bench".to_string());
-
-                // Add --manifest-path with the script file
-                args.push("--manifest-path".to_string());
+                // Add the script file path
                 args.push(runnable.file_path.to_str().unwrap_or("").to_string());
+                
+                // Add --bench flag to run benchmarks
+                args.push("--bench".to_string());
 
                 // Apply extra args
                 builder.apply_args(&mut args, runnable, config, file_type);
 
-                // Add benchmark filter
+                // Add benchmark filter if specific benchmark
                 args.push("--".to_string());
                 args.push(bench_name.clone());
 

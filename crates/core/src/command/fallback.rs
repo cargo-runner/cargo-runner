@@ -76,8 +76,18 @@ fn create_synthetic_runnable(file_path: &Path, package_name: Option<&str>) -> Re
                         end: Position { line: 0, character: 0 },
                     };
                     
+                    // Check if it contains benchmarks
+                    let has_benchmarks = content.contains("#[bench]") || 
+                                       content.contains("criterion_group!") || 
+                                       content.contains("criterion_main!");
+                    
+                    // If it has benchmarks, we'll handle it specially when building the command
                     return Ok(Some(Runnable {
-                        label: "Run cargo script".to_string(),
+                        label: if has_benchmarks {
+                            "Run cargo script benchmarks".to_string()
+                        } else {
+                            "Run cargo script".to_string()
+                        },
                         scope,
                         kind: RunnableKind::SingleFileScript { 
                             shebang: first_line.to_string() 

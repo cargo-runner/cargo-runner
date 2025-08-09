@@ -1,0 +1,50 @@
+{
+  "rustc": {
+    "binary_framework": {
+      "channel": "stable",
+      "extra_args": ["--edition", "2021", "-O"],
+      "extra_test_binary_args": []
+    },
+    "test_framework": {
+      "channel": "stable", 
+      "extra_args": ["--test", "--edition", "2021", "--no-capture"],
+      "extra_test_binary_args": []
+    },
+    "benchmark_framework": {
+      "channel": "nightly",
+      "extra_args": ["--test", "--bench"],
+      "extra_test_binary_args": []
+    }
+  },
+  "overrides": [
+    {
+      "match": {
+        "file_type": "Standalone",
+        "module_path": "tests"
+      },
+      "rustc": {
+        "test_framework": {
+          "extra_args": ["--exact", "--test-threads=1"],
+          "extra_test_binary_args": []
+        }
+      }
+    },
+    {
+      "match": {
+        "file_type": "Standalone", 
+        "function_name": "bench_*"
+      },
+      "rustc": {
+        "benchmark_framework": {
+          "extra_args": [
+            "-Z", "unstable-options",
+            "--bench",
+            "--report-time",
+            "--format", "json"
+          ],
+          "extra_test_binary_args": []
+        }
+      }
+    }
+  ]
+}

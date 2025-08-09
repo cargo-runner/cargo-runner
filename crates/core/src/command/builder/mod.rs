@@ -81,17 +81,39 @@ impl<'a> CommandBuilder<'a> {
         Ok(false)
     }
 
-    /// Check if a file is a standalone file (has main() and not part of a Cargo project)
+    /// Check if a file is a standalone file (not part of a Cargo project structure)
     fn is_standalone_file(&self, file_path: &Path) -> bool {
-        // First check if file has a main function
-        let has_main = if let Ok(content) = std::fs::read_to_string(file_path) {
-            content.contains("fn main(") || content.contains("fn main (")
-        } else {
-            return false; // Can't read file, not standalone
+        // First check if the file has appropriate content for the runnable type
+        let has_appropriate_content = match &self.runnable.kind {
+            RunnableKind::Binary { .. } | RunnableKind::Standalone { .. } => {
+                // For binaries, check for main function
+                if let Ok(content) = std::fs::read_to_string(file_path) {
+                    content.contains("fn main(") || content.contains("fn main (")
+                } else {
+                    return false;
+                }
+            }
+            RunnableKind::Test { .. } | RunnableKind::ModuleTests { .. } => {
+                // For tests, check for #[test] or #[cfg(test)]
+                if let Ok(content) = std::fs::read_to_string(file_path) {
+                    content.contains("#[test]") || content.contains("#[cfg(test)]")
+                } else {
+                    return false;
+                }
+            }
+            RunnableKind::Benchmark { .. } => {
+                // For benchmarks, check for #[bench]
+                if let Ok(content) = std::fs::read_to_string(file_path) {
+                    content.contains("#[bench]")
+                } else {
+                    return false;
+                }
+            }
+            _ => return false, // Other types are not standalone
         };
 
-        if !has_main {
-            return false; // No main function, not standalone
+        if !has_appropriate_content {
+            return false;
         }
 
         // Check if file is part of a Cargo project
@@ -106,12 +128,29 @@ impl<'a> CommandBuilder<'a> {
                 if let Ok(relative) = file_path.strip_prefix(root) {
                     let path_str = relative.to_str().unwrap_or("");
 
-                    // Check standard binary locations
-                    if path_str == "src/main.rs"
-                        || path_str.starts_with("src/bin/")
-                        || path_str.starts_with("examples/")
-                    {
-                        return false; // In standard location, not standalone
+                    // Check standard Cargo project locations based on runnable type
+                    match &self.runnable.kind {
+                        RunnableKind::Binary { .. } | RunnableKind::Standalone { .. } => {
+                            if path_str == "src/main.rs"
+                                || path_str.starts_with("src/bin/")
+                                || path_str.starts_with("examples/")
+                            {
+                                return false; // In standard location, not standalone
+                            }
+                        }
+                        RunnableKind::Test { .. } | RunnableKind::ModuleTests { .. } => {
+                            if path_str.starts_with("tests/")
+                                || path_str.starts_with("src/") && path_str.contains("test")
+                            {
+                                return false; // In standard test location, not standalone
+                            }
+                        }
+                        RunnableKind::Benchmark { .. } => {
+                            if path_str.starts_with("benches/") {
+                                return false; // In standard bench location, not standalone
+                            }
+                        }
+                        _ => {}
                     }
 
                     // Check if it's listed in Cargo.toml

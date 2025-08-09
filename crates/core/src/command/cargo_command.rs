@@ -97,13 +97,23 @@ impl CargoCommand {
 
                         // If this is a test command with a filter, add it
                         if self.args.contains(&"--test".to_string()) {
+                            // Check if we have exec phase args (like --bench)
+                            if let Some((_, exec_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_EXEC_ARGS") {
+                                // Add exec args BEFORE the test filter
+                                for arg in exec_args.split_whitespace() {
+                                    if arg != "{bench_name}" && arg != "{test_name}" {
+                                        cmd.push_str(&format!(" {}", arg));
+                                    }
+                                }
+                            }
+                            
                             if let Some(ref test_filter) = self.test_filter {
                                 cmd.push_str(&format!(" {}", test_filter));
                             }
                             
                             // Add extra test binary args if present
                             if let Some((_, extra_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS") {
-                                cmd.push_str(" --");
+                                // No separator for test binaries - args are mixed with test names
                                 for arg in extra_args.split_whitespace() {
                                     cmd.push_str(&format!(" {}", arg));
                                 }
@@ -183,20 +193,27 @@ impl CargoCommand {
 
                 // If compilation succeeded and we have an output name, run it
                 if let Some(output) = output_name {
-                    eprintln!("Running: ./{}", output);
                     let mut run_cmd = Command::new(format!("./{}", output));
 
                     // If this is a test command with a filter, add it as argument
                     if self.args.contains(&"--test".to_string()) {
+                        // Check if we have exec phase args (like --bench)
+                        if let Some((_, exec_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_EXEC_ARGS") {
+                            // Add exec args BEFORE the test filter
+                            for arg in exec_args.split_whitespace() {
+                                if arg != "{bench_name}" && arg != "{test_name}" {
+                                    run_cmd.arg(arg);
+                                }
+                            }
+                        }
+                        
                         if let Some(ref test_filter) = self.test_filter {
                             run_cmd.arg(test_filter);
                         }
                         
                         // Add extra test binary args if present
                         if let Some((_, extra_args)) = self.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS") {
-                            // Add separator
-                            run_cmd.arg("--");
-                            // Add each extra arg
+                            // No separator needed for test binaries - args are mixed with test names
                             for arg in extra_args.split_whitespace() {
                                 run_cmd.arg(arg);
                             }
@@ -208,10 +225,13 @@ impl CargoCommand {
                         run_cmd.current_dir(dir);
                     }
 
-                    // Set environment variables
+                    // Set environment variables (but skip internal ones)
                     for (key, value) in &self.env {
-                        run_cmd.env(key, value);
+                        if !key.starts_with("_RUSTC_") {
+                            run_cmd.env(key, value);
+                        }
                     }
+
 
                     run_cmd.status()
                 } else {
