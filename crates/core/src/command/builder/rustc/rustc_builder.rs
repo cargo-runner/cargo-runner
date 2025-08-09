@@ -19,6 +19,7 @@ impl CommandBuilderImpl for RustcCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
+        eprintln!("DEBUG: RustcCommandBuilder::build called for {:?}", runnable.kind);
         let builder = RustcCommandBuilder;
         
         match &runnable.kind {
@@ -53,6 +54,7 @@ impl RustcCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
+        eprintln!("DEBUG: build_test_command called for test: {}", test_name);
         let framework = self.get_test_framework(config);
         let file_name = self.get_file_name(runnable)?;
         let output_name = format!("{}_test", file_name);
@@ -499,8 +501,13 @@ impl RustcCommandBuilder {
             }
         }
         
+        tracing::debug!("apply_exec_config: framework exec_args = {:?}", exec_args);
+        
         // Apply override test binary args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
+        let override_config = self.get_override(runnable, config, file_type);
+        tracing::debug!("get_override returned: {:?}", override_config.is_some());
+        if let Some(override_config) = override_config {
+            tracing::debug!("Found override for runnable: {:?}", runnable.get_function_name());
             // First check if there's a framework-specific override
             if let Some(override_rustc) = &override_config.rustc {
                 // Get the appropriate framework based on runnable type
@@ -520,6 +527,7 @@ impl RustcCommandBuilder {
                 if let Some(framework) = override_framework {
                     if let Some(exec) = &framework.exec {
                         if let Some(extra_test_binary_args) = &exec.extra_test_binary_args {
+                            tracing::debug!("Adding override exec args: {:?}", extra_test_binary_args);
                             exec_args.extend(extra_test_binary_args.clone());
                         }
                     }
@@ -542,6 +550,7 @@ impl RustcCommandBuilder {
         }
         
         // Store exec args in env for later use by execute()
+        tracing::debug!("Final exec_args: {:?}", exec_args);
         if !exec_args.is_empty() {
             command.env.push((
                 "_RUSTC_TEST_EXTRA_ARGS".to_string(),
@@ -603,7 +612,7 @@ impl RustcCommandBuilder {
         _config: &Config,
         file_type: FileType,
     ) -> FunctionIdentity {
-        FunctionIdentity {
+        let identity = FunctionIdentity {
             package: None, // Standalone files don't have packages
             module_path: if runnable.module_path.is_empty() {
                 None
@@ -613,6 +622,8 @@ impl RustcCommandBuilder {
             file_path: Some(runnable.file_path.clone()),
             function_name: runnable.get_function_name(),
             file_type: Some(file_type),
-        }
+        };
+        tracing::debug!("Created identity: {:?}", identity);
+        identity
     }
 }

@@ -490,9 +490,12 @@ fn print_command_breakdown(command: &cargo_runner_core::CargoCommand) {
             }
             
             // Check for test binary args in env
-            if let Some((_, extra_args)) = command.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS") {
+            let has_test_extra_args = command.env.iter().find(|(k, _)| k == "_RUSTC_TEST_EXTRA_ARGS");
+            if let Some((_, extra_args)) = has_test_extra_args {
                 let args: Vec<&str> = extra_args.split_whitespace().collect();
-                println!("      • extraTestBinaryArgs: {:?}", args);
+                if !args.is_empty() {
+                    println!("      • extraTestBinaryArgs: {:?}", args);
+                }
             }
         }
         _ => {

@@ -234,28 +234,6 @@ impl ConfigMerger {
     }
     
     fn merge_rustc_config(&self, base: &mut super::RustcConfig, override_config: super::RustcConfig, force_replace: bool) {
-        // Merge extra_args with deduplication
-        if let Some(ref extra_args) = override_config.extra_args {
-            if force_replace || base.extra_args.is_none() {
-                base.extra_args = Some(extra_args.clone());
-            } else if let Some(ref mut base_args) = base.extra_args {
-                for arg in extra_args {
-                    if !base_args.contains(arg) {
-                        base_args.push(arg.clone());
-                    }
-                }
-            }
-        }
-        
-        // Merge env
-        if let Some(ref env) = override_config.extra_env {
-            if force_replace || base.extra_env.is_none() {
-                base.extra_env = Some(env.clone());
-            } else if let Some(ref mut base_env) = base.extra_env {
-                base_env.extend(env.clone());
-            }
-        }
-        
         // Merge test_framework
         if let Some(test_framework) = override_config.test_framework {
             if force_replace || base.test_framework.is_none() {
@@ -271,6 +249,15 @@ impl ConfigMerger {
                 base.binary_framework = Some(binary_framework);
             } else if let Some(ref mut base_framework) = base.binary_framework {
                 self.merge_rustc_framework(base_framework, binary_framework);
+            }
+        }
+        
+        // Merge benchmark_framework
+        if let Some(benchmark_framework) = override_config.benchmark_framework {
+            if force_replace || base.benchmark_framework.is_none() {
+                base.benchmark_framework = Some(benchmark_framework);
+            } else if let Some(ref mut base_framework) = base.benchmark_framework {
+                self.merge_rustc_framework(base_framework, benchmark_framework);
             }
         }
     }
@@ -355,6 +342,19 @@ impl ConfigMerger {
                 base_env.extend(env.clone());
             }
         }
+        
+        // Merge extra_test_binary_args with deduplication
+        if let Some(ref extra_test_binary_args) = override_config.extra_test_binary_args {
+            if force_replace || base.extra_test_binary_args.is_none() {
+                base.extra_test_binary_args = Some(extra_test_binary_args.clone());
+            } else if let Some(ref mut base_args) = base.extra_test_binary_args {
+                for arg in extra_test_binary_args {
+                    if !base_args.contains(arg) {
+                        base_args.push(arg.clone());
+                    }
+                }
+            }
+        }
     }
 
     /// Merge override arrays, handling force_replace per override
@@ -362,78 +362,7 @@ impl ConfigMerger {
         for new_override in new_overrides {
             // Check if we already have an override for this identity
             if let Some(existing) = base_overrides.iter_mut().find(|o| o.identity == new_override.identity) {
-                // Check if this specific override has force_replace
-                let _force = new_override.force_replace_args.unwrap_or(false) || 
-                            new_override.force_replace_env.unwrap_or(false);
-                
-                // Merge or replace based on force_replace settings
-                if new_override.command.is_some() {
-                    existing.command = new_override.command;
-                }
-                if new_override.subcommand.is_some() {
-                    existing.subcommand = new_override.subcommand;
-                }
-                if new_override.channel.is_some() {
-                    existing.channel = new_override.channel;
-                }
-                if new_override.test_framework.is_some() {
-                    existing.test_framework = new_override.test_framework;
-                }
-                
-                // Handle features merging
-                if new_override.features.is_some() {
-                    if new_override.force_replace_features.unwrap_or(false) {
-                        existing.features = new_override.features;
-                    } else {
-                        existing.features = super::Features::merge(existing.features.as_ref(), new_override.features.as_ref());
-                    }
-                }
-
-                // Handle args merging with deduplication
-                if let Some(ref args) = new_override.extra_args {
-                    if new_override.force_replace_args.unwrap_or(false) || existing.extra_args.is_none() {
-                        existing.extra_args = Some(args.clone());
-                    } else if let Some(ref mut existing_args) = existing.extra_args {
-                        for arg in args {
-                            if !existing_args.contains(arg) {
-                                existing_args.push(arg.clone());
-                            }
-                        }
-                    }
-                }
-
-                // Handle test binary args merging with deduplication
-                if let Some(ref args) = new_override.extra_test_binary_args {
-                    if new_override.force_replace_args.unwrap_or(false) || existing.extra_test_binary_args.is_none() {
-                        existing.extra_test_binary_args = Some(args.clone());
-                    } else if let Some(ref mut existing_args) = existing.extra_test_binary_args {
-                        for arg in args {
-                            if !existing_args.contains(arg) {
-                                existing_args.push(arg.clone());
-                            }
-                        }
-                    }
-                }
-
-                // Handle env merging
-                if let Some(ref env) = new_override.extra_env {
-                    if new_override.force_replace_env.unwrap_or(false) || existing.extra_env.is_none() {
-                        existing.extra_env = Some(env.clone());
-                    } else if let Some(ref mut existing_env) = existing.extra_env {
-                        existing_env.extend(env.clone());
-                    }
-                }
-
-                // Update force_replace flags
-                if new_override.force_replace_args.is_some() {
-                    existing.force_replace_args = new_override.force_replace_args;
-                }
-                if new_override.force_replace_features.is_some() {
-                    existing.force_replace_features = new_override.force_replace_features;
-                }
-                if new_override.force_replace_env.is_some() {
-                    existing.force_replace_env = new_override.force_replace_env;
-                }
+                // Only merge the nested configs now
                 
                 // Merge nested configs
                 if let Some(new_cargo) = new_override.cargo {

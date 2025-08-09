@@ -92,21 +92,17 @@ mod tests {
                     function_name: Some("test_addition".to_string()),
                     file_type: Some(FileType::CargoProject),
                 },
-                features: None,
-                force_replace_features: Some(false),
-                command: Some("cargo".to_string()),
-                subcommand: Some("nextest".to_string()),
-                channel: None,
-                extra_args: Some(vec!["--nocapture".to_string()]),
-                extra_test_binary_args: Some(vec!["--test-threads=1".to_string()]),
-                test_framework: None,
-                force_replace_args: Some(false),
-                extra_env: Some(HashMap::from([(
-                    "RUST_LOG".to_string(),
-                    "debug".to_string(),
-                )])),
-                force_replace_env: Some(false),
-                cargo: None,
+                cargo: Some(CargoConfig {
+                    command: Some("cargo".to_string()),
+                    subcommand: Some("nextest".to_string()),
+                    extra_args: Some(vec!["--nocapture".to_string()]),
+                    extra_test_binary_args: Some(vec!["--test-threads=1".to_string()]),
+                    extra_env: Some(HashMap::from([(
+                        "RUST_LOG".to_string(),
+                        "debug".to_string(),
+                    )])),
+                    ..Default::default()
+                }),
                 rustc: None,
                 single_file_script: None,
             }],
@@ -137,7 +133,10 @@ mod tests {
                     function_name: Some("test_foo".to_string()),
                     file_type: Some(FileType::CargoProject),
                 },
-                extra_args: Some(vec!["--nocapture".to_string()]),
+                cargo: Some(CargoConfig {
+                    extra_args: Some(vec!["--nocapture".to_string()]),
+                    ..Default::default()
+                }),
                 ..Default::default()
             }],
             ..Default::default()
@@ -154,7 +153,7 @@ mod tests {
         let override_config = config.get_override_for(&identity);
         assert!(override_config.is_some());
         assert_eq!(
-            override_config.unwrap().extra_args,
+            override_config.unwrap().cargo.as_ref().unwrap().extra_args,
             Some(vec!["--nocapture".to_string()])
         );
 

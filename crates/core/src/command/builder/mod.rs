@@ -140,9 +140,9 @@ impl<'a> CommandBuilder<'a> {
                         }
                         RunnableKind::Test { .. } | RunnableKind::ModuleTests { .. } => {
                             if path_str.starts_with("tests/")
-                                || path_str.starts_with("src/") && path_str.contains("test")
+                                || path_str.starts_with("src/")
                             {
-                                return false; // In standard test location, not standalone
+                                return false; // In standard location, not standalone
                             }
                         }
                         RunnableKind::Benchmark { .. } => {
