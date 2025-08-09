@@ -313,34 +313,64 @@ fn print_formatted_analysis(
                 if let Some(override_config) = runner.get_override_for_runnable(runnable) {
                     println!("   🔀 Matched override:");
                     println!("      • match: {:?}", override_config.identity);
-                    if override_config.command.is_some() {
-                        println!("      • command: {:?}", override_config.command);
-                    }
-                    if override_config.subcommand.is_some() {
-                        println!("      • subcommand: {:?}", override_config.subcommand);
-                    }
-                    if let Some(features) = &override_config.features {
-                        match features {
-                            cargo_runner_core::config::Features::All(s) if s == "all" => {
-                                println!("      • features: all");
+                    
+                    // Show cargo config if present
+                    if let Some(cargo) = &override_config.cargo {
+                        println!("      • cargo config:");
+                        if cargo.command.is_some() {
+                            println!("        - command: {:?}", cargo.command);
+                        }
+                        if cargo.subcommand.is_some() {
+                            println!("        - subcommand: {:?}", cargo.subcommand);
+                        }
+                        if let Some(features) = &cargo.features {
+                            match features {
+                                cargo_runner_core::config::Features::All(s) if s == "all" => {
+                                    println!("        - features: all");
+                                }
+                                cargo_runner_core::config::Features::Selected(selected) => {
+                                    println!("        - features: {:?}", selected);
+                                }
+                                _ => {}
                             }
-                            cargo_runner_core::config::Features::Selected(selected) => {
-                                println!("      • features: {:?}", selected);
-                            }
-                            _ => {}
+                        }
+                        if cargo.extra_args.is_some() {
+                            println!("        - extra_args: {:?}", cargo.extra_args);
+                        }
+                        if cargo.extra_test_binary_args.is_some() {
+                            println!("        - extra_test_binary_args: {:?}", cargo.extra_test_binary_args);
+                        }
+                        if cargo.extra_env.is_some() {
+                            println!("        - extra_env: {:?}", cargo.extra_env);
                         }
                     }
-                    if override_config.extra_args.is_some() {
-                        println!("      • extra_args: {:?}", override_config.extra_args);
+                    
+                    // Show rustc config if present
+                    if let Some(rustc) = &override_config.rustc {
+                        println!("      • rustc config:");
+                        if rustc.test_framework.is_some() {
+                            println!("        - test_framework: present");
+                        }
+                        if rustc.binary_framework.is_some() {
+                            println!("        - binary_framework: present");
+                        }
+                        if rustc.benchmark_framework.is_some() {
+                            println!("        - benchmark_framework: present");
+                        }
                     }
-                    if override_config.extra_test_binary_args.is_some() {
-                        println!(
-                            "      • extra_test_binary_args: {:?}",
-                            override_config.extra_test_binary_args
-                        );
-                    }
-                    if override_config.extra_env.is_some() {
-                        println!("      • extra_env: {:?}", override_config.extra_env);
+                    
+                    // Show single_file_script config if present
+                    if let Some(sfs) = &override_config.single_file_script {
+                        println!("      • single_file_script config:");
+                        if sfs.extra_args.is_some() {
+                            println!("        - extra_args: {:?}", sfs.extra_args);
+                        }
+                        if sfs.extra_test_binary_args.is_some() {
+                            println!("        - extra_test_binary_args: {:?}", sfs.extra_test_binary_args);
+                        }
+                        if sfs.extra_env.is_some() {
+                            println!("        - extra_env: {:?}", sfs.extra_env);
+                        }
                     }
                 }
             }
@@ -785,11 +815,16 @@ fn init_command(cwd: Option<&str>, force: bool) -> Result<()> {
             continue;
         }
 
-        // Read package name from Cargo.toml
-        let package_name = get_package_name(cargo_toml)?;
-
-        // Create default configuration
-        let config = create_default_config(&package_name);
+        // Check if this is a workspace-only Cargo.toml
+        let config = if is_workspace_only(cargo_toml)? {
+            // Create workspace config (no package name)
+            create_workspace_config()
+        } else {
+            // Read package name from Cargo.toml
+            let package_name = get_package_name(cargo_toml)?;
+            // Create package configuration
+            create_default_config(&package_name)
+        };
 
         // Write configuration file
         fs::write(&config_path, config)
@@ -858,6 +893,17 @@ fn unset_command(clean: bool) -> Result<()> {
     Ok(())
 }
 
+fn is_workspace_only(cargo_toml: &Path) -> Result<bool> {
+    let contents = fs::read_to_string(cargo_toml)
+        .with_context(|| format!("Failed to read {}", cargo_toml.display()))?;
+    
+    // Check if it has [workspace] but no [package]
+    let has_workspace = contents.contains("[workspace]");
+    let has_package = contents.contains("[package]");
+    
+    Ok(has_workspace && !has_package)
+}
+
 fn get_package_name(cargo_toml: &Path) -> Result<String> {
     let contents = fs::read_to_string(cargo_toml)
         .with_context(|| format!("Failed to read {}", cargo_toml.display()))?;
@@ -879,17 +925,45 @@ fn get_package_name(cargo_toml: &Path) -> Result<String> {
         .to_string())
 }
 
+fn create_workspace_config() -> String {
+    use serde_json::{Map, Value, json};
+    
+    // Create a config with new nested structure for workspace
+    let mut config = Map::new();
+    
+    // Create cargo config section without package name
+    let mut cargo_config = Map::new();
+    cargo_config.insert("extra_args".to_string(), json!([]));
+    cargo_config.insert("extra_env".to_string(), json!({}));
+    cargo_config.insert("extra_test_binary_args".to_string(), json!([]));
+    
+    // Add cargo config to main config
+    config.insert("cargo".to_string(), Value::Object(cargo_config));
+    
+    // Add empty overrides array
+    config.insert("overrides".to_string(), json!([]));
+    
+    // Pretty print the JSON
+    serde_json::to_string_pretty(&config).unwrap()
+}
+
 fn create_default_config(package_name: &str) -> String {
     use serde_json::{Map, Value, json};
 
-    // Create a config with only non-null fields
+    // Create a config with new nested structure
     let mut config = Map::new();
 
-    // Only add fields with actual values
-    config.insert("package".to_string(), json!(package_name));
-    config.insert("extra_args".to_string(), json!([]));
-    config.insert("env".to_string(), json!({}));
-    config.insert("extra_test_binary_args".to_string(), json!([]));
+    // Create cargo config section
+    let mut cargo_config = Map::new();
+    cargo_config.insert("package".to_string(), json!(package_name));
+    cargo_config.insert("extra_args".to_string(), json!([]));
+    cargo_config.insert("extra_env".to_string(), json!({}));
+    cargo_config.insert("extra_test_binary_args".to_string(), json!([]));
+    
+    // Add cargo config to main config
+    config.insert("cargo".to_string(), Value::Object(cargo_config));
+    
+    // Add empty overrides array
     config.insert("overrides".to_string(), json!([]));
 
     // Example test_frameworks configuration (commented out by default)
@@ -915,7 +989,12 @@ fn create_root_config(project_root: &Path, cargo_tomls: &[PathBuf]) -> Result<St
     // Get the root package name if available
     let root_cargo_toml = project_root.join("Cargo.toml");
     let package_name = if root_cargo_toml.exists() {
-        Some(get_package_name(&root_cargo_toml)?)
+        // Check if this is a workspace-only Cargo.toml
+        if is_workspace_only(&root_cargo_toml)? {
+            None  // Workspaces don't have package names
+        } else {
+            Some(get_package_name(&root_cargo_toml)?)
+        }
     } else {
         None
     };
@@ -926,19 +1005,29 @@ fn create_root_config(project_root: &Path, cargo_tomls: &[PathBuf]) -> Result<St
         .map(|p| p.display().to_string())
         .collect();
 
-    // Create root configuration with only non-null fields
+    // Create root configuration with new nested structure
     let mut config = Map::new();
 
+    // Create cargo config section
+    let mut cargo_config = Map::new();
+    
     // Only add package if we have one
     if let Some(pkg) = package_name {
-        config.insert("package".to_string(), json!(pkg));
+        cargo_config.insert("package".to_string(), json!(pkg));
     }
-
-    // Always include these for root config
-    config.insert("linked_projects".to_string(), json!(linked_projects));
-    config.insert("extra_args".to_string(), json!([]));
-    config.insert("env".to_string(), json!({}));
-    config.insert("extra_test_binary_args".to_string(), json!([]));
+    
+    // Add linked projects to cargo config
+    cargo_config.insert("linked_projects".to_string(), json!(linked_projects));
+    
+    // Add empty defaults for cargo config
+    cargo_config.insert("extra_args".to_string(), json!([]));
+    cargo_config.insert("extra_env".to_string(), json!({}));
+    cargo_config.insert("extra_test_binary_args".to_string(), json!([]));
+    
+    // Add cargo config to main config
+    config.insert("cargo".to_string(), Value::Object(cargo_config));
+    
+    // Add empty overrides array
     config.insert("overrides".to_string(), json!([]));
 
     // Example test_frameworks configuration with miri and nextest
@@ -1040,15 +1129,14 @@ fn print_config_details(_runner: &cargo_runner_core::CargoRunner, filepath: &str
     // Show rustc configuration if present
     if let Some(rustc_config) = &merged_config.rustc {
         println!("      • rustc config:");
-        if let Some(extra_args) = &rustc_config.extra_args {
-            if !extra_args.is_empty() {
-                println!("         - extra_args: {:?}", extra_args);
-            }
+        if rustc_config.test_framework.is_some() {
+            println!("         - test_framework: configured");
         }
-        if let Some(extra_env) = &rustc_config.extra_env {
-            if !extra_env.is_empty() {
-                println!("         - extra_env: {} variables", extra_env.len());
-            }
+        if rustc_config.binary_framework.is_some() {
+            println!("         - binary_framework: configured");
+        }
+        if rustc_config.benchmark_framework.is_some() {
+            println!("         - benchmark_framework: configured");
         }
     }
 

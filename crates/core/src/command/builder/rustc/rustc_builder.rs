@@ -438,9 +438,9 @@ impl RustcCommandBuilder {
     fn apply_build_config(
         &self,
         args: &mut Vec<String>,
-        runnable: &Runnable,
-        config: &Config,
-        file_type: FileType,
+        _runnable: &Runnable,
+        _config: &Config,
+        _file_type: FileType,
         framework: &RustcFramework,
     ) {
         // Find the position of -o flag
@@ -456,21 +456,7 @@ impl RustcCommandBuilder {
             }
         }
         
-        // Apply override args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_rustc) = &override_config.rustc {
-                if let Some(override_args) = &override_rustc.extra_args {
-                    extra_args.extend(override_args.clone());
-                }
-            }
-        }
-        
-        // Apply global rustc args
-        if let Some(rustc_config) = &config.rustc {
-            if let Some(global_args) = &rustc_config.extra_args {
-                extra_args.extend(global_args.clone());
-            }
-        }
+        // Note: extra_args are now handled through framework-specific configs above
         
         // Insert extra args before -o flag if it exists
         if let Some(pos) = output_flag_pos {
@@ -561,30 +547,12 @@ impl RustcCommandBuilder {
     
     fn apply_env(
         &self,
-        command: &mut CargoCommand,
-        runnable: &Runnable,
-        config: &Config,
-        file_type: FileType,
+        _command: &mut CargoCommand,
+        _runnable: &Runnable,
+        _config: &Config,
+        _file_type: FileType,
     ) {
-        // Apply override env vars (highest priority)
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_rustc) = &override_config.rustc {
-                if let Some(extra_env) = &override_rustc.extra_env {
-                    for (key, value) in extra_env {
-                        command.env.push((key.clone(), value.clone()));
-                    }
-                }
-            }
-        }
-        
-        // Apply global rustc env vars
-        if let Some(rustc_config) = &config.rustc {
-            if let Some(extra_env) = &rustc_config.extra_env {
-                for (key, value) in extra_env {
-                    command.env.push((key.clone(), value.clone()));
-                }
-            }
-        }
+        // Note: extra_env is now handled through framework-specific configs
     }
     
     fn get_file_name(&self, runnable: &Runnable) -> Result<String> {

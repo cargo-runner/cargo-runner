@@ -54,9 +54,7 @@ pub trait CargoBuilderHelper {
             if let Some(override_cargo) = &override_config.cargo {
                 if let Some(features) = &override_cargo.features {
                     args.extend(features.to_args());
-                    if override_config.force_replace_features.unwrap_or(false) {
-                        return;
-                    }
+                    // Features are merged by default now
                 }
             }
         }

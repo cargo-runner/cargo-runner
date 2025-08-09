@@ -29,7 +29,7 @@ pub trait ConfigAccess {
     ) -> Option<&'a Vec<String>> {
         match file_type {
             FileType::CargoProject => config.cargo.as_ref()?.extra_args.as_ref(),
-            FileType::Standalone => config.rustc.as_ref()?.extra_args.as_ref(),
+            FileType::Standalone => None, // RustcConfig no longer has extra_args at top level
             FileType::SingleFileScript => config.single_file_script.as_ref()?.extra_args.as_ref(),
         }
     }
@@ -41,7 +41,7 @@ pub trait ConfigAccess {
     ) -> Option<&'a HashMap<String, String>> {
         match file_type {
             FileType::CargoProject => config.cargo.as_ref()?.extra_env.as_ref(),
-            FileType::Standalone => config.rustc.as_ref()?.extra_env.as_ref(),
+            FileType::Standalone => None, // RustcConfig no longer has extra_env at top level
             FileType::SingleFileScript => config.single_file_script.as_ref()?.extra_env.as_ref(),
         }
     }
