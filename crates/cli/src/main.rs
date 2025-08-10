@@ -1988,29 +1988,20 @@ fn parse_override_args(args: &[String]) -> serde_json::Map<String, serde_json::V
             channel = Some(arg[1..].to_string());
         }
         // Check for test binary args starting with /
-        else if arg.starts_with('/') && arg.len() > 1 {
-            // Collect all following args until we hit another token
-            let mut test_args = Vec::new();
-            let args_str = &arg[1..]; // Remove the / prefix
+        else if arg == "/" || arg.starts_with('/') {
+            // The / acts like -- in cargo test, everything after goes to test binary
             
-            // If there's content after /, add it
-            if !args_str.is_empty() {
-                test_args.push(args_str.to_string());
+            // If there's content immediately after / (like /--show-output), add it
+            if arg.len() > 1 {
+                let arg_content = &arg[1..];
+                extra_test_binary_args.push(arg_content.to_string());
             }
             
-            // Collect following args that don't start with special tokens
+            // Collect ALL remaining args as test binary args
             while i + 1 < args.len() {
-                let next_arg = &args[i + 1];
-                if next_arg.starts_with('@') || next_arg.starts_with('+') || 
-                   next_arg.starts_with('/') || next_arg.starts_with('-') ||
-                   (next_arg.chars().all(|c| c.is_uppercase() || c == '_') && next_arg.contains('=')) {
-                    break;
-                }
                 i += 1;
-                test_args.push(args[i].clone());
+                extra_test_binary_args.push(args[i].clone());
             }
-            
-            extra_test_binary_args.extend(test_args);
         }
         // Check for environment variables (SCREAMING_CASE=value)
         else if arg.chars().take_while(|&c| c != '=').all(|c| c.is_uppercase() || c == '_') && arg.contains('=') {
