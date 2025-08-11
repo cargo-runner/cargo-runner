@@ -231,18 +231,26 @@ fn print_formatted_analysis(
 
     // Always show file-level command as it represents the entire file scope
     // Get file-level command
-    if let Some(cmd) = runner.get_file_command(path)? {
-        println!("📄 File-level command:");
-        print_command_breakdown(&cmd);
+    match runner.get_file_command(path) {
+        Ok(Some(cmd)) => {
+            println!("\n📄 File-level command:");
+            print_command_breakdown(&cmd);
 
-        // Determine file type
-        let file_type = determine_file_type(path);
-        println!("   📦 Type: {}", file_type);
+            // Determine file type
+            let file_type = determine_file_type(path);
+            println!("   📦 Type: {}", file_type);
 
-        // Get file scope info
-        if let Ok(source) = std::fs::read_to_string(path) {
-            let line_count = source.lines().count();
-            println!("   📏 Scope: lines 1-{}", line_count);
+            // Get file scope info
+            if let Ok(source) = std::fs::read_to_string(path) {
+                let line_count = source.lines().count();
+                println!("   📏 Scope: lines 1-{}", line_count);
+            }
+        }
+        Ok(None) => {
+            println!("\n📄 File-level command: None");
+        }
+        Err(e) => {
+            println!("\n📄 File-level command: Error - {}", e);
         }
     }
 
@@ -588,6 +596,26 @@ fn print_command_breakdown(command: &cargo_runner_core::CargoCommand) {
                 }
             }
         }
+        CommandType::Bazel => {
+            println!("      • command: bazel");
+            
+            // Parse Bazel-specific arguments
+            if !command.args.is_empty() {
+                let subcommand = &command.args[0];
+                println!("      • subcommand: {}", subcommand);
+                
+                // Show target if present
+                if command.args.len() > 1 {
+                    println!("      • target: {}", command.args[1]);
+                }
+                
+                // Show other args
+                let extra_args: Vec<_> = command.args.iter().skip(2).collect();
+                if !extra_args.is_empty() {
+                    println!("      • extraArgs: {:?}", extra_args);
+                }
+            }
+        }
         _ => {
             // Original cargo command parsing
             let args = &command.args;
@@ -869,11 +897,21 @@ fn init_command(
     }
     println!("✅ Set PROJECT_ROOT to: {}", project_root.display());
 
-    // Find all Cargo.toml files recursively
+    // Find all Cargo.toml files recursively, excluding bazel directories
     let mut cargo_tomls = Vec::new();
+    
     for entry in WalkDir::new(&project_root)
         .follow_links(true)
         .into_iter()
+        .filter_entry(|e| {
+            // Skip bazel-generated directories
+            if let Some(name) = e.file_name().to_str() {
+                if name.starts_with("bazel-") {
+                    return false;
+                }
+            }
+            true
+        })
         .filter_map(|e| e.ok())
     {
         if entry.file_name() == "Cargo.toml" {
@@ -1321,7 +1359,15 @@ fn create_root_config(project_root: &Path, cargo_tomls: &[PathBuf]) -> Result<St
         None
     };
 
-    // Convert all Cargo.toml paths to strings
+    // Check if this is a Bazel project
+    let is_bazel = project_root.join("BUILD.bazel").exists() 
+        || project_root.join("BUILD").exists()
+        || project_root.join("MODULE.bazel").exists()
+        || project_root.join("WORKSPACE").exists()
+        || project_root.join("WORKSPACE.bazel").exists();
+
+    // Always use Cargo.toml files for linkedProjects
+    // rust-project.json is for rust-analyzer, not for cargo-runner
     let linked_projects: Vec<String> = cargo_tomls
         .iter()
         .map(|p| p.display().to_string())
@@ -1332,6 +1378,11 @@ fn create_root_config(project_root: &Path, cargo_tomls: &[PathBuf]) -> Result<St
 
     // Create cargo config section
     let mut cargo_config = Map::new();
+
+    // For Bazel projects, set command to "bazel"
+    if is_bazel {
+        cargo_config.insert("command".to_string(), json!("bazel"));
+    }
 
     // Only add package if we have one
     if let Some(pkg) = package_name {
@@ -1487,6 +1538,181 @@ fn print_config_details(_runner: &cargo_runner_core::CargoRunner, filepath: &str
     Ok(())
 }
 
+fn create_file_level_override(filepath: &str, root: bool, override_args: Vec<String>) -> Result<()> {
+    use serde_json::{Map, Value, json};
+    use std::path::Path;
+    
+    // Parse the override arguments - this returns a Map with the parsed configuration
+    let override_config = parse_override_args(&override_args);
+    
+    // Create the match criteria for file-level override
+    let mut match_criteria = Map::new();
+    match_criteria.insert("file_path".to_string(), json!(filepath));
+    
+    // Create the final override entry
+    let mut override_entry = Map::new();
+    override_entry.insert("match".to_string(), Value::Object(match_criteria));
+    
+    // Separate cargo-specific fields from other fields
+    let cargo_fields = vec![
+        "command", "subcommand", "channel", "extra_args", 
+        "extra_env", "extra_test_binary_args", "package",
+        "remove_command", "remove_subcommand", "remove_channel",
+        "remove_args", "remove_env", "remove_test_args", "remove_env_keys"
+    ];
+    
+    let mut cargo_config = Map::new();
+    let mut has_cargo_fields = false;
+    
+    // Add all the override configurations, separating cargo fields
+    for (key, value) in override_config {
+        if cargo_fields.contains(&key.as_str()) {
+            cargo_config.insert(key, value);
+            has_cargo_fields = true;
+        } else {
+            // Non-cargo fields go at the root level
+            override_entry.insert(key, value);
+        }
+    }
+    
+    // Only add cargo section if we have cargo fields
+    if has_cargo_fields {
+        override_entry.insert("cargo".to_string(), Value::Object(cargo_config));
+    }
+    
+    // Debug: verify structure
+    if has_cargo_fields {
+        println!("   📝 Cargo fields moved to cargo section");
+    }
+    
+    // Determine config file location
+    let config_path = if root {
+        // Get PROJECT_ROOT from environment
+        let project_root = env::var("PROJECT_ROOT")
+            .map(PathBuf::from)
+            .or_else(|_| env::current_dir())
+            .context("Failed to determine project root")?;
+        project_root.join(".cargo-runner.json")
+    } else {
+        // Find the nearest .cargo-runner.json file
+        let path = Path::new(filepath);
+        let mut current = path.parent();
+        
+        while let Some(dir) = current {
+            let config_path = dir.join(".cargo-runner.json");
+            if config_path.exists() {
+                println!("   📂 Found config at: {}", config_path.display());
+                add_override_to_existing_config(&config_path, override_entry)?;
+                
+                println!("\n✅ File-level override created successfully!");
+                println!("   📍 Config: {}", config_path.display());
+                println!("   📄 File: {}", filepath);
+                
+                return Ok(());
+            }
+            current = dir.parent();
+        }
+        
+        // If no config found, create one in the file's directory
+        let parent_dir = path.parent().unwrap_or(Path::new("."));
+        parent_dir.join(".cargo-runner.json")
+    };
+    
+    // Add the override to the config
+    add_override_to_existing_config(&config_path, override_entry.clone())?;
+    
+    println!("\n✅ File-level override created successfully!");
+    println!("   📍 Config: {}", config_path.display());
+    println!("   📄 File: {}", filepath);
+    
+    // Show what was configured
+    if let Some(cargo_config) = override_entry.get("cargo") {
+        if let Some(obj) = cargo_config.as_object() {
+            if let Some(subcommand) = obj.get("subcommand") {
+                println!("   🚀 Subcommand: cargo {}", subcommand.as_str().unwrap_or(""));
+            }
+            if let Some(extra_args) = obj.get("extra_args") {
+                if let Some(args) = extra_args.as_array() {
+                    let args_str: Vec<String> = args.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect();
+                    if !args_str.is_empty() {
+                        println!("   📝 Extra args: {}", args_str.join(" "));
+                    }
+                }
+            }
+        }
+    }
+    
+    if let Some(bazel_config) = override_entry.get("bazel") {
+        if let Some(obj) = bazel_config.as_object() {
+            if let Some(extra_test_args) = obj.get("extra_test_args") {
+                if let Some(args) = extra_test_args.as_array() {
+                    let args_str: Vec<String> = args.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect();
+                    if !args_str.is_empty() {
+                        println!("   📝 Extra test args (Bazel): {}", args_str.join(" "));
+                    }
+                }
+            }
+            if let Some(extra_run_args) = obj.get("extra_run_args") {
+                if let Some(args) = extra_run_args.as_array() {
+                    let args_str: Vec<String> = args.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect();
+                    if !args_str.is_empty() {
+                        println!("   📝 Extra run args (Bazel): {}", args_str.join(" "));
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+fn add_override_to_existing_config(config_path: &Path, override_entry: serde_json::Map<String, serde_json::Value>) -> Result<()> {
+    use serde_json::{Map, Value, json};
+    
+    println!("   🔧 Adding override to config...");
+    println!("   📝 Override entry: {:?}", override_entry);
+    
+    // Read existing config or create new one
+    let mut config: Map<String, Value> = if config_path.exists() {
+        let content = fs::read_to_string(config_path)
+            .with_context(|| format!("Failed to read config from {}", config_path.display()))?;
+        serde_json::from_str(&content)
+            .with_context(|| format!("Failed to parse config from {}", config_path.display()))?
+    } else {
+        let mut new_config = Map::new();
+        new_config.insert("cargo".to_string(), json!({
+            "extra_args": [],
+            "extra_env": {},
+            "extra_test_binary_args": []
+        }));
+        new_config.insert("overrides".to_string(), json!([]));
+        new_config
+    };
+    
+    // Get or create overrides array
+    let overrides = config
+        .entry("overrides".to_string())
+        .or_insert(json!([]))
+        .as_array_mut()
+        .ok_or_else(|| anyhow::anyhow!("overrides is not an array"))?;
+    
+    // Add the new override
+    overrides.push(Value::Object(override_entry));
+    
+    // Write back the config
+    let json_string = serde_json::to_string_pretty(&config)?;
+    fs::write(config_path, json_string)
+        .with_context(|| format!("Failed to write config to {}", config_path.display()))?;
+    
+    Ok(())
+}
+
 fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) -> Result<()> {
     use serde_json::{Map, Value, json};
 
@@ -1514,8 +1740,15 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
         all_runnables.into_iter().next()
     };
 
-    let runnable =
-        runnable.ok_or_else(|| anyhow::anyhow!("No runnable found at the specified location"))?;
+    // If no runnable found, create a file-level override
+    if runnable.is_none() {
+        println!("   📄 No specific runnable found, creating file-level override");
+        
+        // For file-level overrides, we'll use the file path as the match criteria
+        return create_file_level_override(&filepath, root, override_args);
+    }
+
+    let runnable = runnable.unwrap();
 
     // Detect file type based on the runnable
     let file_type = runner.detect_file_type(&resolved_path)?;
@@ -1533,9 +1766,30 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
     println!("   🎯 Found: {:?}", runnable.kind);
     println!("   📝 File type: {:?}", file_type);
 
+    // Load the merged config to detect build system
+    println!("   📂 Loading configs for path: {}", resolved_path.display());
+    let mut merger = cargo_runner_core::config::ConfigMerger::new();
+    merger.load_configs_for_path(&resolved_path)?;
+    let merged_config = merger.get_merged_config();
+
     // Determine configuration section based on file type
     let config_section = match file_type {
-        cargo_runner_core::FileType::CargoProject => "cargo",
+        cargo_runner_core::FileType::CargoProject => {
+            // Check if this is a Bazel project
+            let command = merged_config.cargo
+                .as_ref()
+                .and_then(|c| c.command.as_ref());
+            
+            if let Some(cmd) = command {
+                println!("   🔍 Detected command: {}", cmd);
+            }
+            
+            let is_bazel = command
+                .map(|cmd| cmd == "bazel")
+                .unwrap_or(false);
+            
+            if is_bazel { "bazel" } else { "cargo" }
+        },
         cargo_runner_core::FileType::Standalone => "rustc",
         cargo_runner_core::FileType::SingleFileScript => "single_file_script",
     };
@@ -1655,32 +1909,67 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
     // Add configuration based on file type
     match file_type {
         cargo_runner_core::FileType::CargoProject => {
-            let mut cargo_config = Map::new();
+            // Check if this is a Bazel project
+            let is_bazel = merged_config.cargo
+                .as_ref()
+                .and_then(|c| c.command.as_ref())
+                .map(|cmd| cmd == "bazel")
+                .unwrap_or(false);
 
-            // Handle command and subcommand
-            if let Some(command) = parsed_args.get("command") {
-                cargo_config.insert("command".to_string(), command.clone());
-            }
-            if let Some(subcommand) = parsed_args.get("subcommand") {
-                cargo_config.insert("subcommand".to_string(), subcommand.clone());
-            }
-            if let Some(channel) = parsed_args.get("channel") {
-                cargo_config.insert("channel".to_string(), channel.clone());
-            }
+            if is_bazel {
+                // Create bazel override section
+                let mut bazel_config = Map::new();
 
-            if let Some(extra_args) = parsed_args.get("extra_args") {
-                cargo_config.insert("extra_args".to_string(), extra_args.clone());
+                // For Bazel, extra_args becomes extra_test_args for tests
+                if let Some(extra_args) = parsed_args.get("extra_args") {
+                    if matches!(&runnable.kind, 
+                        cargo_runner_core::RunnableKind::Test { .. } | 
+                        cargo_runner_core::RunnableKind::ModuleTests { .. }) {
+                        bazel_config.insert("extra_test_args".to_string(), extra_args.clone());
+                    } else {
+                        bazel_config.insert("extra_run_args".to_string(), extra_args.clone());
+                    }
+                }
+                
+                // Handle extra_test_binary_args as extra_test_args for Bazel
+                if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
+                    bazel_config.insert("extra_test_args".to_string(), extra_test_binary_args.clone());
+                }
+                
+                if let Some(extra_env) = parsed_args.get("extra_env") {
+                    bazel_config.insert("extra_env".to_string(), extra_env.clone());
+                }
+
+                override_config.insert("bazel".to_string(), Value::Object(bazel_config));
+            } else {
+                // Create cargo override section
+                let mut cargo_config = Map::new();
+
+                // Handle command and subcommand
+                if let Some(command) = parsed_args.get("command") {
+                    cargo_config.insert("command".to_string(), command.clone());
+                }
+                if let Some(subcommand) = parsed_args.get("subcommand") {
+                    cargo_config.insert("subcommand".to_string(), subcommand.clone());
+                }
+                if let Some(channel) = parsed_args.get("channel") {
+                    cargo_config.insert("channel".to_string(), channel.clone());
+                }
+
+                if let Some(extra_args) = parsed_args.get("extra_args") {
+                    cargo_config.insert("extra_args".to_string(), extra_args.clone());
+                }
+                if let Some(extra_env) = parsed_args.get("extra_env") {
+                    cargo_config.insert("extra_env".to_string(), extra_env.clone());
+                }
+                if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
+                    cargo_config.insert(
+                        "extra_test_binary_args".to_string(),
+                        extra_test_binary_args.clone(),
+                    );
+                }
+                override_config.insert("cargo".to_string(), Value::Object(cargo_config));
             }
-            if let Some(extra_env) = parsed_args.get("extra_env") {
-                cargo_config.insert("extra_env".to_string(), extra_env.clone());
-            }
-            if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
-                cargo_config.insert(
-                    "extra_test_binary_args".to_string(),
-                    extra_test_binary_args.clone(),
-                );
-            }
-            override_config.insert("cargo".to_string(), Value::Object(cargo_config));
         }
         cargo_runner_core::FileType::Standalone => {
             // For rustc
@@ -1829,7 +2118,20 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
         if let Some(existing_obj) = existing.as_object_mut() {
             // Get the appropriate config section
             let config_section = match file_type {
-                cargo_runner_core::FileType::CargoProject => existing_obj.get_mut("cargo"),
+                cargo_runner_core::FileType::CargoProject => {
+                    // Check if this is a Bazel project
+                    let is_bazel = merged_config.cargo
+                        .as_ref()
+                        .and_then(|c| c.command.as_ref())
+                        .map(|cmd| cmd == "bazel")
+                        .unwrap_or(false);
+                    
+                    if is_bazel {
+                        existing_obj.get_mut("bazel")
+                    } else {
+                        existing_obj.get_mut("cargo")
+                    }
+                },
                 cargo_runner_core::FileType::Standalone => existing_obj.get_mut("rustc"),
                 cargo_runner_core::FileType::SingleFileScript => {
                     existing_obj.get_mut("single_file_script")
@@ -1875,20 +2177,23 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
             }
 
             // Merge in the new override config
-            if let Some(new_section) = override_config.get(match file_type {
-                cargo_runner_core::FileType::CargoProject => "cargo",
+            let section_key = match file_type {
+                cargo_runner_core::FileType::CargoProject => {
+                    // Check if this is a Bazel project
+                    let is_bazel = merged_config.cargo
+                        .as_ref()
+                        .and_then(|c| c.command.as_ref())
+                        .map(|cmd| cmd == "bazel")
+                        .unwrap_or(false);
+                    
+                    if is_bazel { "bazel" } else { "cargo" }
+                },
                 cargo_runner_core::FileType::Standalone => "rustc",
                 cargo_runner_core::FileType::SingleFileScript => "single_file_script",
-            }) {
-                existing_obj.insert(
-                    match file_type {
-                        cargo_runner_core::FileType::CargoProject => "cargo",
-                        cargo_runner_core::FileType::Standalone => "rustc",
-                        cargo_runner_core::FileType::SingleFileScript => "single_file_script",
-                    }
-                    .to_string(),
-                    new_section.clone(),
-                );
+            };
+            
+            if let Some(new_section) = override_config.get(section_key) {
+                existing_obj.insert(section_key.to_string(), new_section.clone());
             }
 
             println!("✅ Override updated successfully!");
@@ -1910,7 +2215,16 @@ fn override_command(filepath_arg: &str, root: bool, override_args: Vec<String>) 
         println!(
             "\n   📋 Applied changes to {}:",
             match file_type {
-                cargo_runner_core::FileType::CargoProject => "cargo configuration",
+                cargo_runner_core::FileType::CargoProject => {
+                    // Check if this is a Bazel project
+                    let is_bazel = merged_config.cargo
+                        .as_ref()
+                        .and_then(|c| c.command.as_ref())
+                        .map(|cmd| cmd == "bazel")
+                        .unwrap_or(false);
+                    
+                    if is_bazel { "bazel configuration" } else { "cargo configuration" }
+                },
                 cargo_runner_core::FileType::Standalone => {
                     match &runnable.kind {
                         cargo_runner_core::RunnableKind::Test { .. }
@@ -2051,21 +2365,21 @@ fn parse_override_args(args: &[String]) -> serde_json::Map<String, serde_json::V
                 }
             }
         }
-        // Check for command token @command:subcommand
+        // Check for command token @command.subcommand
         else if arg.starts_with('@') {
             let token = &arg[1..];
-            let parts: Vec<&str> = token.split(':').collect();
+            let parts: Vec<&str> = token.split('.').collect();
 
             if !parts.is_empty() {
                 let cmd = parts[0];
 
-                // Special handling for @cargo:subcommand format
+                // Special handling for @cargo.subcommand format
                 if cmd == "cargo" && parts.len() > 1 {
                     // Don't set command to cargo (it's the default)
                     // Just set the subcommand
                     subcommand = Some(parts[1..].join(" "));
                 } else {
-                    // For other commands like @dx, @trunk, etc.
+                    // For other commands like @dx, @trunk, @bazel, etc.
                     command = Some(cmd.to_string());
                     if parts.len() > 1 {
                         subcommand = Some(parts[1..].join(" "));

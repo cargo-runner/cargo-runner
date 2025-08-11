@@ -31,9 +31,49 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         
         // Get binary framework for later use
         let binary_framework = builder.get_binary_framework(config, file_type);
+        
+        // Check for override that might change command/subcommand
+        tracing::debug!("Checking for overrides...");
+        let override_config = builder.get_override(runnable, config, file_type);
+        let has_override_command = override_config
+            .and_then(|o| o.cargo.as_ref())
+            .and_then(|c| c.command.as_ref())
+            .is_some();
+        tracing::debug!("has_override_command: {}", has_override_command);
 
-        // Handle binary framework configuration
-        if let Some(ref binary_framework) = binary_framework {
+        // Handle override command first (takes precedence)
+        if let Some(override_config) = override_config {
+            if let Some(override_cargo) = &override_config.cargo {
+                if let Some(cmd) = &override_cargo.command {
+                    if cmd != "cargo" {
+                        command_type = CommandType::Shell;
+                        args.push(cmd.clone());
+                        
+                        // Add subcommand if specified
+                        if let Some(subcommand) = &override_cargo.subcommand {
+                            args.extend(subcommand.split_whitespace().map(String::from));
+                        }
+                    } else {
+                        // Standard cargo with channel
+                        if let Some(channel) = &override_cargo.channel {
+                            args.push(format!("+{}", channel));
+                        } else if let Some(channel) = builder.get_channel(config, file_type) {
+                            args.push(format!("+{}", channel));
+                        }
+                        
+                        if let Some(subcommand) = &override_cargo.subcommand {
+                            args.extend(subcommand.split_whitespace().map(String::from));
+                        } else {
+                            args.push("run".to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Only use binary framework if no override command was found
+        if !has_override_command && binary_framework.is_some() {
+            let binary_framework = binary_framework.as_ref().unwrap();
             // Handle custom command
             if let Some(cmd) = &binary_framework.command {
                 if cmd != "cargo" {
@@ -85,8 +125,8 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
             if let Some(framework_args) = &binary_framework.extra_args {
                 args.extend(framework_args.clone());
             }
-        } else {
-            // Standard binary command
+        } else if !has_override_command {
+            // Standard binary command (only if no override was applied)
             if let Some(channel) = builder.get_channel(config, file_type) {
                 args.push(format!("+{}", channel));
             }

@@ -5,7 +5,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use super::{CargoConfig, Override, RustcConfig, SingleFileScriptConfig};
+use super::{BazelConfig, CargoConfig, Override, RustcConfig, SingleFileScriptConfig};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -17,6 +17,8 @@ pub struct Config {
     pub rustc: Option<RustcConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub single_file_script: Option<SingleFileScriptConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bazel: Option<BazelConfig>,
 
     // Overrides for specific functions
     #[serde(default)]
@@ -39,9 +41,18 @@ impl Config {
     }
 
     pub fn get_override_for(&self, identity: &FunctionIdentity) -> Option<&Override> {
-        self.overrides
-            .iter()
-            .find(|override_| override_.identity.matches(identity))
+        tracing::debug!("Config::get_override_for called with identity: {:?}", identity);
+        tracing::debug!("Available overrides: {}", self.overrides.len());
+        for (i, override_) in self.overrides.iter().enumerate() {
+            tracing::debug!("  Override {}: {:?}", i, override_.identity);
+            if override_.identity.matches(identity) {
+                tracing::debug!("  -> MATCH!");
+                return Some(override_);
+            } else {
+                tracing::debug!("  -> No match");
+            }
+        }
+        None
     }
 
     pub fn find_config_file(start_path: &Path) -> Option<PathBuf> {
@@ -99,6 +110,7 @@ mod tests {
                 }),
                 rustc: None,
                 single_file_script: None,
+                bazel: None,
             }],
             ..Default::default()
         };

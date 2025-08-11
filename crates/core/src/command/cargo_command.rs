@@ -7,6 +7,7 @@ pub enum CommandType {
     Rustc,
     Shell,        // For dx, trunk, and other shell commands
     RustSFScript, // For cargo script test execution
+    Bazel,        // For Bazel build system
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +56,16 @@ impl CargoCommand {
     pub fn new_rust_sf_script(args: Vec<String>) -> Self {
         Self {
             command_type: CommandType::RustSFScript,
+            args,
+            working_dir: None,
+            env: Vec::new(),
+            test_filter: None,
+        }
+    }
+
+    pub fn new_bazel(args: Vec<String>) -> Self {
+        Self {
+            command_type: CommandType::Bazel,
             args,
             working_dir: None,
             env: Vec::new(),
@@ -158,6 +169,18 @@ impl CargoCommand {
             }
             CommandType::RustSFScript | CommandType::Cargo => {
                 let mut cmd = String::from("cargo");
+                for arg in &self.args {
+                    cmd.push(' ');
+                    if arg.contains(' ') {
+                        cmd.push_str(&format!("'{arg}'"));
+                    } else {
+                        cmd.push_str(arg);
+                    }
+                }
+                cmd
+            }
+            CommandType::Bazel => {
+                let mut cmd = String::from("bazel");
                 for arg in &self.args {
                     cmd.push(' ');
                     if arg.contains(' ') {
@@ -336,6 +359,23 @@ impl CargoCommand {
             }
             CommandType::RustSFScript | CommandType::Cargo => {
                 let mut cmd = Command::new("cargo");
+                cmd.args(&self.args);
+
+                // Set working directory if specified
+                if let Some(ref dir) = self.working_dir {
+                    cmd.current_dir(dir);
+                }
+
+                // Set environment variables
+                for (key, value) in &self.env {
+                    tracing::debug!("Setting env: {}={}", key, value);
+                    cmd.env(key, value);
+                }
+
+                cmd.status()
+            }
+            CommandType::Bazel => {
+                let mut cmd = Command::new("bazel");
                 cmd.args(&self.args);
 
                 // Set working directory if specified

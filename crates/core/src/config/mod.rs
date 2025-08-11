@@ -1,5 +1,6 @@
 //! Configuration management for cargo-runner
 
+mod bazel_config;
 mod cargo_config;
 mod features;
 mod merge;
@@ -10,6 +11,7 @@ pub mod test_framework;
 pub mod utils;
 
 // Re-export main types
+pub use bazel_config::{BazelConfig, BazelFramework};
 pub use cargo_config::{BinaryFramework, CargoConfig, SingleFileScriptConfig};
 pub use features::Features;
 pub use merge::{ConfigInfo, ConfigMerger};

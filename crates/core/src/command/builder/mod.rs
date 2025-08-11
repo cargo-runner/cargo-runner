@@ -1,10 +1,12 @@
 //! Clean API for command building with encapsulated config resolution
 
+mod bazel;
 mod cargo;
 mod config_access;
 mod config_resolver;
 mod rustc;
 
+pub use self::bazel::BazelCommandBuilder;
 pub use self::cargo::{
     BenchmarkCommandBuilder, BinaryCommandBuilder, DocTestCommandBuilder, ModuleTestCommandBuilder,
     TestCommandBuilder,

@@ -94,8 +94,10 @@ dependencies = [
  "cargo_toml",
  "insta",
  "md5",
+ "regex",
  "serde",
  "serde_json",
+ "serde_starlark",
  "tempfile",
  "thiserror",
  "tracing",
@@ -484,6 +486,15 @@ name = "serde_spanned"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40734c41988f7306bb04f0ecf60ec0f3f1caa34290e4e8ea471dcd3346483b83"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde_starlark"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45f0ec43438c1213326fe5e26e20b748322e4b5d324bef7e06676b8cbf280fd0"
 dependencies = [
  "serde",
 ]

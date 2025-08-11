@@ -1,6 +1,7 @@
 //! Main runner that coordinates parsing, detection, and command generation
 
 use crate::{
+    build_system::{BuildSystem, BuildSystemDetector, DefaultBuildSystemDetector},
     command::CargoCommand,
     config::{Config, ConfigMerger},
     error::Result,
@@ -16,6 +17,7 @@ pub struct CargoRunner {
     parser: RustParser,
     config: Config,
     project_root: Option<PathBuf>,
+    build_system: Option<BuildSystem>,
 }
 
 impl CargoRunner {
@@ -31,6 +33,7 @@ impl CargoRunner {
             parser: RustParser::new()?,
             config,
             project_root,
+            build_system: None,
         })
     }
 
@@ -40,6 +43,7 @@ impl CargoRunner {
             parser: RustParser::new()?,
             config,
             project_root: None,
+            build_system: None,
         })
     }
 
@@ -49,10 +53,24 @@ impl CargoRunner {
         line: u32,
     ) -> Result<Vec<Runnable>> {
         debug!(
-            "detect_runnables_at_line: file={:?}, line={}",
-            file_path, line
+            "detect_runnables_at_line: file={:?}, line={}, build_system={:?}",
+            file_path, line, self.build_system
         );
         self.ensure_project_root(file_path)?;
+
+        // For Bazel projects, use Bazel-aware detection
+        if matches!(self.build_system, Some(BuildSystem::Bazel)) {
+            debug!("Using Bazel runnable detection for line {}", line);
+            let all_runnables = self.detect_bazel_runnables(file_path)?;
+            
+            // Filter to runnables that contain the line
+            let runnables: Vec<_> = all_runnables.into_iter()
+                .filter(|r| r.scope.start.line <= line && line <= r.scope.end.line)
+                .collect();
+            
+            debug!("Found {} runnables at line {}", runnables.len(), line);
+            return Ok(runnables);
+        }
 
         // Detect runnables
         debug!("Detecting runnables from file");
@@ -70,6 +88,8 @@ impl CargoRunner {
         line: u32,
     ) -> Result<Option<Runnable>> {
         let mut runnables = self.detect_runnables_at_line(file_path, line)?;
+        
+        debug!("get_best_runnable_at_line: found {} runnables", runnables.len());
         
         // If we have multiple runnables, pick the most specific one
         if runnables.len() > 1 {
@@ -116,28 +136,177 @@ impl CargoRunner {
     }
 
     pub fn build_command_for_runnable(&self, runnable: &Runnable) -> Result<Option<CargoCommand>> {
+        match self.build_system {
+            Some(BuildSystem::Bazel) => self.build_bazel_command_for_runnable(runnable),
+            _ => {
+                let package_name = self.get_package_name(&runnable.file_path)?;
+                
+                // Use the new clean API with the current config from runner
+                let command = crate::command::builder::CommandBuilder::for_runnable(runnable)
+                    .with_package(package_name.unwrap_or_default())
+                    .with_project_root(self.project_root.as_deref().unwrap_or_else(|| Path::new(".")))
+                    .with_config(self.config.clone())
+                    .build()?;
+
+                Ok(Some(command))
+            }
+        }
+    }
+    
+    fn detect_bazel_runnables(&mut self, file_path: &Path) -> Result<Vec<Runnable>> {
+        use crate::types::{Scope, Position, ScopeKind};
+        
+        // For Bazel, we still detect test functions in the source file
+        let mut runnables = self.detector.detect_runnables(file_path, None)?;
+        
+        // Resolve module paths
+        self.resolve_module_paths(file_path, &mut runnables)?;
+        
+        // Update labels to indicate they're for Bazel
+        for runnable in &mut runnables {
+            match &runnable.kind {
+                RunnableKind::Test { .. } => {
+                    runnable.label = format!("{} (Bazel)", runnable.label);
+                }
+                RunnableKind::Binary { .. } => {
+                    runnable.label = format!("{} (Bazel)", runnable.label);
+                }
+                _ => {}
+            }
+        }
+        
+        // If this is a main.rs file, add a binary runnable
+        if file_path.file_name() == Some(std::ffi::OsStr::new("main.rs")) {
+            let content = std::fs::read_to_string(file_path)?;
+            let line_count = content.lines().count() as u32;
+            
+            runnables.push(Runnable {
+                label: "Run server (Bazel)".to_string(),
+                scope: Scope {
+                    start: Position::new(0, 0),
+                    end: Position::new(line_count.saturating_sub(1), 0),
+                    kind: ScopeKind::File(crate::types::FileScope::Bin { name: Some("server".to_string()) }),
+                    name: Some(file_path.file_name().unwrap_or_default().to_string_lossy().to_string()),
+                },
+                kind: RunnableKind::Binary { bin_name: None },
+                module_path: String::new(),
+                file_path: file_path.to_path_buf(),
+                extended_scope: None,
+            });
+        }
+        
+        Ok(runnables)
+    }
+
+    fn build_bazel_command_for_runnable(&self, runnable: &Runnable) -> Result<Option<CargoCommand>> {
+        use crate::command::builder::{BazelCommandBuilder, CommandBuilderImpl};
+        
+        debug!("build_bazel_command_for_runnable: runnable={:?}", runnable);
+        
+        // Get the package name for Bazel (workspace name)
         let package_name = self.get_package_name(&runnable.file_path)?;
         
-        // Use the new clean API with the current config from runner
-        let command = crate::command::builder::CommandBuilder::for_runnable(runnable)
-            .with_package(package_name.unwrap_or_default())
-            .with_project_root(self.project_root.as_deref().unwrap_or_else(|| Path::new(".")))
-            .with_config(self.config.clone())
-            .build()?;
-
+        // Use the new BazelCommandBuilder with full configuration support
+        let command = BazelCommandBuilder::build(
+            runnable,
+            package_name.as_deref(),
+            &self.config,
+            crate::types::FileType::CargoProject, // Bazel projects are treated similarly to cargo projects
+        )?;
+        
+        debug!("Returning Bazel command: {:?}", command);
         Ok(Some(command))
     }
 
     pub fn get_fallback_command(&mut self, file_path: &Path) -> Result<Option<CargoCommand>> {
-        debug!("get_fallback_command: file_path={:?}", file_path);
+        debug!("get_fallback_command ENTRY: file_path={:?}", file_path);
+        debug!("get_fallback_command: current build_system={:?}, project_root={:?}", self.build_system, self.project_root);
         
         // Resolve the actual file path first
         let (resolved_path, _) = self.resolve_file_path_internal(file_path)?;
         debug!("get_fallback_command: resolved_path={:?}", resolved_path);
         
         // Ensure project root and reload config for the resolved path
+        debug!("get_fallback_command: before ensure_project_root, build_system={:?}", self.build_system);
         self.ensure_project_root(&resolved_path)?;
+        debug!("get_fallback_command: after ensure_project_root, build_system={:?}", self.build_system);
         
+        // Check if this is a Bazel project
+        if matches!(self.build_system, Some(BuildSystem::Bazel)) {
+            debug!("get_fallback_command: Detected Bazel project");
+            // For Bazel projects, try to find a binary target
+            
+            if let Some(ref project_root) = self.project_root {
+                debug!("get_fallback_command: project_root={:?}", project_root);
+                // Ensure we have absolute paths
+                let _abs_path = if resolved_path.is_absolute() {
+                    resolved_path.clone()
+                } else {
+                    std::env::current_dir()?.join(&resolved_path)
+                };
+                
+                // Package path not needed for simplified approach
+                
+                // For Bazel projects, always return a fallback command
+                // Check if this is a test file or main file to determine the command type
+                let file_name = resolved_path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+                debug!("get_fallback_command: file_name={:?}", file_name);
+                
+                // Create a synthetic runnable for override matching
+                let scope = crate::types::Scope {
+                    kind: crate::types::ScopeKind::Function,
+                    name: Some("main".to_string()),
+                    start: crate::types::Position { line: 0, character: 0 },
+                    end: crate::types::Position { line: 0, character: 0 },
+                };
+                
+                let synthetic_runnable = crate::types::Runnable {
+                    label: "File-level command".to_string(),
+                    scope,
+                    kind: if file_name == "main.rs" || resolved_path.to_string_lossy().contains("src/bin") {
+                        crate::types::RunnableKind::Binary { bin_name: None }
+                    } else {
+                        crate::types::RunnableKind::Test { test_name: "test".to_string(), is_async: false }
+                    },
+                    module_path: self.get_package_name(&resolved_path)?.unwrap_or_default(),
+                    file_path: resolved_path.clone(),
+                    extended_scope: None,
+                };
+                
+                // Check for overrides
+                let override_config = self.get_override_for_runnable(&synthetic_runnable);
+                let mut extra_args = Vec::new();
+                
+                if let Some(override_) = override_config {
+                    if let Some(cargo_override) = &override_.cargo {
+                        if let Some(args) = &cargo_override.extra_args {
+                            extra_args.extend(args.clone());
+                        }
+                    }
+                }
+                
+                // Use the new BazelCommandBuilder
+                use crate::command::builder::{BazelCommandBuilder, CommandBuilderImpl};
+                
+                let command = BazelCommandBuilder::build(
+                    &synthetic_runnable,
+                    self.get_package_name(&resolved_path)?.as_deref(),
+                    &self.config,
+                    crate::types::FileType::CargoProject,
+                )?;
+                
+                debug!("get_fallback_command: Returning Bazel command with overrides: {:?}", command);
+                return Ok(Some(command));
+            } else {
+                debug!("get_fallback_command: No project_root found for Bazel project");
+            }
+            
+            return Ok(None);
+        }
+        
+        debug!("get_fallback_command: Not a Bazel project, falling back to Cargo");
         let package_name = self.get_package_name(&resolved_path)?;
         let project_root = self.project_root.as_deref();
         
@@ -160,6 +329,14 @@ impl CargoRunner {
 
     pub fn detect_all_runnables(&mut self, file_path: &Path) -> Result<Vec<Runnable>> {
         self.ensure_project_root(file_path)?;
+
+        debug!("detect_all_runnables: build_system={:?}", self.build_system);
+        
+        // For Bazel projects, detect runnables differently
+        if matches!(self.build_system, Some(BuildSystem::Bazel)) {
+            debug!("Detecting Bazel runnables");
+            return self.detect_bazel_runnables(file_path);
+        }
 
         // Detect runnables using normal pattern detection
         let mut runnables = self.detector.detect_runnables(file_path, None)?;
@@ -207,15 +384,76 @@ impl CargoRunner {
 
 
     fn ensure_project_root(&mut self, file_path: &Path) -> Result<()> {
-        if self.project_root.is_none() {
-            if let Some(cargo_toml) = ModuleResolver::find_cargo_toml(file_path) {
-                self.project_root = cargo_toml.parent().map(|p| p.to_path_buf());
+        debug!("ensure_project_root: file_path={:?}, current build_system={:?}", file_path, self.build_system);
+        
+        // If we already have a project root from PROJECT_ROOT env, use that
+        if self.project_root.is_some() && self.build_system.is_none() {
+            if let Some(ref project_root) = self.project_root {
+                self.build_system = DefaultBuildSystemDetector::detect(project_root);
+                debug!("Detected build system from PROJECT_ROOT: {:?}", self.build_system);
+            }
+            // If still no build system, check if the specific file is in a Cargo project
+            if self.build_system.is_none() {
+                if let Some(cargo_toml) = ModuleResolver::find_cargo_toml(file_path) {
+                    debug!("Found Cargo.toml for file: {:?}", cargo_toml);
+                    // Don't change project_root, just detect it's a Cargo project
+                    self.build_system = Some(BuildSystem::Cargo);
+                }
+            }
+        } else if self.project_root.is_none() {
+            // No PROJECT_ROOT env, check from file path
+            // Walk up from the file to find a project root
+            let mut current = if file_path.is_file() {
+                file_path.parent().unwrap_or(file_path)
+            } else {
+                file_path
+            };
+            
+            let mut found_root = None;
+            loop {
+                // Use the build system detector to check each directory
+                if let Some(build_system) = DefaultBuildSystemDetector::detect(current) {
+                    debug!("Found build system {:?} at {:?}", build_system, current);
+                    self.project_root = Some(current.to_path_buf());
+                    self.build_system = Some(build_system);
+                    found_root = Some(current);
+                    break;
+                }
+                
+                // Check parent
+                if let Some(parent) = current.parent() {
+                    current = parent;
+                } else {
+                    break;
+                }
+            }
+            
+            // If no project root found, use CWD
+            if found_root.is_none() {
+                if let Ok(cwd) = std::env::current_dir() {
+                    self.project_root = Some(cwd.clone());
+                    self.build_system = DefaultBuildSystemDetector::detect(&cwd);
+                    debug!("Using CWD as project root, build system: {:?}", self.build_system);
+                }
             }
         }
+        
+        debug!("ensure_project_root: final build_system={:?}, project_root={:?}", self.build_system, self.project_root);
         
         // Always reload config for the file path to get proper merged config
         // This is important when the file is in a different project than CWD
         self.reload_config_for_path(file_path)?;
+        
+        // After loading config, check if it specifies bazel as the command
+        if let Some(ref cargo_config) = self.config.cargo {
+            if let Some(ref command) = cargo_config.command {
+                if command == "bazel" {
+                    debug!("Config specifies bazel as command, switching to Bazel build system");
+                    self.build_system = Some(BuildSystem::Bazel);
+                }
+            }
+        }
+        
         Ok(())
     }
 
@@ -261,8 +499,21 @@ impl CargoRunner {
             if let Some(linked_projects) = &cargo.linked_projects {
                 debug!("Checking {} linked projects", linked_projects.len());
                 for linked_project in linked_projects {
-                    let cargo_toml_path = Path::new(linked_project);
-                    if let Some(project_dir) = cargo_toml_path.parent() {
+                    let linked_path = Path::new(linked_project);
+                    
+                    // Determine the project directory based on the linked file type
+                    let project_dir = if linked_path.file_name() == Some(std::ffi::OsStr::new("rust-project.json")) {
+                        // For Bazel projects, rust-project.json is in the project root
+                        linked_path.parent()
+                    } else if linked_path.file_name() == Some(std::ffi::OsStr::new("Cargo.toml")) {
+                        // For Cargo projects, Cargo.toml is in the project root
+                        linked_path.parent()
+                    } else {
+                        // If it's neither, assume it's a Cargo.toml path
+                        linked_path.parent()
+                    };
+                    
+                    if let Some(project_dir) = project_dir {
                         let candidate = project_dir.join(file_path);
                         debug!("Checking candidate: {:?}", candidate);
                         if candidate.exists() {

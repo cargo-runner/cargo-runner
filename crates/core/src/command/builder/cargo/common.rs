@@ -14,7 +14,14 @@ pub trait CargoBuilderHelper {
         file_type: FileType,
     ) -> Option<&'a crate::config::Override> {
         let identity = self.create_identity(runnable, config, file_type);
-        config.get_override_for(&identity)
+        tracing::debug!("Looking for override for identity: {:?}", identity);
+        let result = config.get_override_for(&identity);
+        if result.is_some() {
+            tracing::debug!("Found matching override!");
+        } else {
+            tracing::debug!("No matching override found");
+        }
+        result
     }
 
     fn create_identity(

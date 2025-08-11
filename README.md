@@ -1,5 +1,11 @@
 # Scope-Based Runnable Detection and Command Building Guide
 
+##  testing repo
+- ~/Codes/boss (single bazel)
+- ~/Codes/nodes (complex setup cargo , single file rust, rustc)
+- ~/Codes/yoyo (complex setup bazel)
+
+
 ## Overview
 
 The cargo-runner uses a sophisticated scope detection system combined with pattern matching to identify runnable code and build appropriate cargo commands. This guide explains how scope ranges work and how they interact with our runnable detection system.

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use super::FileType;
 
 /// Represents the identity of a function in a Rust project
@@ -43,7 +43,8 @@ impl FunctionIdentity {
         // If self has a file_path requirement, it must match
         if let Some(ref my_file) = self.file_path {
             if let Some(ref other_file) = other.file_path {
-                if my_file != other_file {
+                // Check if paths match, handling relative vs absolute paths
+                if !paths_match(my_file, other_file) {
                     return false;
                 }
             } else {
@@ -78,5 +79,24 @@ impl FunctionIdentity {
         
         // All non-None fields in self match
         true
+    }
+}
+
+/// Check if two paths match, handling relative vs absolute paths
+fn paths_match(path1: &Path, path2: &Path) -> bool {
+    // If both are the same, quick return
+    if path1 == path2 {
+        return true;
+    }
+    
+    // If one is absolute and one is relative, check if the relative path
+    // is a suffix of the absolute path
+    if path1.is_absolute() && path2.is_relative() {
+        path1.ends_with(path2)
+    } else if path2.is_absolute() && path1.is_relative() {
+        path2.ends_with(path1)
+    } else {
+        // Both absolute or both relative, and they're not equal
+        false
     }
 }
