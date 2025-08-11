@@ -1,6 +1,6 @@
+use super::FileType;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use super::FileType;
 
 /// Represents the identity of a function in a Rust project
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,7 +27,7 @@ impl FunctionIdentity {
                 return false;
             }
         }
-        
+
         // If self has a module_path requirement, it must match
         if let Some(ref my_module) = self.module_path {
             if let Some(ref other_module) = other.module_path {
@@ -39,7 +39,7 @@ impl FunctionIdentity {
                 return false;
             }
         }
-        
+
         // If self has a file_path requirement, it must match
         if let Some(ref my_file) = self.file_path {
             if let Some(ref other_file) = other.file_path {
@@ -52,7 +52,7 @@ impl FunctionIdentity {
                 return false;
             }
         }
-        
+
         // If self has a function_name requirement, it must match
         if let Some(ref my_func) = self.function_name {
             if let Some(ref other_func) = other.function_name {
@@ -64,7 +64,7 @@ impl FunctionIdentity {
                 return false;
             }
         }
-        
+
         // If self has a file_type requirement, it must match
         if let Some(my_type) = self.file_type {
             if let Some(other_type) = other.file_type {
@@ -76,7 +76,7 @@ impl FunctionIdentity {
                 return false;
             }
         }
-        
+
         // All non-None fields in self match
         true
     }
@@ -88,7 +88,7 @@ fn paths_match(path1: &Path, path2: &Path) -> bool {
     if path1 == path2 {
         return true;
     }
-    
+
     // If one is absolute and one is relative, check if the relative path
     // is a suffix of the absolute path
     if path1.is_absolute() && path2.is_relative() {

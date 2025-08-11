@@ -1,6 +1,6 @@
+use super::{Features, TestFramework};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use super::{Features, TestFramework};
 
 // Type alias for clarity - TestFramework is actually a generic framework config
 pub type BinaryFramework = TestFramework;
@@ -31,7 +31,6 @@ pub struct CargoConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub package: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

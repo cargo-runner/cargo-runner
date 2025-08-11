@@ -2,7 +2,10 @@
 
 use super::common::CargoBuilderHelper;
 use crate::{
-    command::{builder::{CommandBuilderImpl, ConfigAccess}, CargoCommand},
+    command::{
+        CargoCommand,
+        builder::{CommandBuilderImpl, ConfigAccess},
+    },
     config::Config,
     error::Result,
     types::{FileType, Runnable},
@@ -21,7 +24,11 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        tracing::debug!("ModuleTestCommandBuilder::build called for {:?}, package={:?}", runnable.file_path, package);
+        tracing::debug!(
+            "ModuleTestCommandBuilder::build called for {:?}, package={:?}",
+            runnable.file_path,
+            package
+        );
         let builder = ModuleTestCommandBuilder;
         let mut args = vec![];
 
@@ -66,7 +73,7 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
 
         // Get test framework for checking if we're using default cargo test
         let test_framework = builder.get_test_framework(config, file_type);
-        
+
         // Add --bin for tests in binary files (like src/main.rs)
         builder.add_bin_target(&mut args, &runnable.file_path, package, test_framework)?;
 
@@ -87,7 +94,12 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
             }
         }
 
-        builder.apply_common_config(&mut command, config, file_type, builder.get_extra_env(config, file_type));
+        builder.apply_common_config(
+            &mut command,
+            config,
+            file_type,
+            builder.get_extra_env(config, file_type),
+        );
         builder.apply_env(&mut command, runnable, config, file_type);
 
         Ok(command)
@@ -103,44 +115,54 @@ impl ModuleTestCommandBuilder {
         test_framework: Option<&crate::config::TestFramework>,
     ) -> Result<()> {
         let path_str = file_path.to_str().unwrap_or("");
-        
+
         // Check if we're using default cargo test command
         let is_default_test = args.contains(&"test".to_string()) && {
             if let Some(tf) = &test_framework {
                 // If we have a test framework, check if it's using default cargo test
-                tf.command.as_ref().map(|c| c == "cargo").unwrap_or(true) &&
-                tf.subcommand.is_none()
+                tf.command.as_ref().map(|c| c == "cargo").unwrap_or(true) && tf.subcommand.is_none()
             } else {
                 // No test framework means we're using default cargo
                 true
             }
         };
-        
+
         // For tests in library source files (src/**/*.rs, excluding main.rs and bin/), add --lib flag
         // Only if using default cargo test command
-        if is_default_test && path_str.contains("/src/") && 
-           !path_str.ends_with("/src/main.rs") && 
-           !path_str.contains("/src/bin/") {
-            tracing::debug!("Adding --lib for module tests in library source file: {}", path_str);
+        if is_default_test
+            && path_str.contains("/src/")
+            && !path_str.ends_with("/src/main.rs")
+            && !path_str.contains("/src/bin/")
+        {
+            tracing::debug!(
+                "Adding --lib for module tests in library source file: {}",
+                path_str
+            );
             args.push("--lib".to_string());
             return Ok(());
         }
-        
+
         // For tests in example files (examples/*.rs), add --example flag
         // Only if using default cargo test command
-        if is_default_test && (path_str.contains("/examples/") || path_str.starts_with("examples/")) {
+        if is_default_test && (path_str.contains("/examples/") || path_str.starts_with("examples/"))
+        {
             if let Some(stem) = file_path.file_stem() {
                 let example_name = stem.to_string_lossy();
-                tracing::debug!("Adding --example {} for module tests in examples/{}.rs", example_name, example_name);
+                tracing::debug!(
+                    "Adding --example {} for module tests in examples/{}.rs",
+                    example_name,
+                    example_name
+                );
                 args.push("--example".to_string());
                 args.push(example_name.to_string());
             }
             return Ok(());
         }
-        
+
         // For tests in binary files (src/main.rs, src/bin/*.rs), add --bin flag
         // Only if using default cargo test command
-        if is_default_test && (path_str.ends_with("/src/main.rs") || path_str.contains("/src/bin/")) {
+        if is_default_test && (path_str.ends_with("/src/main.rs") || path_str.contains("/src/bin/"))
+        {
             if path_str.ends_with("/src/main.rs") {
                 // For src/main.rs, use package name as binary name
                 if let Some(pkg) = package {
@@ -151,15 +173,19 @@ impl ModuleTestCommandBuilder {
             } else if let Some(stem) = file_path.file_stem() {
                 // For src/bin/*.rs, use file stem as binary name
                 let bin_name = stem.to_string_lossy();
-                tracing::debug!("Adding --bin {} for module tests in src/bin/{}.rs", bin_name, bin_name);
+                tracing::debug!(
+                    "Adding --bin {} for module tests in src/bin/{}.rs",
+                    bin_name,
+                    bin_name
+                );
                 args.push("--bin".to_string());
                 args.push(bin_name.to_string());
             }
         }
-        
+
         Ok(())
     }
-    
+
     fn add_module_filter(
         &self,
         args: &mut Vec<String>,
@@ -170,7 +196,7 @@ impl ModuleTestCommandBuilder {
         // For module tests, we need to extract the module name from the RunnableKind
         if let crate::types::RunnableKind::ModuleTests { module_name } = &runnable.kind {
             args.push("--".to_string());
-            
+
             // Use the full module path if available, otherwise just the module name
             if !runnable.module_path.is_empty() {
                 tracing::debug!("Using runnable.module_path: {}", runnable.module_path);
@@ -193,7 +219,13 @@ impl ModuleTestCommandBuilder {
         file_type: FileType,
     ) {
         // Apply features first
-        self.apply_features(args, runnable, config, file_type, self.get_features(config, file_type));
+        self.apply_features(
+            args,
+            runnable,
+            config,
+            file_type,
+            self.get_features(config, file_type),
+        );
 
         // Apply override args
         if let Some(override_config) = self.get_override(runnable, config, file_type) {

@@ -2,7 +2,10 @@
 
 use super::common::CargoBuilderHelper;
 use crate::{
-    command::{builder::{CommandBuilderImpl, ConfigAccess}, CargoCommand},
+    command::{
+        CargoCommand,
+        builder::{CommandBuilderImpl, ConfigAccess},
+    },
     config::Config,
     error::Result,
     types::{FileType, Runnable, RunnableKind},
@@ -47,7 +50,12 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
         }
 
         let mut command = CargoCommand::new(args);
-        builder.apply_common_config(&mut command, config, file_type, builder.get_extra_env(config, file_type));
+        builder.apply_common_config(
+            &mut command,
+            config,
+            file_type,
+            builder.get_extra_env(config, file_type),
+        );
         builder.apply_env(&mut command, runnable, config, file_type);
 
         Ok(command)
@@ -63,7 +71,13 @@ impl BenchmarkCommandBuilder {
         file_type: FileType,
     ) {
         // Apply features first
-        self.apply_features(args, runnable, config, file_type, self.get_features(config, file_type));
+        self.apply_features(
+            args,
+            runnable,
+            config,
+            file_type,
+            self.get_features(config, file_type),
+        );
 
         // Apply override args
         if let Some(override_config) = self.get_override(runnable, config, file_type) {

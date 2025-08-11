@@ -24,14 +24,18 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        tracing::debug!("BinaryCommandBuilder::build called for {:?}, package={:?}", runnable.file_path, package);
+        tracing::debug!(
+            "BinaryCommandBuilder::build called for {:?}, package={:?}",
+            runnable.file_path,
+            package
+        );
         let builder = BinaryCommandBuilder;
         let mut args = vec![];
         let mut command_type = CommandType::Cargo;
-        
+
         // Get binary framework for later use
         let binary_framework = builder.get_binary_framework(config, file_type);
-        
+
         // Check for override that might change command/subcommand
         tracing::debug!("Checking for overrides...");
         let override_config = builder.get_override(runnable, config, file_type);
@@ -48,7 +52,7 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
                     if cmd != "cargo" {
                         command_type = CommandType::Shell;
                         args.push(cmd.clone());
-                        
+
                         // Add subcommand if specified
                         if let Some(subcommand) = &override_cargo.subcommand {
                             args.extend(subcommand.split_whitespace().map(String::from));
@@ -60,7 +64,7 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
                         } else if let Some(channel) = builder.get_channel(config, file_type) {
                             args.push(format!("+{}", channel));
                         }
-                        
+
                         if let Some(subcommand) = &override_cargo.subcommand {
                             args.extend(subcommand.split_whitespace().map(String::from));
                         } else {
@@ -70,7 +74,7 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
                 }
             }
         }
-        
+
         // Only use binary framework if no override command was found
         if !has_override_command && binary_framework.is_some() {
             let binary_framework = binary_framework.as_ref().unwrap();
@@ -146,21 +150,27 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
             // 1. We have "run" in the args
             // 2. We're using cargo (not a custom command like dx)
             // 3. No custom subcommand (like "leptos serve")
-            let has_custom_command = binary_framework.as_ref()
+            let has_custom_command = binary_framework
+                .as_ref()
                 .and_then(|bf| bf.command.as_ref())
                 .map(|cmd| cmd != "cargo")
                 .unwrap_or(false);
-            
-            let has_custom_subcommand = binary_framework.as_ref()
+
+            let has_custom_subcommand = binary_framework
+                .as_ref()
                 .and_then(|bf| bf.subcommand.as_ref())
                 .is_some();
-            
-            let is_default_run = args.contains(&"run".to_string()) && 
-                                !has_custom_command && 
-                                !has_custom_subcommand;
-            
-            tracing::debug!("Check default run: args={:?}, has_custom_command={}, has_custom_subcommand={}, is_default_run={}", 
-                          args, has_custom_command, has_custom_subcommand, is_default_run);
+
+            let is_default_run =
+                args.contains(&"run".to_string()) && !has_custom_command && !has_custom_subcommand;
+
+            tracing::debug!(
+                "Check default run: args={:?}, has_custom_command={}, has_custom_subcommand={}, is_default_run={}",
+                args,
+                has_custom_command,
+                has_custom_subcommand,
+                is_default_run
+            );
             builder.add_target(&mut args, runnable, package, is_default_run)?;
         }
 
@@ -199,33 +209,53 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
 }
 
 impl BinaryCommandBuilder {
-    fn add_target(&self, args: &mut Vec<String>, runnable: &Runnable, package: Option<&str>, is_default_run: bool) -> Result<()> {
-        tracing::debug!("add_target: is_default_run={}, package={:?}, file_path={:?}", is_default_run, package, runnable.file_path);
-        
+    fn add_target(
+        &self,
+        args: &mut Vec<String>,
+        runnable: &Runnable,
+        package: Option<&str>,
+        is_default_run: bool,
+    ) -> Result<()> {
+        tracing::debug!(
+            "add_target: is_default_run={}, package={:?}, file_path={:?}",
+            is_default_run,
+            package,
+            runnable.file_path
+        );
+
         let path_str = runnable.file_path.to_str().unwrap_or("");
-        
+
         // Check if this is an example file
         if path_str.contains("/examples/") {
             self.add_example(args, runnable)?;
             return Ok(());
         }
-        
+
         // Otherwise, handle as binary
         self.add_binary(args, runnable, package, is_default_run)?;
         Ok(())
     }
-    
+
     fn add_example(&self, args: &mut Vec<String>, runnable: &Runnable) -> Result<()> {
         if let Some(stem) = runnable.file_path.file_stem() {
             let example_name = stem.to_string_lossy();
-            tracing::debug!("Adding --example {} (file in examples/ directory)", example_name);
+            tracing::debug!(
+                "Adding --example {} (file in examples/ directory)",
+                example_name
+            );
             args.push("--example".to_string());
             args.push(example_name.to_string());
         }
         Ok(())
     }
-    
-    fn add_binary(&self, args: &mut Vec<String>, runnable: &Runnable, package: Option<&str>, is_default_run: bool) -> Result<()> {
+
+    fn add_binary(
+        &self,
+        args: &mut Vec<String>,
+        runnable: &Runnable,
+        package: Option<&str>,
+        is_default_run: bool,
+    ) -> Result<()> {
         // First check if we have an explicit binary name in the runnable
         if let crate::types::RunnableKind::Binary { bin_name } = &runnable.kind {
             if let Some(name) = bin_name {
@@ -235,7 +265,7 @@ impl BinaryCommandBuilder {
                 return Ok(());
             }
         }
-        
+
         // For src/main.rs, we might need to add --bin with the package name
         // if there are multiple binaries in the project
         if let Some(stem) = runnable.file_path.file_stem() {
@@ -249,11 +279,18 @@ impl BinaryCommandBuilder {
                 // For main.rs with default cargo run command, use the package name as the binary name
                 // This handles the case where there are multiple binaries in the project
                 if is_default_run && package.is_some() {
-                    tracing::debug!("Adding --bin {} (main.rs with package name)", package.unwrap());
+                    tracing::debug!(
+                        "Adding --bin {} (main.rs with package name)",
+                        package.unwrap()
+                    );
                     args.push("--bin".to_string());
                     args.push(package.unwrap().to_string());
                 } else {
-                    tracing::debug!("Not adding --bin: is_default_run={}, package={:?}", is_default_run, package);
+                    tracing::debug!(
+                        "Not adding --bin: is_default_run={}, package={:?}",
+                        is_default_run,
+                        package
+                    );
                 }
             }
         }

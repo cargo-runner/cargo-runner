@@ -1,7 +1,10 @@
 //! Single file script builder for cargo script files
 
 use crate::{
-    command::{builder::{CommandBuilderImpl, ConfigAccess}, CargoCommand},
+    command::{
+        CargoCommand,
+        builder::{CommandBuilderImpl, ConfigAccess},
+    },
     config::Config,
     error::Result,
     types::{FileType, FunctionIdentity, Runnable, RunnableKind},
@@ -25,19 +28,19 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
             RunnableKind::SingleFileScript { .. } => {
                 // Extract shebang from file
                 let shebang = builder.extract_shebang(&runnable.file_path)?;
-                
+
                 // Build command for running the script
                 let mut args = builder.parse_shebang_args(&shebang);
 
                 // Add the script file path
                 args.push(runnable.file_path.to_str().unwrap_or("").to_string());
-                
+
                 // Check if the file contains benchmarks
                 if let Ok(content) = std::fs::read_to_string(&runnable.file_path) {
-                    let has_benchmarks = content.contains("#[bench]") || 
-                                       content.contains("criterion_group!") || 
-                                       content.contains("criterion_main!");
-                    
+                    let has_benchmarks = content.contains("#[bench]")
+                        || content.contains("criterion_group!")
+                        || content.contains("criterion_main!");
+
                     if has_benchmarks {
                         // Add --bench flag for running benchmarks
                         args.push("--bench".to_string());
@@ -71,7 +74,7 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
 
                 // Add test filter with module path
                 args.push("--".to_string());
-                
+
                 // Build the full test path including module
                 let full_test_path = if !runnable.module_path.is_empty() {
                     format!("{}::{}", runnable.module_path, test_name)
@@ -79,7 +82,7 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                     test_name.clone()
                 };
                 args.push(full_test_path);
-                
+
                 // Add --exact flag for individual test
                 args.push("--exact".to_string());
 
@@ -110,7 +113,7 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
 
                 // Add module filter
                 args.push("--".to_string());
-                
+
                 // Use the full module path if available, otherwise just the module name
                 if !runnable.module_path.is_empty() {
                     args.push(runnable.module_path.clone());
@@ -133,7 +136,7 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                 // For binary/main function in cargo script, just run the script
                 // Extract shebang from file
                 let shebang = builder.extract_shebang(&runnable.file_path)?;
-                
+
                 // Build command for running the script
                 let mut args = builder.parse_shebang_args(&shebang);
 
@@ -155,13 +158,13 @@ impl CommandBuilderImpl for SingleFileScriptBuilder {
                 // Build command for running a benchmark in a cargo script
                 // Extract shebang from file
                 let shebang = builder.extract_shebang(&runnable.file_path)?;
-                
+
                 // Build command for running the script
                 let mut args = builder.parse_shebang_args(&shebang);
 
                 // Add the script file path
                 args.push(runnable.file_path.to_str().unwrap_or("").to_string());
-                
+
                 // Add --bench flag to run benchmarks
                 args.push("--bench".to_string());
 
@@ -191,13 +194,13 @@ impl SingleFileScriptBuilder {
     fn extract_shebang(&self, file_path: &std::path::Path) -> Result<String> {
         let content = std::fs::read_to_string(file_path)
             .map_err(|e| crate::error::Error::ParseError(format!("Failed to read file: {}", e)))?;
-        
+
         if let Some(first_line) = content.lines().next() {
             if first_line.starts_with("#!") {
                 return Ok(first_line.to_string());
             }
         }
-        
+
         // Default shebang if not found
         Ok("#!/usr/bin/env -S cargo +nightly -Zscript".to_string())
     }
@@ -209,14 +212,10 @@ impl SingleFileScriptBuilder {
 
         if let Some(cmd_part) = shebang.strip_prefix("#!") {
             let parts: Vec<&str> = cmd_part.split_whitespace().collect();
-            
+
             // Skip /usr/bin/env and -S if present
             let start_idx = if parts.get(0) == Some(&"/usr/bin/env") {
-                if parts.get(1) == Some(&"-S") {
-                    2
-                } else {
-                    1
-                }
+                if parts.get(1) == Some(&"-S") { 2 } else { 1 }
             } else {
                 0
             };

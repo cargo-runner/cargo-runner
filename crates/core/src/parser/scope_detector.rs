@@ -703,9 +703,11 @@ fn test_function() {
         let scopes = parser.get_scopes(source, Path::new("test.rs")).unwrap();
 
         assert!(scopes.iter().any(|s| s.name == Some("main".to_string())));
-        assert!(scopes
-            .iter()
-            .any(|s| s.name == Some("test_function".to_string())));
+        assert!(
+            scopes
+                .iter()
+                .any(|s| s.name == Some("test_function".to_string()))
+        );
     }
 
     #[test]

@@ -1,8 +1,11 @@
 //! Bazel command builder with placeholder support
 
 use crate::{
-    command::{builder::{CommandBuilderImpl, ConfigAccess}, CargoCommand},
-    config::{Config, BazelConfig, BazelFramework},
+    command::{
+        CargoCommand,
+        builder::{CommandBuilderImpl, ConfigAccess},
+    },
+    config::{BazelConfig, BazelFramework, Config},
     error::Result,
     types::{FileType, Runnable, RunnableKind},
 };
@@ -23,7 +26,7 @@ impl CommandBuilderImpl for BazelCommandBuilder {
         tracing::debug!("BazelCommandBuilder::build called for {:?}", runnable.kind);
         let builder = BazelCommandBuilder;
         let bazel_config = config.bazel.as_ref();
-        
+
         match &runnable.kind {
             RunnableKind::Test { test_name, .. } => {
                 builder.build_test_command(runnable, test_name, bazel_config, config, file_type)
@@ -31,12 +34,20 @@ impl CommandBuilderImpl for BazelCommandBuilder {
             RunnableKind::ModuleTests { .. } => {
                 builder.build_module_tests_command(runnable, bazel_config, config, file_type)
             }
-            RunnableKind::Binary { bin_name } => {
-                builder.build_binary_command(runnable, bin_name.as_deref(), bazel_config, config, file_type)
-            }
-            RunnableKind::Benchmark { bench_name } => {
-                builder.build_benchmark_command(runnable, bench_name, bazel_config, config, file_type)
-            }
+            RunnableKind::Binary { bin_name } => builder.build_binary_command(
+                runnable,
+                bin_name.as_deref(),
+                bazel_config,
+                config,
+                file_type,
+            ),
+            RunnableKind::Benchmark { bench_name } => builder.build_benchmark_command(
+                runnable,
+                bench_name,
+                bazel_config,
+                config,
+                file_type,
+            ),
             RunnableKind::DocTest { .. } => {
                 builder.build_doc_test_command(runnable, bazel_config, config, file_type)
             }
@@ -57,22 +68,22 @@ impl BazelCommandBuilder {
         file_type: FileType,
     ) -> Result<CargoCommand> {
         tracing::debug!("build_test_command called for test: {}", test_name);
-        
+
         // Get the test framework or use defaults
         let framework = bazel_config
             .and_then(|bc| bc.test_framework.clone())
             .unwrap_or_else(|| BazelConfig::default_test_framework());
-        
+
         // Determine the target
         let target = self.determine_target(runnable, bazel_config, true);
-        
+
         // Build the test filter
         let test_filter = if runnable.module_path.is_empty() {
             test_name.to_string()
         } else {
             format!("{}::{}", runnable.module_path, test_name)
         };
-        
+
         // Build the command
         let mut command = self.build_command_from_framework(
             &framework,
@@ -81,13 +92,13 @@ impl BazelCommandBuilder {
             Some(&test_filter),
             None,
         );
-        
+
         // Apply overrides
         self.apply_overrides(&mut command, runnable, config, file_type);
-        
+
         Ok(command)
     }
-    
+
     fn build_module_tests_command(
         &self,
         runnable: &Runnable,
@@ -96,22 +107,22 @@ impl BazelCommandBuilder {
         file_type: FileType,
     ) -> Result<CargoCommand> {
         tracing::debug!("build_module_tests_command called");
-        
+
         // Get the test framework or use defaults
         let framework = bazel_config
             .and_then(|bc| bc.test_framework.clone())
             .unwrap_or_else(|| BazelConfig::default_test_framework());
-        
+
         // Determine the target
         let target = self.determine_target(runnable, bazel_config, true);
-        
+
         // Build module filter (no exact matching for module tests)
         let test_filter = if !runnable.module_path.is_empty() {
             Some(runnable.module_path.clone())
         } else {
             None
         };
-        
+
         // Build the command
         let mut command = self.build_command_from_framework(
             &framework,
@@ -120,13 +131,13 @@ impl BazelCommandBuilder {
             test_filter.as_deref(),
             None,
         );
-        
+
         // Apply overrides
         self.apply_overrides(&mut command, runnable, config, file_type);
-        
+
         Ok(command)
     }
-    
+
     fn build_binary_command(
         &self,
         runnable: &Runnable,
@@ -136,30 +147,25 @@ impl BazelCommandBuilder {
         file_type: FileType,
     ) -> Result<CargoCommand> {
         tracing::debug!("build_binary_command called for binary: {:?}", bin_name);
-        
+
         // Get the binary framework or use defaults
         let framework = bazel_config
             .and_then(|bc| bc.binary_framework.clone())
             .unwrap_or_else(|| BazelConfig::default_binary_framework());
-        
+
         // Determine the target
         let target = self.determine_target(runnable, bazel_config, false);
-        
+
         // Build the command
-        let mut command = self.build_command_from_framework(
-            &framework,
-            runnable,
-            Some(&target),
-            None,
-            bin_name,
-        );
-        
+        let mut command =
+            self.build_command_from_framework(&framework, runnable, Some(&target), None, bin_name);
+
         // Apply overrides
         self.apply_overrides(&mut command, runnable, config, file_type);
-        
+
         Ok(command)
     }
-    
+
     fn build_benchmark_command(
         &self,
         runnable: &Runnable,
@@ -168,23 +174,26 @@ impl BazelCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        tracing::debug!("build_benchmark_command called for benchmark: {}", bench_name);
-        
+        tracing::debug!(
+            "build_benchmark_command called for benchmark: {}",
+            bench_name
+        );
+
         // Get the benchmark framework or use defaults
         let framework = bazel_config
             .and_then(|bc| bc.benchmark_framework.clone())
             .unwrap_or_else(|| BazelConfig::default_benchmark_framework());
-        
+
         // Determine the target
         let target = self.determine_target(runnable, bazel_config, true);
-        
+
         // Build the benchmark filter
         let bench_filter = if runnable.module_path.is_empty() {
             bench_name.to_string()
         } else {
             format!("{}::{}", runnable.module_path, bench_name)
         };
-        
+
         // Build the command
         let mut command = self.build_command_from_framework(
             &framework,
@@ -193,13 +202,13 @@ impl BazelCommandBuilder {
             Some(&bench_filter),
             None,
         );
-        
+
         // Apply overrides
         self.apply_overrides(&mut command, runnable, config, file_type);
-        
+
         Ok(command)
     }
-    
+
     fn build_doc_test_command(
         &self,
         runnable: &Runnable,
@@ -208,30 +217,25 @@ impl BazelCommandBuilder {
         file_type: FileType,
     ) -> Result<CargoCommand> {
         tracing::debug!("build_doc_test_command called");
-        
+
         // Get the doc test framework or use defaults
         let framework = bazel_config
             .and_then(|bc| bc.doc_test_framework.clone())
             .unwrap_or_else(|| BazelConfig::default_doc_test_framework());
-        
+
         // Determine the target
         let target = self.determine_target(runnable, bazel_config, true);
-        
+
         // Build the command
-        let mut command = self.build_command_from_framework(
-            &framework,
-            runnable,
-            Some(&target),
-            None,
-            None,
-        );
-        
+        let mut command =
+            self.build_command_from_framework(&framework, runnable, Some(&target), None, None);
+
         // Apply overrides
         self.apply_overrides(&mut command, runnable, config, file_type);
-        
+
         Ok(command)
     }
-    
+
     /// Build a command from a framework configuration
     fn build_command_from_framework(
         &self,
@@ -243,9 +247,9 @@ impl BazelCommandBuilder {
     ) -> CargoCommand {
         let command_name = framework.command.as_deref().unwrap_or("bazel");
         let subcommand = framework.subcommand.as_deref().unwrap_or("test");
-        
+
         let mut args = vec![subcommand.to_string()];
-        
+
         // Add the target
         if let Some(target_template) = &framework.target {
             let expanded_target = self.expand_template(
@@ -260,7 +264,7 @@ impl BazelCommandBuilder {
         } else if let Some(target) = target {
             args.push(target.to_string());
         }
-        
+
         // Add base args with placeholder expansion
         if let Some(base_args) = &framework.args {
             for arg in base_args {
@@ -275,12 +279,12 @@ impl BazelCommandBuilder {
                 args.push(expanded);
             }
         }
-        
+
         // Add extra args (no expansion needed)
         if let Some(extra_args) = &framework.extra_args {
             args.extend(extra_args.clone());
         }
-        
+
         // Add test args (for test subcommand)
         if subcommand == "test" && test_filter.is_some() {
             if let Some(test_args) = &framework.test_args {
@@ -301,7 +305,7 @@ impl BazelCommandBuilder {
                 }
             }
         }
-        
+
         // Add exec args (for run subcommand)
         if subcommand == "run" {
             if let Some(exec_args) = &framework.exec_args {
@@ -321,26 +325,31 @@ impl BazelCommandBuilder {
                 }
             }
         }
-        
+
         let mut command = if command_name == "bazel" {
             CargoCommand::new_bazel(args)
         } else {
             // Support custom commands (like bazelisk)
             CargoCommand::new_shell(command_name.to_string(), args)
         };
-        
+
         // Apply environment variables
         if let Some(env) = &framework.extra_env {
             for (key, value) in env {
                 command.env.push((key.clone(), value.clone()));
             }
         }
-        
+
         command
     }
-    
+
     /// Determine the Bazel target based on the runnable and configuration
-    fn determine_target(&self, runnable: &Runnable, bazel_config: Option<&BazelConfig>, is_test: bool) -> String {
+    fn determine_target(
+        &self,
+        runnable: &Runnable,
+        bazel_config: Option<&BazelConfig>,
+        is_test: bool,
+    ) -> String {
         // Check for legacy configuration first
         if let Some(config) = bazel_config {
             if is_test && config.test_target.is_some() {
@@ -349,7 +358,7 @@ impl BazelCommandBuilder {
                 return config.binary_target.clone().unwrap();
             }
         }
-        
+
         // Use configured defaults if available
         if let Some(config) = bazel_config {
             if is_test && config.default_test_target.is_some() {
@@ -358,15 +367,20 @@ impl BazelCommandBuilder {
                 return config.default_binary_target.clone().unwrap();
             }
         }
-        
+
         // Try to find the actual Bazel target from BUILD files
         // First, we need to find the workspace root
-        let workspace_root = runnable.file_path
+        let workspace_root = runnable
+            .file_path
             .ancestors()
             .find(|p| p.join("WORKSPACE").exists() || p.join("MODULE.bazel").exists());
-        
+
         if let Some(workspace_root) = workspace_root {
-            tracing::debug!("Looking for Bazel target for file: {:?} in workspace: {:?}", runnable.file_path, workspace_root);
+            tracing::debug!(
+                "Looking for Bazel target for file: {:?} in workspace: {:?}",
+                runnable.file_path,
+                workspace_root
+            );
             if let Some(target) = crate::build_system::bazel::find_bazel_target_for_file(
                 &runnable.file_path,
                 workspace_root,
@@ -380,14 +394,14 @@ impl BazelCommandBuilder {
         } else {
             tracing::debug!("No workspace root found, using default target");
         }
-        
+
         // Fall back to simple inference
         let file_path = &runnable.file_path;
         let file_name = file_path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown");
-        
+
         // Check common patterns
         if file_path.to_string_lossy().contains("src/bin/") {
             // Binary in src/bin
@@ -403,7 +417,7 @@ impl BazelCommandBuilder {
             "//:server".to_string()
         }
     }
-    
+
     /// Expand template placeholders
     fn expand_template(
         &self,
@@ -418,12 +432,9 @@ impl BazelCommandBuilder {
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown");
-        
-        let parent_dir = file_path
-            .parent()
-            .and_then(|p| p.to_str())
-            .unwrap_or(".");
-        
+
+        let parent_dir = file_path.parent().and_then(|p| p.to_str()).unwrap_or(".");
+
         // Extract target components
         let (package, target_name) = if target.contains(':') {
             let parts: Vec<&str> = target.splitn(2, ':').collect();
@@ -431,28 +442,25 @@ impl BazelCommandBuilder {
         } else {
             ("", target)
         };
-        
+
         template
             // Bazel-specific placeholders
             .replace("{target}", target)
             .replace("{target_name}", target_name)
             .replace("{package}", package)
-            
             // File-related placeholders
             .replace("{file_path}", file_path.to_str().unwrap_or(""))
             .replace("{file_name}", file_name)
             .replace("{parent_dir}", parent_dir)
-            
             // Test/benchmark placeholders
             .replace("{test_filter}", test_filter.unwrap_or(""))
             .replace("{bench_filter}", test_filter.unwrap_or(""))
             .replace("{test_name}", test_filter.unwrap_or(""))
             .replace("{module_path}", module_path)
-            
             // Binary placeholders
             .replace("{binary_name}", binary_name.unwrap_or(file_name))
     }
-    
+
     /// Get override configuration for a runnable
     fn get_override<'a>(
         &self,
@@ -461,7 +469,9 @@ impl BazelCommandBuilder {
         file_type: FileType,
     ) -> Option<&'a crate::config::Override> {
         let identity = crate::types::FunctionIdentity {
-            package: config.bazel.as_ref()
+            package: config
+                .bazel
+                .as_ref()
                 .and_then(|b| b.workspace.clone())
                 .or_else(|| config.cargo.as_ref().and_then(|c| c.package.clone())),
             module_path: if runnable.module_path.is_empty() {
@@ -473,7 +483,7 @@ impl BazelCommandBuilder {
             function_name: runnable.get_function_name(),
             file_type: Some(file_type),
         };
-        
+
         tracing::debug!("Looking for override for identity: {:?}", identity);
         let result = config.get_override_for(&identity);
         if result.is_some() {
@@ -483,7 +493,7 @@ impl BazelCommandBuilder {
         }
         result
     }
-    
+
     /// Apply overrides to the command
     fn apply_overrides(
         &self,
@@ -493,7 +503,7 @@ impl BazelCommandBuilder {
         file_type: FileType,
     ) {
         let override_config = self.get_override(runnable, config, file_type);
-        
+
         if let Some(override_) = override_config {
             if let Some(bazel_override) = &override_.bazel {
                 // Apply legacy overrides for backward compatibility
@@ -502,7 +512,7 @@ impl BazelCommandBuilder {
                         command.env.push((key.clone(), value.clone()));
                     }
                 }
-                
+
                 // Apply extra test args
                 if let Some(extra_args) = &bazel_override.extra_test_args {
                     for arg in extra_args {

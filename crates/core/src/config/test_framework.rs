@@ -1,6 +1,6 @@
+use super::Features;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use super::Features;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

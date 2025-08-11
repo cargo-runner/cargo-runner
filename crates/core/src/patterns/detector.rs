@@ -1,6 +1,6 @@
 use crate::{
     error::Result,
-    parser::{scope_detector::ScopeDetector, RustParser},
+    parser::{RustParser, scope_detector::ScopeDetector},
     patterns::{
         BenchmarkPattern, BinaryPattern, DocTestPattern, ModTestPattern, Pattern, TestFnPattern,
     },

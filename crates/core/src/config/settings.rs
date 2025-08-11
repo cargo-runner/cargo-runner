@@ -41,7 +41,10 @@ impl Config {
     }
 
     pub fn get_override_for(&self, identity: &FunctionIdentity) -> Option<&Override> {
-        tracing::debug!("Config::get_override_for called with identity: {:?}", identity);
+        tracing::debug!(
+            "Config::get_override_for called with identity: {:?}",
+            identity
+        );
         tracing::debug!("Available overrides: {}", self.overrides.len());
         for (i, override_) in self.overrides.iter().enumerate() {
             tracing::debug!("  Override {}: {:?}", i, override_.identity);
@@ -77,7 +80,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{FunctionIdentity, FileType};
+    use crate::types::{FileType, FunctionIdentity};
     use std::collections::HashMap;
 
     #[test]
@@ -121,7 +124,10 @@ mod tests {
         let parsed: Config = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.overrides.len(), 1);
-        assert_eq!(parsed.cargo.as_ref().unwrap().channel, Some("nightly".to_string()));
+        assert_eq!(
+            parsed.cargo.as_ref().unwrap().channel,
+            Some("nightly".to_string())
+        );
     }
 
     #[test]

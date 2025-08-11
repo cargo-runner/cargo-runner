@@ -24,27 +24,37 @@ impl Features {
     }
 
     /// Merge two Features, with the second one taking precedence if it's "all"
-    pub fn merge(base: Option<&Features>, override_features: Option<&Features>) -> Option<Features> {
+    pub fn merge(
+        base: Option<&Features>,
+        override_features: Option<&Features>,
+    ) -> Option<Features> {
         match (base, override_features) {
             // Both are None
             (None, None) => None,
             // One is None
             (Some(base), None) => Some(base.clone()),
             (None, Some(override_f)) => Some(override_f.clone()),
-            
+
             // Handle "all" cases
             (_, Some(Features::All(s))) if s == "all" => Some(Features::All("all".to_string())),
             (Some(Features::All(s)), _) if s == "all" => Some(Features::All("all".to_string())),
-            
+
             // Both are All but not "all" - take override
             (Some(Features::All(_)), Some(Features::All(s))) => Some(Features::All(s.clone())),
-            
+
             // Mixed All and Selected - prefer Selected
-            (Some(Features::All(_)), Some(Features::Selected(features))) => Some(Features::Selected(features.clone())),
-            (Some(Features::Selected(features)), Some(Features::All(_))) => Some(Features::Selected(features.clone())),
-            
+            (Some(Features::All(_)), Some(Features::Selected(features))) => {
+                Some(Features::Selected(features.clone()))
+            }
+            (Some(Features::Selected(features)), Some(Features::All(_))) => {
+                Some(Features::Selected(features.clone()))
+            }
+
             // Both are Selected - merge them
-            (Some(Features::Selected(base_features)), Some(Features::Selected(override_features))) => {
+            (
+                Some(Features::Selected(base_features)),
+                Some(Features::Selected(override_features)),
+            ) => {
                 let mut merged = base_features.clone();
                 for feature in override_features {
                     if !merged.contains(feature) {
@@ -85,7 +95,7 @@ mod tests {
     fn test_features_merge() {
         let base = Features::Selected(vec!["core".to_string(), "web".to_string()]);
         let override_f = Features::Selected(vec!["desktop".to_string()]);
-        
+
         let merged = Features::merge(Some(&base), Some(&override_f)).unwrap();
         match merged {
             Features::Selected(features) => {

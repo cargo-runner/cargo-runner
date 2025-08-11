@@ -29,7 +29,7 @@ pub enum Error {
 
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
-    
+
     #[error("{0}")]
     Other(String),
 }

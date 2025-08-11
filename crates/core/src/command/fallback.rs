@@ -2,7 +2,7 @@ use crate::{
     command::CargoCommand,
     config::ConfigMerger,
     error::Result,
-    types::{Runnable, RunnableKind, Scope, ScopeKind, Position},
+    types::{Position, Runnable, RunnableKind, Scope, ScopeKind},
 };
 use cargo_toml::Manifest;
 use std::path::Path;
@@ -19,12 +19,15 @@ pub fn generate_fallback_command(
     debug!("generate_fallback_command: file_path={:?}", file_path);
     // Create a synthetic runnable based on file location
     let runnable = create_synthetic_runnable(file_path, package_name)?;
-    
+
     debug!("Created synthetic runnable: {:?}", runnable.is_some());
-    
+
     if let Some(runnable) = runnable {
-        debug!("Synthetic runnable: kind={:?}, file={:?}, module_path='{}'", runnable.kind, runnable.file_path, runnable.module_path);
-        
+        debug!(
+            "Synthetic runnable: kind={:?}, file={:?}, module_path='{}'",
+            runnable.kind, runnable.file_path, runnable.module_path
+        );
+
         // Use provided config or load it
         let config = if let Some(config) = config {
             config
@@ -33,19 +36,28 @@ pub fn generate_fallback_command(
             merger.load_configs_for_path(file_path)?;
             merger.get_merged_config()
         };
-        
-        debug!("Fallback command config: cargo.binary_framework={:?}", config.cargo.as_ref().and_then(|c| c.binary_framework.as_ref()));
-        
+
+        debug!(
+            "Fallback command config: cargo.binary_framework={:?}",
+            config
+                .cargo
+                .as_ref()
+                .and_then(|c| c.binary_framework.as_ref())
+        );
+
         // Use the CommandBuilder to build the command with config support
-        debug!("Calling CommandBuilder::for_runnable with package_name={:?}", package_name);
+        debug!(
+            "Calling CommandBuilder::for_runnable with package_name={:?}",
+            package_name
+        );
         let command = crate::command::builder::CommandBuilder::for_runnable(&runnable)
             .with_package(package_name.unwrap_or_default())
             .with_project_root(project_root.unwrap_or_else(|| Path::new(".")))
             .with_config(config)
             .build()?;
-        
+
         debug!("Generated fallback command: {:?}", command.args);
-        
+
         Ok(Some(command))
     } else {
         // Check if this might be a standalone Rust file
@@ -54,34 +66,46 @@ pub fn generate_fallback_command(
                 return generate_rustc_command(file_path);
             }
         }
-        
+
         Ok(None)
     }
 }
 
 /// Create a synthetic runnable based on file path patterns
-fn create_synthetic_runnable(file_path: &Path, package_name: Option<&str>) -> Result<Option<Runnable>> {
+fn create_synthetic_runnable(
+    file_path: &Path,
+    package_name: Option<&str>,
+) -> Result<Option<Runnable>> {
     debug!("create_synthetic_runnable: file_path={:?}", file_path);
     // First check if this is a cargo script file
     if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
         if let Ok(content) = std::fs::read_to_string(file_path) {
             if let Some(first_line) = content.lines().next() {
                 debug!("First line of file: {:?}", first_line);
-                if first_line.starts_with("#!") && first_line.contains("cargo") && first_line.contains("-Zscript") {
+                if first_line.starts_with("#!")
+                    && first_line.contains("cargo")
+                    && first_line.contains("-Zscript")
+                {
                     debug!("Detected cargo script file!");
                     // It's a cargo script file
                     let scope = Scope {
                         kind: ScopeKind::Function,
                         name: Some("main".to_string()),
-                        start: Position { line: 0, character: 0 },
-                        end: Position { line: 0, character: 0 },
+                        start: Position {
+                            line: 0,
+                            character: 0,
+                        },
+                        end: Position {
+                            line: 0,
+                            character: 0,
+                        },
                     };
-                    
+
                     // Check if it contains benchmarks
-                    let has_benchmarks = content.contains("#[bench]") || 
-                                       content.contains("criterion_group!") || 
-                                       content.contains("criterion_main!");
-                    
+                    let has_benchmarks = content.contains("#[bench]")
+                        || content.contains("criterion_group!")
+                        || content.contains("criterion_main!");
+
                     // If it has benchmarks, we'll handle it specially when building the command
                     return Ok(Some(Runnable {
                         label: if has_benchmarks {
@@ -90,8 +114,8 @@ fn create_synthetic_runnable(file_path: &Path, package_name: Option<&str>) -> Re
                             "Run cargo script".to_string()
                         },
                         scope,
-                        kind: RunnableKind::SingleFileScript { 
-                            shebang: first_line.to_string() 
+                        kind: RunnableKind::SingleFileScript {
+                            shebang: first_line.to_string(),
                         },
                         module_path: String::new(),
                         file_path: file_path.to_path_buf(),
@@ -101,25 +125,31 @@ fn create_synthetic_runnable(file_path: &Path, package_name: Option<&str>) -> Re
             }
         }
     }
-    
+
     // First check if we can find a project root for custom targets
     let project_root = file_path
         .ancestors()
         .find(|p| p.join("Cargo.toml").exists());
     let path_str = file_path.to_str().unwrap_or("");
     let file_name = file_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-    
+
     // Normalize path separators
     let normalized_path = path_str.replace('\\', "/");
-    
+
     // Create a dummy scope for the synthetic runnable
     let scope = Scope {
         kind: ScopeKind::Function,
         name: Some("main".to_string()),
-        start: Position { line: 1, character: 0 },
-        end: Position { line: 100, character: 0 },
+        start: Position {
+            line: 1,
+            character: 0,
+        },
+        end: Position {
+            line: 100,
+            character: 0,
+        },
     };
-    
+
     // Determine runnable kind based on file location patterns
     if normalized_path.contains("/src/bin/")
         || normalized_path.contains("src/bin/")
@@ -127,14 +157,16 @@ fn create_synthetic_runnable(file_path: &Path, package_name: Option<&str>) -> Re
         || normalized_path.ends_with("src/main.rs")
     {
         // Binary target
-        let bin_name = if normalized_path.ends_with("/src/main.rs") || normalized_path.ends_with("src/main.rs") {
+        let bin_name = if normalized_path.ends_with("/src/main.rs")
+            || normalized_path.ends_with("src/main.rs")
+        {
             None
         } else if file_name != "main" {
             Some(file_name.to_string())
         } else {
             None
         };
-        
+
         Ok(Some(Runnable {
             label: if let Some(ref name) = bin_name {
                 format!("Run binary '{}'", name)
@@ -208,13 +240,12 @@ fn create_synthetic_runnable(file_path: &Path, package_name: Option<&str>) -> Re
         // Build script - we can't create a runnable for this
         Ok(None)
     } else {
-        // Check for custom targets in Cargo.toml  
+        // Check for custom targets in Cargo.toml
         if let Some(project_root) = project_root {
             check_cargo_toml_for_runnable(file_path, project_root, package_name)
         } else {
             Ok(None)
         }
-
     }
 }
 
@@ -245,8 +276,14 @@ fn check_cargo_toml_for_runnable(
     let scope = Scope {
         kind: ScopeKind::Function,
         name: Some("main".to_string()),
-        start: Position { line: 1, character: 0 },
-        end: Position { line: 100, character: 0 },
+        start: Position {
+            line: 1,
+            character: 0,
+        },
+        end: Position {
+            line: 100,
+            character: 0,
+        },
     };
 
     // Check [[bin]] entries
@@ -258,7 +295,9 @@ fn check_cargo_toml_for_runnable(
                     return Ok(Some(Runnable {
                         label: format!("Run binary '{}'", bin_name),
                         scope,
-                        kind: RunnableKind::Binary { bin_name: Some(bin_name) },
+                        kind: RunnableKind::Binary {
+                            bin_name: Some(bin_name),
+                        },
                         module_path: package_name.unwrap_or_default().to_string(),
                         file_path: file_path.to_path_buf(),
                         extended_scope: None,
@@ -273,11 +312,16 @@ fn check_cargo_toml_for_runnable(
         for example in &manifest.example {
             if let Some(path) = &example.path {
                 if path == relative_str {
-                    let example_name = example.name.clone().unwrap_or_else(|| file_name.to_string());
+                    let example_name = example
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| file_name.to_string());
                     return Ok(Some(Runnable {
                         label: format!("Run example '{}'", example_name),
                         scope,
-                        kind: RunnableKind::Binary { bin_name: Some(example_name) },
+                        kind: RunnableKind::Binary {
+                            bin_name: Some(example_name),
+                        },
                         module_path: package_name.unwrap_or_default().to_string(),
                         file_path: file_path.to_path_buf(),
                         extended_scope: None,
@@ -296,7 +340,10 @@ fn check_cargo_toml_for_runnable(
                     return Ok(Some(Runnable {
                         label: format!("Run test '{}'", test_name),
                         scope,
-                        kind: RunnableKind::Test { test_name, is_async: false },
+                        kind: RunnableKind::Test {
+                            test_name,
+                            is_async: false,
+                        },
                         module_path: package_name.unwrap_or_default().to_string(),
                         file_path: file_path.to_path_buf(),
                         extended_scope: None,
@@ -332,7 +379,9 @@ fn check_cargo_toml_for_runnable(
                 return Ok(Some(Runnable {
                     label: "Run library tests".to_string(),
                     scope,
-                    kind: RunnableKind::ModuleTests { module_name: String::new() },
+                    kind: RunnableKind::ModuleTests {
+                        module_name: String::new(),
+                    },
                     module_path: String::new(),
                     file_path: file_path.to_path_buf(),
                     extended_scope: None,
@@ -352,30 +401,31 @@ fn is_standalone_rust_file(file_path: &Path) -> bool {
     } else {
         return false; // Can't read file, not standalone
     };
-    
+
     if !has_main {
         return false; // No main function, not standalone
     }
-    
+
     // Check if file is part of a Cargo project
     let cargo_root = file_path
         .ancestors()
         .find(|p| p.join("Cargo.toml").exists());
-    
+
     match cargo_root {
         None => true, // No Cargo.toml found, definitely standalone
         Some(root) => {
             // Check if the file is in a standard Cargo source location
             if let Ok(relative) = file_path.strip_prefix(root) {
                 let path_str = relative.to_str().unwrap_or("");
-                
+
                 // Check standard binary locations
-                if path_str == "src/main.rs" || 
-                   path_str.starts_with("src/bin/") ||
-                   path_str.starts_with("examples/") {
+                if path_str == "src/main.rs"
+                    || path_str.starts_with("src/bin/")
+                    || path_str.starts_with("examples/")
+                {
                     return false; // In standard location, not standalone
                 }
-                
+
                 // Check if it's listed in Cargo.toml as a [[bin]]
                 let cargo_toml_path = root.join("Cargo.toml");
                 if let Ok(manifest) = Manifest::from_path(&cargo_toml_path) {
@@ -388,7 +438,7 @@ fn is_standalone_rust_file(file_path: &Path) -> bool {
                         }
                     }
                 }
-                
+
                 // Has main(), not in standard location, not in Cargo.toml = standalone
                 true
             } else {
@@ -401,50 +451,64 @@ fn is_standalone_rust_file(file_path: &Path) -> bool {
 /// Generate a rustc command for standalone Rust files
 fn generate_rustc_command(file_path: &Path) -> Result<Option<CargoCommand>> {
     // Read the file content to check for shebang and tests
-    let content = std::fs::read_to_string(file_path)
-        .map_err(|e| crate::Error::IoError(e))?;
-    
+    let content = std::fs::read_to_string(file_path).map_err(|e| crate::Error::IoError(e))?;
+
     // Check if it's a cargo script file (has shebang)
     if let Some(first_line) = content.lines().next() {
-        if first_line.starts_with("#!") && first_line.contains("cargo") && first_line.contains("-Zscript") {
+        if first_line.starts_with("#!")
+            && first_line.contains("cargo")
+            && first_line.contains("-Zscript")
+        {
             // It's a cargo script file
             let scope = Scope {
                 kind: ScopeKind::Function,
                 name: Some("main".to_string()),
-                start: Position { line: 0, character: 0 },
-                end: Position { line: 0, character: 0 },
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: 0,
+                    character: 0,
+                },
             };
-            
+
             let runnable = Runnable {
                 label: "Run cargo script".to_string(),
                 scope,
-                kind: RunnableKind::SingleFileScript { 
-                    shebang: first_line.to_string() 
+                kind: RunnableKind::SingleFileScript {
+                    shebang: first_line.to_string(),
                 },
                 module_path: String::new(),
                 file_path: file_path.to_path_buf(),
                 extended_scope: None,
             };
-            
+
             // Use the CommandBuilder to build the command
-            let command = crate::command::builder::CommandBuilder::for_runnable(&runnable)
-                .build()?;
-            
+            let command =
+                crate::command::builder::CommandBuilder::for_runnable(&runnable).build()?;
+
             return Ok(Some(command));
         }
     }
-    
+
     // Not a cargo script, check if it has tests
     let has_tests = content.contains("#[test]") || content.contains("#[cfg(test)]");
-    
+
     // Create a standalone runnable
     let scope = Scope {
         kind: ScopeKind::Function,
         name: Some("main".to_string()),
-        start: Position { line: 0, character: 0 },
-        end: Position { line: 0, character: 0 },
+        start: Position {
+            line: 0,
+            character: 0,
+        },
+        end: Position {
+            line: 0,
+            character: 0,
+        },
     };
-    
+
     let runnable = Runnable {
         label: "Run standalone file".to_string(),
         scope,
@@ -453,11 +517,10 @@ fn generate_rustc_command(file_path: &Path) -> Result<Option<CargoCommand>> {
         file_path: file_path.to_path_buf(),
         extended_scope: None,
     };
-    
+
     // Use the CommandBuilder to build the command
-    let command = crate::command::builder::CommandBuilder::for_runnable(&runnable)
-        .build()?;
-    
+    let command = crate::command::builder::CommandBuilder::for_runnable(&runnable).build()?;
+
     Ok(Some(command))
 }
 
@@ -470,9 +533,10 @@ mod tests {
     #[test]
     fn test_binary_fallback() {
         let path = PathBuf::from("/project/src/bin/my_tool.rs");
-        let cmd = generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
-            .unwrap()
-            .unwrap();
+        let cmd =
+            generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
+                .unwrap()
+                .unwrap();
 
         // The command builder will generate the correct arguments based on config
         // We just verify that a command was generated
@@ -484,9 +548,10 @@ mod tests {
     #[test]
     fn test_main_binary_fallback() {
         let path = PathBuf::from("/project/src/main.rs");
-        let cmd = generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
-            .unwrap()
-            .unwrap();
+        let cmd =
+            generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
+                .unwrap()
+                .unwrap();
 
         assert!(cmd.args.contains(&"run".to_string()));
         assert!(cmd.args.contains(&"my_crate".to_string()));
@@ -495,9 +560,10 @@ mod tests {
     #[test]
     fn test_lib_fallback() {
         let path = PathBuf::from("/project/src/lib.rs");
-        let cmd = generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
-            .unwrap()
-            .unwrap();
+        let cmd =
+            generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
+                .unwrap()
+                .unwrap();
 
         assert!(cmd.args.contains(&"test".to_string()));
         assert!(cmd.args.contains(&"my_crate".to_string()));
@@ -507,9 +573,10 @@ mod tests {
     #[test]
     fn test_example_fallback() {
         let path = PathBuf::from("/project/examples/demo.rs");
-        let cmd = generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
-            .unwrap()
-            .unwrap();
+        let cmd =
+            generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
+                .unwrap()
+                .unwrap();
 
         assert!(cmd.args.contains(&"run".to_string()));
         assert!(cmd.args.contains(&"my_crate".to_string()));
@@ -519,9 +586,10 @@ mod tests {
     #[test]
     fn test_integration_test_fallback() {
         let path = PathBuf::from("/project/tests/integration.rs");
-        let cmd = generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
-            .unwrap()
-            .unwrap();
+        let cmd =
+            generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
+                .unwrap()
+                .unwrap();
 
         assert!(cmd.args.contains(&"test".to_string()));
         assert!(cmd.args.contains(&"my_crate".to_string()));
@@ -531,9 +599,10 @@ mod tests {
     #[test]
     fn test_bench_fallback() {
         let path = PathBuf::from("/project/benches/performance.rs");
-        let cmd = generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
-            .unwrap()
-            .unwrap();
+        let cmd =
+            generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
+                .unwrap()
+                .unwrap();
 
         assert!(cmd.args.contains(&"bench".to_string()));
         assert!(cmd.args.contains(&"my_crate".to_string()));
@@ -543,7 +612,8 @@ mod tests {
     #[test]
     fn test_build_script_fallback() {
         let path = PathBuf::from("/project/build.rs");
-        let cmd = generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None);
+        let cmd =
+            generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None);
 
         // Build scripts are not runnable, should return None
         assert!(cmd.unwrap().is_none());
@@ -553,7 +623,9 @@ mod tests {
     fn test_no_pattern_match() {
         // Test a file that doesn't match any pattern - not in a standard Cargo directory
         let path = PathBuf::from("/project/random.rs");
-        let cmd = generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None).unwrap();
+        let cmd =
+            generate_fallback_command(&path, Some("my_crate"), Some(Path::new("/project")), None)
+                .unwrap();
 
         assert!(cmd.is_none());
     }
@@ -567,11 +639,17 @@ mod tests {
             .unwrap();
 
         assert_eq!(cmd.command_type, CommandType::Rustc);
-        assert_eq!(cmd.args, vec![
-            "--crate-type", "bin",
-            "--crate-name", "test",
-            "/tmp/test.rs",
-            "-o", "/tmp/test"
-        ]);
+        assert_eq!(
+            cmd.args,
+            vec![
+                "--crate-type",
+                "bin",
+                "--crate-name",
+                "test",
+                "/tmp/test.rs",
+                "-o",
+                "/tmp/test"
+            ]
+        );
     }
 }
