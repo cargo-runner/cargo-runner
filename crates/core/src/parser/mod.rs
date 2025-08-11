@@ -7,4 +7,4 @@ pub mod utils;
 
 // Re-export commonly used items
 pub use rust_parser::RustParser;
-pub use utils::{find_doc_comments_before, node_to_position};
+pub use utils::node_to_position;
