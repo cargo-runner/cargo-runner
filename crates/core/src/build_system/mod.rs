@@ -1,6 +1,3 @@
-pub mod cargo;
-pub mod bazel;
-
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq)]

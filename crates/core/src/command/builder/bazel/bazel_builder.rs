@@ -381,7 +381,7 @@ impl BazelCommandBuilder {
                 runnable.file_path,
                 workspace_root
             );
-            if let Some(target) = crate::build_system::bazel::find_bazel_target_for_file(
+            if let Some(target) = super::target_detection::find_bazel_target_for_file(
                 &runnable.file_path,
                 workspace_root,
                 is_test,
