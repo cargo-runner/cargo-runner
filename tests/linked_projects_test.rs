@@ -71,13 +71,15 @@ mod tests {
     
     // Create root config with linked_projects
     let root_config = serde_json::json!({
-        "linked_projects": [
-            project_a_dir.join("Cargo.toml").display().to_string(),
-            project_b_dir.join("Cargo.toml").display().to_string()
-        ],
-        "package": "root-workspace",
-        "extra_args": [],
-        "env": {},
+        "cargo": {
+            "linked_projects": [
+                project_a_dir.join("Cargo.toml").display().to_string(),
+                project_b_dir.join("Cargo.toml").display().to_string()
+            ],
+            "package": "root-workspace",
+            "extra_args": [],
+            "extra_env": {}
+        },
         "overrides": []
     });
     
@@ -151,9 +153,11 @@ fn main() {
     
     // Create config without linked_projects
     let config = serde_json::json!({
-        "package": "test-project",
-        "extra_args": [],
-        "env": {},
+        "cargo": {
+            "package": "test-project",
+            "extra_args": [],
+            "extra_env": {}
+        },
         "overrides": []
     });
     
@@ -181,6 +185,7 @@ fn main() {
     assert_eq!(cmd.working_dir, Some(root_dir.display().to_string()));
     
     // Clean up
+    std::env::set_current_dir(&original_dir).unwrap();
     unsafe {
         std::env::remove_var("PROJECT_ROOT");
     }

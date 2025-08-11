@@ -567,6 +567,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(cmd.command_type, CommandType::Rustc);
-        assert_eq!(cmd.args, vec!["/tmp/test.rs", "-o", "test"]);
+        assert_eq!(cmd.args, vec![
+            "--crate-type", "bin",
+            "--crate-name", "test",
+            "/tmp/test.rs",
+            "-o", "/tmp/test"
+        ]);
     }
 }

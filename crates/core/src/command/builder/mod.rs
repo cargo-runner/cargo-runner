@@ -24,12 +24,33 @@ use std::path::Path;
 /// Main entry point for building commands
 ///
 /// # Example
-/// ```
-/// let runnable = /* ... */;
+/// ```no_run
+/// use cargo_runner_core::command::builder::CommandBuilder;
+/// use cargo_runner_core::types::{Runnable, RunnableKind, Scope, Position};
+/// use std::path::{Path, PathBuf};
+/// 
+/// let runnable = Runnable {
+///     label: "test_example".to_string(),
+///     kind: RunnableKind::Test {
+///         test_name: "test_example".to_string(),
+///         is_async: false,
+///     },
+///     scope: Scope {
+///         start: Position::new(1, 0),
+///         end: Position::new(10, 0),
+///         kind: cargo_runner_core::types::ScopeKind::Function,
+///         name: Some("test_example".to_string()),
+///     },
+///     module_path: "my_crate::tests".to_string(),
+///     file_path: PathBuf::from("src/tests.rs"),
+///     extended_scope: None,
+/// };
+/// 
 /// let command = CommandBuilder::for_runnable(&runnable)
 ///     .with_package("my-package")
-///     .with_project_root("/path/to/project")
-///     .build()?;
+///     .with_project_root(Path::new("/path/to/project"))
+///     .build()
+///     .unwrap();
 /// ```
 pub struct CommandBuilder<'a> {
     runnable: &'a Runnable,
