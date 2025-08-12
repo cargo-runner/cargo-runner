@@ -12,7 +12,7 @@ pub fn analyze_command(filepath_arg: &str, verbose: bool, show_config: bool) -> 
     // Parse filepath and line number
     let (filepath, line) = parse_filepath_with_line(filepath_arg);
 
-    let mut runner = cargo_runner_core::CargoRunner::new()?;
+    let mut runner = cargo_runner_core::UnifiedRunner::new()?;
 
     if verbose {
         // Show JSON output for verbose mode
@@ -32,7 +32,7 @@ pub fn analyze_command(filepath_arg: &str, verbose: bool, show_config: bool) -> 
 }
 
 pub fn print_formatted_analysis(
-    runner: &mut cargo_runner_core::CargoRunner,
+    runner: &mut cargo_runner_core::UnifiedRunner,
     filepath: &str,
     line: Option<usize>,
     show_config: bool,
@@ -293,7 +293,7 @@ pub fn print_formatted_analysis(
     Ok(())
 }
 
-fn print_config_details(_runner: &cargo_runner_core::CargoRunner, filepath: &str) -> Result<()> {
+fn print_config_details(_runner: &cargo_runner_core::UnifiedRunner, filepath: &str) -> Result<()> {
     use cargo_runner_core::config::ConfigMerger;
     use std::path::Path;
 

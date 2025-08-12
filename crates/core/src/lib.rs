@@ -13,6 +13,9 @@ pub mod patterns;
 pub mod runner;
 pub mod types;
 
+// New runner architecture
+pub mod runner_v2;
+
 // Re-export commonly used types and traits
 pub use error::{Error, Result};
 pub use types::*;
@@ -21,3 +24,10 @@ pub use types::*;
 pub use command::{CargoCommand, CommandType};
 pub use config::Config;
 pub use runner::CargoRunner;
+
+// New architecture exports (will replace the above in future)
+pub use runner_v2::UnifiedRunner;
+
+// Temporary alias for migration
+#[deprecated(note = "Use UnifiedRunner instead")]
+pub type Runner = UnifiedRunner;

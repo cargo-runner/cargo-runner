@@ -11,6 +11,7 @@ pub mod test_fn;
 // Re-export pattern trait and implementations
 pub use benchmark::BenchmarkPattern;
 pub use binary::BinaryPattern;
+pub use detector::RunnableDetector;
 pub use doc_test::DocTestPattern;
 pub use mod_test::ModTestPattern;
 pub use pattern::Pattern;

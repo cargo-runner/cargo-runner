@@ -9,8 +9,9 @@ pub fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
 
     debug!("Running file: {} at line: {:?}", filepath, line);
 
-    let mut runner = cargo_runner_core::CargoRunner::new()?;
-    let command = runner.get_command_at_position_with_dir(&filepath, line)?;
+    let mut runner = cargo_runner_core::UnifiedRunner::new()?;
+    let filepath_path = std::path::Path::new(&filepath);
+    let command = runner.get_command_at_position_with_dir(filepath_path, line.map(|l| l as u32))?;
 
     if dry_run {
         println!("{}", command.to_shell_command());
