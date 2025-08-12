@@ -365,18 +365,24 @@ impl RustcCommandBuilder {
         }
 
         // Fallback to defaults
+        let parent_dir = source_file
+            .parent()
+            .and_then(|p| p.to_str())
+            .filter(|p| !p.is_empty())
+            .unwrap_or(".");
+        
         if is_test {
             vec![
                 "--test".to_string(),
                 source_file.to_str().unwrap_or("").to_string(),
                 "-o".to_string(),
-                output_name.to_string(),
+                format!("{}/{}", parent_dir, output_name),
             ]
         } else {
             vec![
                 source_file.to_str().unwrap_or("").to_string(),
                 "-o".to_string(),
-                output_name.to_string(),
+                format!("{}/{}", parent_dir, output_name),
             ]
         }
     }
@@ -401,6 +407,12 @@ impl RustcCommandBuilder {
         }
 
         // Fallback to defaults
+        let parent_dir = source_file
+            .parent()
+            .and_then(|p| p.to_str())
+            .filter(|p| !p.is_empty())
+            .unwrap_or(".");
+            
         vec![
             "--crate-type".to_string(),
             "bin".to_string(),
@@ -408,7 +420,7 @@ impl RustcCommandBuilder {
             crate_name.to_string(),
             source_file.to_str().unwrap_or("").to_string(),
             "-o".to_string(),
-            output_name.to_string(),
+            format!("{}/{}", parent_dir, output_name),
         ]
     }
 
@@ -430,11 +442,17 @@ impl RustcCommandBuilder {
         }
 
         // Fallback to defaults
+        let parent_dir = source_file
+            .parent()
+            .and_then(|p| p.to_str())
+            .filter(|p| !p.is_empty())
+            .unwrap_or(".");
+            
         vec![
             "--test".to_string(),
             source_file.to_str().unwrap_or("").to_string(),
             "-o".to_string(),
-            output_name.to_string(),
+            format!("{}/{}", parent_dir, output_name),
         ]
     }
 
@@ -451,7 +469,12 @@ impl RustcCommandBuilder {
             .and_then(|s| s.to_str())
             .unwrap_or("unknown");
 
-        let parent_dir = source_file.parent().and_then(|p| p.to_str()).unwrap_or(".");
+        // Ensure parent_dir is always a relative path or "."
+        let parent_dir = source_file
+            .parent()
+            .and_then(|p| p.to_str())
+            .filter(|p| !p.is_empty())
+            .unwrap_or(".");
 
         template
             // Primary placeholders

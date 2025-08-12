@@ -64,43 +64,61 @@ impl ConfigMerger {
         }
 
         // Find PROJECT_ROOT config
-        if let Ok(project_root) = std::env::var("PROJECT_ROOT") {
-            let root_path = PathBuf::from(&project_root);
-            let root_config_path = root_path.join(".cargo-runner.json");
-            if root_config_path.exists() {
-                // Check if this is the same as package config to avoid loading twice
-                // We need to handle the case where package config might be a relative path
-                let is_same_as_package =
-                    if let Some(package_path) = &self.config_info.package_config_path {
-                        // Try to canonicalize both paths
-                        match (package_path.canonicalize(), root_config_path.canonicalize()) {
-                            (Ok(p1), Ok(p2)) => p1 == p2,
-                            _ => {
-                                // If canonicalize fails, try absolute path comparison
-                                let abs_package = if package_path.is_absolute() {
-                                    package_path.clone()
-                                } else {
-                                    std::env::current_dir()
-                                        .ok()
-                                        .map(|cwd| cwd.join(package_path))
-                                        .unwrap_or_else(|| package_path.clone())
-                                };
-                                abs_package == root_config_path
-                            }
-                        }
-                    } else {
-                        false
-                    };
-
-                if !is_same_as_package {
-                    debug!("Found root config at: {:?}", root_config_path);
-                    self.root_config = Some(Config::load_from_file(&root_config_path)?);
-                    self.config_info.root_config_path = Some(root_config_path);
-                } else {
-                    debug!("Root config is same as package config, skipping duplicate load");
-                    self.config_info.root_config_path =
-                        self.config_info.package_config_path.clone();
+        // First check if PROJECT_ROOT is set in environment
+        let project_root = if let Ok(env_root) = std::env::var("PROJECT_ROOT") {
+            PathBuf::from(env_root)
+        } else {
+            // If not set, use current directory or find .cargo-runner.json
+            let cwd = std::env::current_dir().unwrap_or_default();
+            // Walk up from current directory to find .cargo-runner.json
+            let mut check_dir = cwd.as_path();
+            let mut found_root = None;
+            loop {
+                if check_dir.join(".cargo-runner.json").exists() {
+                    found_root = Some(check_dir.to_path_buf());
+                    break;
                 }
+                match check_dir.parent() {
+                    Some(parent) => check_dir = parent,
+                    None => break,
+                }
+            }
+            found_root.unwrap_or(cwd)
+        };
+
+        let root_config_path = project_root.join(".cargo-runner.json");
+        if root_config_path.exists() {
+            // Check if this is the same as package config to avoid loading twice
+            // We need to handle the case where package config might be a relative path
+            let is_same_as_package =
+                if let Some(package_path) = &self.config_info.package_config_path {
+                    // Try to canonicalize both paths
+                    match (package_path.canonicalize(), root_config_path.canonicalize()) {
+                        (Ok(p1), Ok(p2)) => p1 == p2,
+                        _ => {
+                            // If canonicalize fails, try absolute path comparison
+                            let abs_package = if package_path.is_absolute() {
+                                package_path.clone()
+                            } else {
+                                std::env::current_dir()
+                                    .ok()
+                                    .map(|cwd| cwd.join(package_path))
+                                    .unwrap_or_else(|| package_path.clone())
+                            };
+                            abs_package == root_config_path
+                        }
+                    }
+                } else {
+                    false
+                };
+
+            if !is_same_as_package {
+                debug!("Found root config at: {:?}", root_config_path);
+                self.root_config = Some(Config::load_from_file(&root_config_path)?);
+                self.config_info.root_config_path = Some(root_config_path);
+            } else {
+                debug!("Root config is same as package config, skipping duplicate load");
+                self.config_info.root_config_path = self.config_info.package_config_path.clone();
             }
         }
 
@@ -247,8 +265,15 @@ impl ConfigMerger {
         }
 
         // Merge linked_projects
+        // Special handling: if PROJECT_ROOT is set and base already has linked_projects,
+        // don't override them with local config
         if override_config.linked_projects.is_some() {
-            base.linked_projects = override_config.linked_projects;
+            if std::env::var("PROJECT_ROOT").is_ok() && base.linked_projects.is_some() {
+                // Keep the root config's linked_projects when PROJECT_ROOT is set
+                // This ensures subdirectory configs don't lose the workspace-wide linked_projects
+            } else {
+                base.linked_projects = override_config.linked_projects;
+            }
         }
     }
 

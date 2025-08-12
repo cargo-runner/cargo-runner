@@ -42,6 +42,11 @@ impl RunnableDetector {
         // Detect doc tests
         let doc_tests = detector.find_doc_tests(&tree.root_node(), &source);
         for (start, end, _text) in doc_tests {
+            tracing::debug!(
+                "Found doc test at lines {}-{}", 
+                start.line + 1, 
+                end.line + 1
+            );
             let scope = Scope {
                 start,
                 end,
@@ -114,7 +119,8 @@ impl RunnableDetector {
                         } else {
                             impl_name
                         };
-                        (type_name.to_string(), None)
+                        // Return with "impl" marker to differentiate from struct doc tests
+                        (format!("impl {}", type_name), None)
                     } else {
                         // Struct
                         (parent.name.clone().unwrap_or_default(), None)
@@ -128,16 +134,21 @@ impl RunnableDetector {
                 };
 
                 let runnable = Runnable {
-                    label,
+                    label: label.clone(),
                     scope: scope.clone(), // Use the doc test's own scope, not the parent's
                     kind: RunnableKind::DocTest {
-                        struct_or_module_name,
-                        method_name,
+                        struct_or_module_name: struct_or_module_name.clone(),
+                        method_name: method_name.clone(),
                     },
                     module_path: String::new(),
                     file_path: file_path.to_path_buf(),
                     extended_scope: Some(parent_ext.clone()),
                 };
+                tracing::debug!(
+                    "Created doc test runnable: {} (parent: {:?})",
+                    label,
+                    parent.name
+                );
                 runnables.push(runnable);
             }
         }

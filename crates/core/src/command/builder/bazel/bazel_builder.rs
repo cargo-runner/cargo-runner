@@ -9,7 +9,7 @@ use crate::{
     error::Result,
     types::{FileType, Runnable, RunnableKind},
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Bazel command builder with rich placeholder support
 pub struct BazelCommandBuilder;
@@ -75,7 +75,7 @@ impl BazelCommandBuilder {
             .unwrap_or_else(|| BazelConfig::default_test_framework());
 
         // Determine the target
-        let target = self.determine_target(runnable, bazel_config, true);
+        let target = self.determine_target(runnable, bazel_config, config, true);
 
         // Build the test filter
         let test_filter = if runnable.module_path.is_empty() {
@@ -114,7 +114,7 @@ impl BazelCommandBuilder {
             .unwrap_or_else(|| BazelConfig::default_test_framework());
 
         // Determine the target
-        let target = self.determine_target(runnable, bazel_config, true);
+        let target = self.determine_target(runnable, bazel_config, config, true);
 
         // Build module filter (no exact matching for module tests)
         let test_filter = if !runnable.module_path.is_empty() {
@@ -154,7 +154,7 @@ impl BazelCommandBuilder {
             .unwrap_or_else(|| BazelConfig::default_binary_framework());
 
         // Determine the target
-        let target = self.determine_target(runnable, bazel_config, false);
+        let target = self.determine_target(runnable, bazel_config, config, false);
 
         // Build the command
         let mut command =
@@ -185,7 +185,7 @@ impl BazelCommandBuilder {
             .unwrap_or_else(|| BazelConfig::default_benchmark_framework());
 
         // Determine the target
-        let target = self.determine_target(runnable, bazel_config, true);
+        let target = self.determine_target(runnable, bazel_config, config, true);
 
         // Build the benchmark filter
         let bench_filter = if runnable.module_path.is_empty() {
@@ -224,7 +224,7 @@ impl BazelCommandBuilder {
             .unwrap_or_else(|| BazelConfig::default_doc_test_framework());
 
         // Determine the target
-        let target = self.determine_target(runnable, bazel_config, true);
+        let target = self.determine_target(runnable, bazel_config, config, true);
 
         // Build the command
         let mut command =
@@ -348,6 +348,7 @@ impl BazelCommandBuilder {
         &self,
         runnable: &Runnable,
         bazel_config: Option<&BazelConfig>,
+        config: &Config,
         is_test: bool,
     ) -> String {
         // Check for legacy configuration first
@@ -369,20 +370,45 @@ impl BazelCommandBuilder {
         }
 
         // Try to find the actual Bazel target from BUILD files
-        // First, we need to find the workspace root
-        let workspace_root = runnable
-            .file_path
+        // First, convert to absolute path to ensure we can find the workspace root
+        let abs_file_path = if runnable.file_path.is_absolute() {
+            runnable.file_path.clone()
+        } else {
+            std::env::current_dir()
+                .ok()
+                .map(|cwd| cwd.join(&runnable.file_path))
+                .unwrap_or_else(|| runnable.file_path.clone())
+        };
+        
+        // Check if using linked projects
+        if let Some(cargo_config) = &config.cargo {
+            if let Some(linked_projects) = &cargo_config.linked_projects {
+                // Try to find which linked project contains this file
+                if let Some(target) = self.find_bazel_target_via_linked_projects(
+                    &abs_file_path,
+                    linked_projects,
+                    is_test,
+                ) {
+                    return target;
+                }
+            }
+        }
+        
+        // Find the workspace root
+        let workspace_root = abs_file_path
             .ancestors()
-            .find(|p| p.join("WORKSPACE").exists() || p.join("MODULE.bazel").exists());
+            .find(|p| {
+                p.join("MODULE.bazel").exists()
+            });
 
         if let Some(workspace_root) = workspace_root {
             tracing::debug!(
                 "Looking for Bazel target for file: {:?} in workspace: {:?}",
-                runnable.file_path,
+                abs_file_path,
                 workspace_root
             );
             if let Some(target) = super::target_detection::find_bazel_target_for_file(
-                &runnable.file_path,
+                &abs_file_path,
                 workspace_root,
                 is_test,
             ) {
@@ -461,6 +487,87 @@ impl BazelCommandBuilder {
             .replace("{binary_name}", binary_name.unwrap_or(file_name))
     }
 
+    /// Find Bazel target using linked projects configuration (simplified approach)
+    fn find_bazel_target_via_linked_projects(
+        &self,
+        abs_file_path: &Path,
+        linked_projects: &[String],
+        is_test: bool,
+    ) -> Option<String> {
+        // Find which linked project contains this file
+        for linked_project_str in linked_projects {
+            let linked_project = PathBuf::from(linked_project_str);
+            // Get the directory of the linked project (parent of Cargo.toml)
+            let project_dir = linked_project.parent()?;
+            // Check if our file is under this project directory
+            if abs_file_path.starts_with(project_dir) {
+                // Get Bazel package path from linked project path
+                // e.g. /Users/uriah/Code/yoyo/combos/frontend/Cargo.toml -> //combos/frontend
+                let bazel_package = self.get_bazel_package_from_linked_project(&linked_project)?;
+                // Check if this directory has a BUILD.bazel file
+                let build_file = project_dir.join("BUILD.bazel");
+                if !build_file.exists() {
+                    let build_file = project_dir.join("BUILD");
+                    if !build_file.exists() {
+                        continue;
+                    }
+                }
+                
+                // Parse the BUILD file to find targets
+                let targets = super::target_detection::parse_bazel_targets(&build_file);
+                // Get the file path relative to the project directory
+                let relative_path = abs_file_path.strip_prefix(project_dir).ok()?;
+                // Find a target that includes this file
+                for target in &targets {
+                    // Match based on target type and whether it's a test
+                    let is_match = match (is_test, &target.kind) {
+                        (true, super::target_detection::BazelTargetKind::RustTest) => true,
+                        (false, super::target_detection::BazelTargetKind::RustBinary) => {
+                            // For binaries, check if the target includes this file in srcs
+                            target.srcs.contains(&relative_path.to_str().unwrap_or("").to_string())
+                        }
+                        _ => false,
+                    };
+                    
+                    if is_match {
+                        let bazel_target = format!("{}:{}", bazel_package, target.name);
+                        return Some(bazel_target);
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+    
+    /// Get Bazel package path from linked project path
+    /// e.g. /Users/uriah/Code/yoyo/combos/frontend/Cargo.toml -> //combos/frontend
+    fn get_bazel_package_from_linked_project(&self, linked_project: &Path) -> Option<String> {
+        // Find PROJECT_ROOT to determine the base path
+        let project_root = if let Ok(root) = std::env::var("PROJECT_ROOT") {
+            PathBuf::from(root)
+        } else {
+            // Try to find MODULE.bazel by walking up
+            linked_project
+                .ancestors()
+                .find(|p| p.join("MODULE.bazel").exists())?
+                .to_path_buf()
+        };
+        
+        // Get the parent directory of the Cargo.toml
+        let project_dir = linked_project.parent()?;
+        
+        // Get relative path from PROJECT_ROOT to project directory
+        let relative_path = project_dir.strip_prefix(&project_root).ok()?;
+        
+        // Convert to Bazel package format
+        if relative_path.as_os_str().is_empty() {
+            Some("//".to_string())
+        } else {
+            Some(format!("//{}", relative_path.display().to_string().replace('\\', "/")))
+        }
+    }
+    
     /// Get override configuration for a runnable
     fn get_override<'a>(
         &self,

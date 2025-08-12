@@ -29,18 +29,18 @@ impl Config {
     /// Load config using the standard merging strategy
     pub fn load() -> Result<Self> {
         use super::merge::ConfigMerger;
-        
+
         let mut merger = ConfigMerger::new();
-        
+
         // Always load from current directory to get package-specific configs
         if let Ok(cwd) = std::env::current_dir() {
             merger.load_configs_for_path(&cwd)?;
         }
-        
+
         // The merger will automatically pick up PROJECT_ROOT config from env var
         Ok(merger.get_merged_config())
     }
-    
+
     pub fn load_from_file(path: &Path) -> Result<Self> {
         let contents = std::fs::read_to_string(path)?;
         let config = serde_json::from_str(&contents)

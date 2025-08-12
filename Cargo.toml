@@ -43,3 +43,4 @@ path = "examples/demo.rs"
 [[example]]
 name = "no_runnables"
 path = "examples/no_runnables.rs"
+

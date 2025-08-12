@@ -1,10 +1,9 @@
 //! This file showcases all types of runnables that cargo-runner can detect
 
-
 /// A user struct with documentation
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```rust
 /// let user = User::new("Alice", 30);
 /// assert_eq!(user.name, "Alice");
@@ -18,9 +17,9 @@ struct User {
 
 impl User {
     /// Creates a new user
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// let user = User::new("Bob", 25);
     /// assert_eq!(user.name(), "Bob");
@@ -31,16 +30,16 @@ impl User {
             age,
         }
     }
-    
+
     pub fn name(&self) -> &str {
         &self.name
     }
 }
 
 /// A simple function with a doc test
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```rust
 /// assert_eq!(add(2, 3), 5);
 /// assert_eq!(add(-1, 1), 0);
@@ -66,21 +65,21 @@ fn test_user_creation() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_user_name() {
         let user = User::new("David", 40);
         assert_eq!(user.name(), "David");
     }
-    
+
     #[test]
     fn test_add_negative() {
         assert_eq!(add(-10, -20), -30);
     }
-    
+
     mod nested_tests {
         use super::*;
-        
+
         #[test]
         fn test_nested() {
             assert!(true);
@@ -114,10 +113,10 @@ mod tests {
 
 fn main() {
     println!("This is a showcase of cargo-runner features!");
-    
+
     let user = User::new("Main User", 25);
     println!("Created user: {}", user.name());
-    
+
     let sum = add(5, 7);
     println!("5 + 7 = {}", sum);
 }

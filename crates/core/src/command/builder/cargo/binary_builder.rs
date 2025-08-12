@@ -140,8 +140,10 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         // Add package (only for cargo commands)
         if command_type == CommandType::Cargo {
             if let Some(pkg) = package {
-                args.push("--package".to_string());
-                args.push(pkg.to_string());
+                if !pkg.is_empty() {
+                    args.push("--package".to_string());
+                    args.push(pkg.to_string());
+                }
             }
 
             // Add binary name
@@ -186,6 +188,11 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
             }
             _ => CargoCommand::new(args),
         };
+
+        // Set working directory to cargo root for all commands
+        if let Some(cargo_root) = builder.find_cargo_root(&runnable.file_path) {
+            command = command.with_working_dir(cargo_root.to_string_lossy().to_string());
+        }
 
         // Apply binary framework env
         if let Some(ref binary_framework) = binary_framework {

@@ -185,12 +185,12 @@ impl BazelConfig {
 
     /// Get the default doc test framework configuration
     pub fn default_doc_test_framework() -> BazelFramework {
-        // Doc tests in Bazel are typically handled differently
-        // This is a placeholder that can be customized
+        // Doc tests in Bazel are included in the main test target
+        // No separate doc test target exists
         BazelFramework {
             command: Some("bazel".to_string()),
             subcommand: Some("test".to_string()),
-            target: Some("{target}_doc_test".to_string()),
+            target: Some("{target}".to_string()),
             args: Some(vec!["--test_output".to_string(), "streamed".to_string()]),
             ..Default::default()
         }

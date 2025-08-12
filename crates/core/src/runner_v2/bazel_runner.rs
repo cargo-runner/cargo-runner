@@ -51,20 +51,24 @@ impl CommandRunner for BazelRunner {
             runnable, None, // Bazel doesn't use package in the same way
             config, file_type,
         )?;
-
+        
         Ok(command)
     }
 
     fn validate_command(&self, command: &Self::Command) -> Result<()> {
         // Bazel-specific validation
         if command.args.is_empty() {
-            return Err(crate::error::Error::Other("Bazel command has no arguments".to_string()));
+            return Err(crate::error::Error::Other(
+                "Bazel command has no arguments".to_string(),
+            ));
         }
 
         // Ensure it's a bazel command
         match &command.command_type {
             crate::command::CommandType::Bazel => Ok(()),
-            _ => Err(crate::error::Error::Other("Expected Bazel command type".to_string())),
+            _ => Err(crate::error::Error::Other(
+                "Expected Bazel command type".to_string(),
+            )),
         }
     }
 

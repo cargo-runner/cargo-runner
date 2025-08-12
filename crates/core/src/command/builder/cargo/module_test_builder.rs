@@ -24,7 +24,7 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        tracing::debug!(
+        tracing::warn!(
             "ModuleTestCommandBuilder::build called for {:?}, package={:?}",
             runnable.file_path,
             package
@@ -67,8 +67,10 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
 
         // Add package
         if let Some(pkg) = package {
-            args.push("--package".to_string());
-            args.push(pkg.to_string());
+            if !pkg.is_empty() {
+                args.push("--package".to_string());
+                args.push(pkg.to_string());
+            }
         }
 
         // Get test framework for checking if we're using default cargo test
@@ -84,6 +86,11 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
         builder.add_module_filter(&mut args, runnable, config, file_type);
 
         let mut command = CargoCommand::new(args);
+
+        // Set working directory to cargo root
+        if let Some(cargo_root) = builder.find_cargo_root(&runnable.file_path) {
+            command = command.with_working_dir(cargo_root.to_string_lossy().to_string());
+        }
 
         // Apply test framework env
         if let Some(test_framework) = builder.get_test_framework(config, file_type) {
@@ -130,9 +137,9 @@ impl ModuleTestCommandBuilder {
         // For tests in library source files (src/**/*.rs, excluding main.rs and bin/), add --lib flag
         // Only if using default cargo test command
         if is_default_test
-            && path_str.contains("/src/")
-            && !path_str.ends_with("/src/main.rs")
-            && !path_str.contains("/src/bin/")
+            && ((path_str.contains("/src/") || path_str.starts_with("src/") || path_str == "lib.rs")
+                && !path_str.ends_with("/main.rs") && !path_str.ends_with("main.rs")
+                && !path_str.contains("/bin/"))
         {
             tracing::debug!(
                 "Adding --lib for module tests in library source file: {}",
@@ -195,6 +202,23 @@ impl ModuleTestCommandBuilder {
     ) {
         // For module tests, we need to extract the module name from the RunnableKind
         if let crate::types::RunnableKind::ModuleTests { module_name } = &runnable.kind {
+            // For file-level commands on lib.rs files, don't add module filter
+            // This allows running all tests in the library with just --lib
+            let path_str = runnable.file_path.to_str().unwrap_or("");
+            tracing::debug!(
+                "add_module_filter: path_str={}, args={:?}, contains_lib={}",
+                path_str,
+                args,
+                args.contains(&"--lib".to_string())
+            );
+            if args.contains(&"--lib".to_string()) && 
+               (path_str.ends_with("/lib.rs") || path_str == "lib.rs" || path_str.ends_with("/src/lib.rs")) {
+                tracing::debug!("Skipping module filter for file-level lib.rs command");
+                // Still apply test binary args if any
+                self.apply_test_binary_args(args, runnable, config, file_type);
+                return;
+            }
+
             args.push("--".to_string());
 
             // Use the full module path if available, otherwise just the module name

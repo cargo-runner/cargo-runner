@@ -10,7 +10,6 @@ pub mod config;
 pub mod error;
 pub mod parser;
 pub mod patterns;
-pub mod runner;
 pub mod types;
 
 // New runner architecture
@@ -23,11 +22,9 @@ pub use types::*;
 // Re-export main API components
 pub use command::{CargoCommand, CommandType};
 pub use config::Config;
-pub use runner::CargoRunner;
 
-// New architecture exports (will replace the above in future)
+// Export the new unified runner
 pub use runner_v2::UnifiedRunner;
 
-// Temporary alias for migration
-#[deprecated(note = "Use UnifiedRunner instead")]
-pub type Runner = UnifiedRunner;
+// Legacy alias for backwards compatibility
+pub use runner_v2::UnifiedRunner as CargoRunner;

@@ -8,6 +8,8 @@ use std::path::Path;
 pub struct BazelTarget {
     pub name: String,
     pub kind: BazelTargetKind,
+    pub srcs: Vec<String>,
+    pub crate_ref: Option<String>, // For rust_test, the crate it tests
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56,27 +58,68 @@ pub fn find_bazel_target_for_file(
     // Parse targets from BUILD file
     let targets = parse_bazel_targets(&build_file);
 
+    // Get the file path relative to the package directory
+    let relative_file_path = file_path.strip_prefix(package_dir).ok()?;
+    let relative_file_str = relative_file_path.to_str()?;
+
     // Find appropriate target
     if is_test {
-        // Look for test targets
+        // For test files, we need to find which rust_library contains this file
+        // and then find which rust_test references that library
+        
+        // First, find if any rust_library contains this file
+        let mut library_name = None;
+        for target in &targets {
+            if target.kind == BazelTargetKind::RustLibrary {
+                if target.srcs.contains(&relative_file_str.to_string()) {
+                    library_name = Some(&target.name);
+                    break;
+                }
+            }
+        }
+        
+        // If we found a library, look for a test that references it
+        if let Some(lib_name) = library_name {
+            for target in &targets {
+                if target.kind == BazelTargetKind::RustTest {
+                    if let Some(crate_ref) = &target.crate_ref {
+                        // Check if the crate reference matches the library
+                        // Handle both :lib_name and lib_name formats
+                        let crate_name = crate_ref.strip_prefix(':').unwrap_or(crate_ref);
+                        if crate_name == lib_name {
+                            let result = if package_path == "//" {
+                                format!(":{}", target.name)
+                            } else {
+                                format!("{}:{}", package_path, target.name)
+                            };
+                            return Some(result);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fall back to any rust_test target
         for target in &targets {
             if target.kind == BazelTargetKind::RustTest {
-                if package_path == "//" {
-                    return Some(format!(":{}", target.name));
+                let result = if package_path == "//" {
+                    format!(":{}", target.name)
                 } else {
-                    return Some(format!("{}:{}", package_path, target.name));
-                }
+                    format!("{}:{}", package_path, target.name)
+                };
+                return Some(result);
             }
         }
     } else {
         // Look for binary targets
         for target in &targets {
             if target.kind == BazelTargetKind::RustBinary {
-                if package_path == "//" {
-                    return Some(format!(":{}", target.name));
+                let result = if package_path == "//" {
+                    format!(":{}", target.name)
                 } else {
-                    return Some(format!("{}:{}", package_path, target.name));
-                }
+                    format!("{}:{}", package_path, target.name)
+                };
+                return Some(result);
             }
         }
     }
@@ -90,41 +133,27 @@ pub fn parse_bazel_targets(build_file_path: &Path) -> Vec<BazelTarget> {
     let mut targets = Vec::new();
 
     if let Ok(content) = fs::read_to_string(build_file_path) {
-        // Simple regex-based parsing for common patterns
-        // Look for rust_test(name = "...")
-        for line in content.lines() {
-            let trimmed = line.trim();
-
-            // Check for rust_test
-            if trimmed.starts_with("rust_test(")
-                || (trimmed == "rust_test" && content.contains("name"))
-            {
-                if let Some(name) = extract_target_name(&content, line) {
+        // Split into rule blocks
+        let rule_blocks = extract_rule_blocks(&content);
+        
+        for block in rule_blocks {
+            if let Some(rule_type) = get_rule_type(&block) {
+                if let Some(name) = extract_attribute(&block, "name") {
+                    let kind = match rule_type {
+                        "rust_test" => BazelTargetKind::RustTest,
+                        "rust_binary" => BazelTargetKind::RustBinary,
+                        "rust_library" => BazelTargetKind::RustLibrary,
+                        _ => continue,
+                    };
+                    
+                    let srcs = extract_srcs(&block);
+                    let crate_ref = extract_attribute(&block, "crate");
+                    
                     targets.push(BazelTarget {
                         name,
-                        kind: BazelTargetKind::RustTest,
-                    });
-                }
-            }
-            // Check for rust_binary
-            else if trimmed.starts_with("rust_binary(")
-                || (trimmed == "rust_binary" && content.contains("name"))
-            {
-                if let Some(name) = extract_target_name(&content, line) {
-                    targets.push(BazelTarget {
-                        name,
-                        kind: BazelTargetKind::RustBinary,
-                    });
-                }
-            }
-            // Check for rust_library
-            else if trimmed.starts_with("rust_library(")
-                || (trimmed == "rust_library" && content.contains("name"))
-            {
-                if let Some(name) = extract_target_name(&content, line) {
-                    targets.push(BazelTarget {
-                        name,
-                        kind: BazelTargetKind::RustLibrary,
+                        kind,
+                        srcs,
+                        crate_ref,
                     });
                 }
             }
@@ -134,38 +163,122 @@ pub fn parse_bazel_targets(build_file_path: &Path) -> Vec<BazelTarget> {
     targets
 }
 
-/// Extract target name from a BUILD.bazel rule
-fn extract_target_name(content: &str, start_line: &str) -> Option<String> {
-    // Find the position of the current line
-    let start_pos = content.find(start_line)?;
-    let rule_content = &content[start_pos..];
-
-    // Look for the end of this rule (next rule or end of file)
-    let rule_end = rule_content.find("\nrust_").unwrap_or(rule_content.len());
-    let rule_section = &rule_content[..rule_end];
-
-    // Look for name = "..." pattern within this rule
-    if let Some(name_pos) = rule_section.find("name") {
-        let after_name = &rule_section[name_pos + 4..];
-        if let Some(eq_pos) = after_name.find('=') {
-            let after_eq = &after_name[eq_pos + 1..].trim_start();
-
-            // Handle both quoted and unquoted names
-            if after_eq.starts_with('"') {
-                // Find closing quote
-                if let Some(end_quote) = after_eq[1..].find('"') {
-                    return Some(after_eq[1..1 + end_quote].to_string());
-                }
-            } else if after_eq.starts_with('\'') {
-                // Handle single quotes
-                if let Some(end_quote) = after_eq[1..].find('\'') {
-                    return Some(after_eq[1..1 + end_quote].to_string());
+/// Extract rule blocks from BUILD.bazel content
+fn extract_rule_blocks(content: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut current_block = String::new();
+    let mut in_rule = false;
+    let mut paren_count = 0;
+    
+    for line in content.lines() {
+        let trimmed = line.trim();
+        
+        // Check if we're starting a new rule
+        if !in_rule && (trimmed.starts_with("rust_") || trimmed.starts_with("load(")) {
+            in_rule = true;
+            current_block.clear();
+        }
+        
+        if in_rule {
+            current_block.push_str(line);
+            current_block.push('\n');
+            
+            // Count parentheses to determine when rule ends
+            for ch in line.chars() {
+                match ch {
+                    '(' => paren_count += 1,
+                    ')' => {
+                        paren_count -= 1;
+                        if paren_count == 0 {
+                            in_rule = false;
+                            blocks.push(current_block.clone());
+                            current_block.clear();
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
     }
+    
+    blocks
+}
 
+/// Get the rule type from a rule block
+fn get_rule_type(block: &str) -> Option<&str> {
+    let trimmed = block.trim_start();
+    if trimmed.starts_with("rust_test") {
+        Some("rust_test")
+    } else if trimmed.starts_with("rust_binary") {
+        Some("rust_binary")
+    } else if trimmed.starts_with("rust_library") {
+        Some("rust_library")
+    } else {
+        None
+    }
+}
+
+/// Extract an attribute value from a rule block
+fn extract_attribute(block: &str, attr_name: &str) -> Option<String> {
+    // Look for attr_name = "value" or attr_name = :value
+    let pattern = format!("{} =", attr_name);
+    if let Some(pos) = block.find(&pattern) {
+        let after_attr = &block[pos + pattern.len()..];
+        let value_part = after_attr.trim_start();
+        
+        if value_part.starts_with('"') {
+            // String value
+            if let Some(end_pos) = value_part[1..].find('"') {
+                return Some(value_part[1..1 + end_pos].to_string());
+            }
+        } else if value_part.starts_with('\'') {
+            // Single quoted string
+            if let Some(end_pos) = value_part[1..].find('\'') {
+                return Some(value_part[1..1 + end_pos].to_string());
+            }
+        } else if value_part.starts_with(':') {
+            // Label reference like :corex_lib
+            let end_pos = value_part[1..]
+                .find(|c: char| c == ',' || c == ')' || c.is_whitespace())
+                .unwrap_or(value_part.len() - 1);
+            return Some(value_part[0..1 + end_pos].to_string());
+        }
+    }
     None
+}
+
+/// Extract srcs list from a rule block
+fn extract_srcs(block: &str) -> Vec<String> {
+    let mut srcs = Vec::new();
+    
+    if let Some(srcs_pos) = block.find("srcs =") {
+        let after_srcs = &block[srcs_pos + 6..];
+        let trimmed = after_srcs.trim_start();
+        
+        if trimmed.starts_with('[') {
+            // Find the closing bracket
+            if let Some(end_pos) = trimmed.find(']') {
+                let list_content = &trimmed[1..end_pos];
+                // Extract quoted strings
+                let mut current = 0;
+                while current < list_content.len() {
+                    if let Some(quote_start) = list_content[current..].find('"') {
+                        let start = current + quote_start + 1;
+                        if let Some(quote_end) = list_content[start..].find('"') {
+                            srcs.push(list_content[start..start + quote_end].to_string());
+                            current = start + quote_end + 1;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    srcs
 }
 
 #[cfg(test)]
@@ -203,9 +316,11 @@ rust_test(
 
         assert_eq!(targets[0].name, "corex_lib");
         assert_eq!(targets[0].kind, BazelTargetKind::RustLibrary);
+        assert_eq!(targets[0].srcs, vec!["src/lib.rs"]);
 
         assert_eq!(targets[1].name, "corex_tests");
         assert_eq!(targets[1].kind, BazelTargetKind::RustTest);
+        assert_eq!(targets[1].crate_ref, Some(":corex_lib".to_string()));
     }
 
     #[test]

@@ -56,9 +56,10 @@ cargo check
    - Glob pattern support for flexible matching
 
 
-5. **Runner Module** (`src/runner.rs`)
-   - Main API entry point (`CargoRunner`)
-   - Coordinates all components
+5. **Runner Module** (`src/runner_v2/`)
+   - Main API entry point (`UnifiedRunner`)
+   - Supports multiple build systems (Cargo, Bazel)
+   - Coordinates all components with clean architecture
    - Provides high-level methods for runnable detection and command building
 
 ### Key Data Structures
@@ -72,16 +73,15 @@ cargo check
 ## Usage Example
 
 ```rust
-use cargo_runner::{CargoRunner, Config};
+use cargo_runner::{UnifiedRunner, Config};
 
-let mut runner = CargoRunner::new()?;
+let mut runner = UnifiedRunner::new()?;
 let file_path = Path::new("src/lib.rs");
 
 // Get runnable at specific line
 if let Some(runnable) = runner.get_best_runnable_at_line(file_path, 42)? {
-    if let Some(command) = runner.build_command_for_runnable(&runnable)? {
-        println!("Command: {}", command.to_shell_command());
-    }
+    let command = runner.build_command_for_runnable(&runnable)?;
+    println!("Command: {}", command.to_shell_command());
 }
 
 // Get all runnables in file

@@ -30,7 +30,7 @@ impl PackageSelection {
     pub fn is_workspace_mode(&self) -> bool {
         self.workspace || self.all
     }
-    
+
     pub fn validate(&self) -> Result<(), String> {
         if !self.package.is_empty() && self.is_workspace_mode() {
             return Err("Cannot specify both --package and --workspace/--all".to_string());
@@ -73,26 +73,35 @@ impl TargetSelection {
             self.lib,
             !self.bin.is_empty() || self.bins,
             !self.example.is_empty() || self.examples,
-        ].iter().filter(|&&x| x).count();
-        
+        ]
+        .iter()
+        .filter(|&&x| x)
+        .count();
+
         if target_count > 1 {
             return Err("Cannot specify multiple target types for run command".to_string());
         }
-        
+
         // Doc tests conflict with other test targets
         if self.doc && (self.lib || self.bins || self.tests || self.examples) {
             return Err("--doc cannot be used with other target selections".to_string());
         }
-        
+
         Ok(())
     }
-    
+
     pub fn has_specific_target(&self) -> bool {
-        self.lib || self.bins || !self.bin.is_empty() ||
-        self.examples || !self.example.is_empty() ||
-        self.tests || !self.test.is_empty() ||
-        self.benches || !self.bench.is_empty() ||
-        self.all_targets || self.doc
+        self.lib
+            || self.bins
+            || !self.bin.is_empty()
+            || self.examples
+            || !self.example.is_empty()
+            || self.tests
+            || !self.test.is_empty()
+            || self.benches
+            || !self.bench.is_empty()
+            || self.all_targets
+            || self.doc
     }
 }
 
@@ -112,11 +121,11 @@ impl FeatureSelection {
         if self.all_features && self.no_default_features {
             return Err("Cannot specify both --all-features and --no-default-features".to_string());
         }
-        
+
         if self.all_features && !self.features.is_empty() {
             return Err("Cannot specify both --all-features and --features".to_string());
         }
-        
+
         Ok(())
     }
 }
@@ -176,11 +185,11 @@ impl ManifestOptions {
         }
         Ok(())
     }
-    
+
     pub fn is_locked(&self) -> bool {
         self.locked || self.frozen
     }
-    
+
     pub fn is_offline(&self) -> bool {
         self.offline || self.frozen
     }
@@ -204,13 +213,13 @@ impl OutputOptions {
         if self.quiet && self.verbose > 0 {
             return Err("Cannot specify both --quiet and --verbose".to_string());
         }
-        
+
         if let Some(color) = &self.color {
             if !["auto", "always", "never"].contains(&color.as_str()) {
                 return Err(format!("Invalid color mode: {}", color));
             }
         }
-        
+
         Ok(())
     }
 }

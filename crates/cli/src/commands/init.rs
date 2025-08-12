@@ -75,11 +75,13 @@ pub fn init_command(
         project_root.display()
     );
 
-    // Set PROJECT_ROOT environment variable
-    unsafe {
-        env::set_var("PROJECT_ROOT", &project_root);
-    }
-    println!("✅ Set PROJECT_ROOT to: {}", project_root.display());
+    // Create a .cargo-runner.env file for easy sourcing
+    let env_file_path = project_root.join(".cargo-runner.env");
+    let env_content = format!("export PROJECT_ROOT=\"{}\"", project_root.display());
+    fs::write(&env_file_path, &env_content)
+        .with_context(|| format!("Failed to write env file to {}", env_file_path.display()))?;
+
+    println!("✅ Created environment file: {}", env_file_path.display());
 
     // Find all Cargo.toml files recursively, excluding bazel directories
     let mut cargo_tomls = Vec::new();
@@ -174,8 +176,10 @@ pub fn init_command(
         );
     }
 
-    // Print instructions for persisting PROJECT_ROOT
-    println!("\n📌 To persist PROJECT_ROOT, add to your shell profile:");
+    // Print instructions for using PROJECT_ROOT
+    println!("\n📌 To use PROJECT_ROOT in your current shell:");
+    println!("   source {}", env_file_path.display());
+    println!("\n   Or add to your shell profile (~/.bashrc, ~/.zshrc, etc.):");
     println!("   export PROJECT_ROOT=\"{}\"", project_root.display());
 
     Ok(())

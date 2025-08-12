@@ -178,6 +178,11 @@ pub fn print_formatted_analysis(
                 );
             }
 
+            // Debug: show module path
+            if !runnable.module_path.is_empty() {
+                println!("   📍 Module path: {}", runnable.module_path);
+            }
+
             // Show attributes if present
             if let Some(ref extended) = runnable.extended_scope {
                 if extended.attribute_lines > 0 {

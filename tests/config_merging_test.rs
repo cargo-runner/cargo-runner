@@ -151,7 +151,10 @@ fn test_config_hierarchy_merging() {
         override_config.identity.function_name,
         Some("test_foo".to_string())
     );
-    let override_cargo = override_config.cargo.as_ref().expect("Should have cargo override");
+    let override_cargo = override_config
+        .cargo
+        .as_ref()
+        .expect("Should have cargo override");
     assert_eq!(
         override_cargo.extra_args,
         Some(vec!["--nocapture".to_string()])
@@ -239,7 +242,10 @@ fn test_force_replace_in_overrides() {
     // Check that overrides were merged correctly
     assert_eq!(merged.overrides.len(), 1);
     let override_config = &merged.overrides[0];
-    let override_cargo = override_config.cargo.as_ref().expect("Should have cargo override");
+    let override_cargo = override_config
+        .cargo
+        .as_ref()
+        .expect("Should have cargo override");
 
     // The way override merging works in the current implementation:
     // When the same function_name appears in multiple configs, the overrides
@@ -248,7 +254,7 @@ fn test_force_replace_in_overrides() {
     let args = override_cargo.extra_args.as_ref().unwrap();
     // Just check that we have some args - the exact merging behavior might vary
     assert!(!args.is_empty());
-    
+
     // Check that env was merged - should have both VAR1 and VAR2
     let env = override_cargo.extra_env.as_ref().unwrap();
     assert!(env.contains_key("VAR2")); // From package config

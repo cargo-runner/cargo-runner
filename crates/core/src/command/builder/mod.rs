@@ -217,16 +217,24 @@ impl<'a> CommandBuilder<'a> {
                 }
 
                 // Check if file is part of a Cargo project BEFORE checking standalone
-                let cargo_root = self
-                    .runnable
-                    .file_path
+                // First, resolve the file path to absolute if it's relative
+                let file_path = if self.runnable.file_path.is_absolute() {
+                    self.runnable.file_path.clone()
+                } else {
+                    std::env::current_dir()
+                        .ok()
+                        .map(|cwd| cwd.join(&self.runnable.file_path))
+                        .unwrap_or_else(|| self.runnable.file_path.clone())
+                };
+                
+                let cargo_root = file_path
                     .ancestors()
                     .find(|p| p.join("Cargo.toml").exists());
 
                 match cargo_root {
                     Some(root) => {
                         // Check if the file is in a standard Cargo source location
-                        if let Ok(relative) = self.runnable.file_path.strip_prefix(root) {
+                        if let Ok(relative) = file_path.strip_prefix(root) {
                             let path_str = relative.to_str().unwrap_or("");
 
                             tracing::debug!("detect_file_type: relative path = {}", path_str);
@@ -243,7 +251,7 @@ impl<'a> CommandBuilder<'a> {
                                     "detect_file_type: detected as CargoProject (standard location)"
                                 );
                                 Ok(FileType::CargoProject)
-                            } else if self.is_standalone_file(&self.runnable.file_path) {
+                            } else if self.is_standalone_file(&file_path) {
                                 // File is in a Cargo project but not in standard location and has appropriate content
                                 tracing::debug!(
                                     "detect_file_type: detected as Standalone (non-standard location with appropriate content)"
@@ -263,7 +271,7 @@ impl<'a> CommandBuilder<'a> {
                     None => {
                         tracing::debug!("detect_file_type: no Cargo.toml found");
                         // No Cargo.toml found, check if it's standalone
-                        if self.is_standalone_file(&self.runnable.file_path) {
+                        if self.is_standalone_file(&file_path) {
                             tracing::debug!(
                                 "detect_file_type: detected as Standalone (no cargo root, has appropriate content)"
                             );

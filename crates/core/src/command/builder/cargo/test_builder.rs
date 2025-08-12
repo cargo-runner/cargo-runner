@@ -25,7 +25,7 @@ impl CommandBuilderImpl for TestCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        tracing::debug!(
+        tracing::warn!(
             "TestCommandBuilder::build called for {:?}, package={:?}",
             runnable.file_path,
             package
@@ -68,8 +68,10 @@ impl CommandBuilderImpl for TestCommandBuilder {
 
         // Add package
         if let Some(pkg) = package {
-            args.push("--package".to_string());
-            args.push(pkg.to_string());
+            if !pkg.is_empty() {
+                args.push("--package".to_string());
+                args.push(pkg.to_string());
+            }
         }
 
         // Get test framework for checking if we're using default cargo test
@@ -86,6 +88,17 @@ impl CommandBuilderImpl for TestCommandBuilder {
         builder.add_test_filter(&mut args, runnable, config, file_type);
 
         let mut command = CargoCommand::new(args);
+
+        // Set working directory to cargo root
+        if let Some(cargo_root) = builder.find_cargo_root(&runnable.file_path) {
+            tracing::debug!(
+                "Setting working directory for test command to: {:?}",
+                cargo_root
+            );
+            command = command.with_working_dir(cargo_root.to_string_lossy().to_string());
+        } else {
+            tracing::debug!("No cargo root found for: {:?}", runnable.file_path);
+        }
 
         // Apply test framework env
         if let Some(test_framework) = builder.get_test_framework(config, file_type) {
@@ -148,10 +161,20 @@ impl TestCommandBuilder {
 
         // For tests in library source files (src/**/*.rs, excluding main.rs and bin/), add --lib flag
         // Only if using default cargo test command
+        tracing::debug!(
+            "Checking lib condition: is_default_test={}, path_str={}, contains_src={}, starts_with_src={}, is_lib_rs={}, ends_with_main={}, contains_bin={}",
+            is_default_test,
+            path_str,
+            path_str.contains("/src/"),
+            path_str.starts_with("src/"),
+            path_str == "lib.rs",
+            path_str.ends_with("/main.rs") || path_str.ends_with("main.rs"),
+            path_str.contains("/bin/")
+        );
         if is_default_test
-            && path_str.contains("/src/")
-            && !path_str.ends_with("/src/main.rs")
-            && !path_str.contains("/src/bin/")
+            && ((path_str.contains("/src/") || path_str.starts_with("src/") || path_str == "lib.rs")
+                && !path_str.ends_with("/main.rs") && !path_str.ends_with("main.rs")
+                && !path_str.contains("/bin/"))
         {
             tracing::debug!(
                 "Adding --lib for tests in library source file: {}",

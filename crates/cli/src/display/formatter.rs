@@ -1,10 +1,36 @@
 use std::path::Path;
 
 pub fn determine_file_type(path: &Path) -> String {
-    let path_str = path.to_str().unwrap_or("");
+    // Convert to absolute path for consistent checking
+    let abs_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .ok()
+            .map(|cwd| cwd.join(path))
+            .unwrap_or_else(|| path.to_path_buf())
+    };
+    
+    let path_str = abs_path.to_str().unwrap_or("");
+
+    // Check if it's in a Bazel project
+    let has_bazel = abs_path.ancestors().any(|p| {
+        p.join("BUILD.bazel").exists() 
+        || p.join("BUILD").exists()
+        || p.join("WORKSPACE").exists()
+        || p.join("WORKSPACE.bazel").exists()
+    });
+    
+    if has_bazel {
+        if path_str.ends_with("/src/main.rs") || path_str.ends_with("main.rs") {
+            return "Binary (main.rs)".to_string();
+        } else {
+            return "Bazel Rust file".to_string();
+        }
+    }
 
     // Check if it's a standalone file (no Cargo.toml in parents)
-    let has_cargo_toml = path.ancestors().any(|p| p.join("Cargo.toml").exists());
+    let has_cargo_toml = abs_path.ancestors().any(|p| p.join("Cargo.toml").exists());
 
     if !has_cargo_toml {
         // Check if it's a cargo script file

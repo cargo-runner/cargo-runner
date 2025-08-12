@@ -18,7 +18,7 @@ pub fn override_command(filepath_arg: &str, root: bool, override_args: Vec<Strin
     }
 
     // Create a runner to detect the runnable at the given location
-    let mut runner = cargo_runner_core::CargoRunner::new()?;
+    let mut runner = cargo_runner_core::UnifiedRunner::new()?;
 
     // Resolve the file path
     let resolved_path = runner.resolve_file_path(&filepath)?;

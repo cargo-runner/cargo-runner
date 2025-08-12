@@ -3,15 +3,15 @@
 use crate::{
     config::{Config, Override},
     error::Result,
-    runner_v2::validation::{cargo_validation_rules, bazel_validation_rules, ValidationRuleSet},
     runner_v2::options::CommandOptions,
+    runner_v2::validation::{ValidationRuleSet, bazel_validation_rules, cargo_validation_rules},
 };
 
 /// Trait for validating configurations
 pub trait ConfigValidator {
     /// Validate the entire configuration
     fn validate(&self, config: &Config) -> Result<()>;
-    
+
     /// Validate a specific override
     fn validate_override(&self, override_config: &Override) -> Result<()>;
 }
@@ -29,15 +29,15 @@ impl MainConfigValidator {
             bazel_rules: bazel_validation_rules(),
         }
     }
-    
+
     /// Parse command line arguments into CommandOptions
     fn parse_args_to_options(&self, args: &[String]) -> Result<CommandOptions> {
         let mut options = CommandOptions::default();
-        
+
         let mut i = 0;
         while i < args.len() {
             let arg = &args[i];
-            
+
             match arg.as_str() {
                 // Package selection
                 "-p" | "--package" => {
@@ -58,7 +58,7 @@ impl MainConfigValidator {
                         options.package_selection.exclude.push(args[i].clone());
                     }
                 }
-                
+
                 // Target selection
                 "--lib" => {
                     options.target_selection.lib = true;
@@ -87,15 +87,16 @@ impl MainConfigValidator {
                 "--all-targets" => {
                     options.target_selection.all_targets = true;
                 }
-                
+
                 // Feature selection
                 "-F" | "--features" => {
                     i += 1;
                     if i < args.len() {
                         // Split comma-separated features
-                        options.feature_selection.features.extend(
-                            args[i].split(',').map(|s| s.trim().to_string())
-                        );
+                        options
+                            .feature_selection
+                            .features
+                            .extend(args[i].split(',').map(|s| s.trim().to_string()));
                     }
                 }
                 "--all-features" => {
@@ -104,7 +105,7 @@ impl MainConfigValidator {
                 "--no-default-features" => {
                     options.feature_selection.no_default_features = true;
                 }
-                
+
                 // Compilation options
                 "-r" | "--release" => {
                     options.compilation_options.release = true;
@@ -123,7 +124,7 @@ impl MainConfigValidator {
                         }
                     }
                 }
-                
+
                 // Output options
                 "-q" | "--quiet" => {
                     options.output_options.quiet = true;
@@ -134,15 +135,15 @@ impl MainConfigValidator {
                 "-vv" => {
                     options.output_options.verbose = 2;
                 }
-                
+
                 _ => {
                     // Skip unknown arguments
                 }
             }
-            
+
             i += 1;
         }
-        
+
         Ok(options)
     }
 }
@@ -153,7 +154,7 @@ impl ConfigValidator for MainConfigValidator {
         for override_config in &config.overrides {
             self.validate_override(override_config)?;
         }
-        
+
         // Validate cargo config if present
         if let Some(cargo_config) = &config.cargo {
             // Validate extra_args if present
@@ -161,7 +162,7 @@ impl ConfigValidator for MainConfigValidator {
                 let options = self.parse_args_to_options(extra_args)?;
                 self.cargo_rules.validate(&options)?;
             }
-            
+
             // Validate binary_framework args
             if let Some(framework) = &cargo_config.binary_framework {
                 if let Some(extra_args) = &framework.extra_args {
@@ -169,7 +170,7 @@ impl ConfigValidator for MainConfigValidator {
                     self.cargo_rules.validate(&options)?;
                 }
             }
-            
+
             // Validate test_framework args
             if let Some(framework) = &cargo_config.test_framework {
                 if let Some(extra_args) = &framework.extra_args {
@@ -178,7 +179,7 @@ impl ConfigValidator for MainConfigValidator {
                 }
             }
         }
-        
+
         // Validate bazel config if present
         if let Some(bazel_config) = &config.bazel {
             // Validate framework args for each framework type
@@ -188,7 +189,7 @@ impl ConfigValidator for MainConfigValidator {
                 &bazel_config.benchmark_framework,
                 &bazel_config.doc_test_framework,
             ];
-            
+
             for framework_opt in frameworks {
                 if let Some(framework) = framework_opt {
                     if let Some(extra_args) = &framework.extra_args {
@@ -198,10 +199,10 @@ impl ConfigValidator for MainConfigValidator {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     fn validate_override(&self, override_config: &Override) -> Result<()> {
         // Validate cargo override
         if let Some(cargo_override) = &override_config.cargo {
@@ -210,7 +211,7 @@ impl ConfigValidator for MainConfigValidator {
                 self.cargo_rules.validate(&options)?;
             }
         }
-        
+
         // Validate bazel override
         if let Some(bazel_override) = &override_config.bazel {
             // Validate framework args for each framework type
@@ -220,7 +221,7 @@ impl ConfigValidator for MainConfigValidator {
                 &bazel_override.benchmark_framework,
                 &bazel_override.doc_test_framework,
             ];
-            
+
             for framework_opt in frameworks {
                 if let Some(framework) = framework_opt {
                     if let Some(extra_args) = &framework.extra_args {
@@ -230,7 +231,7 @@ impl ConfigValidator for MainConfigValidator {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -242,12 +243,12 @@ impl Config {
         let validator = MainConfigValidator::new();
         validator.validate(self)
     }
-    
+
     /// Save with validation
     pub fn save_validated(&self, path: &std::path::Path) -> Result<()> {
         // Validate before saving
         self.validate()?;
-        
+
         // Use the regular save_to_file method
         self.save_to_file(path)
     }

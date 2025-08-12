@@ -32,16 +32,16 @@ impl FrameworkKind {
 pub trait Framework: Send + Sync {
     /// Get the framework name
     fn name(&self) -> &'static str;
-    
+
     /// Get the framework kind
     fn kind(&self) -> FrameworkKind;
-    
+
     /// Validate options specific to this framework
     fn validate_options(&self, options: &FrameworkOptions) -> Result<()>;
-    
+
     /// Build command arguments for this framework
     fn build_args(&self, options: &FrameworkOptions) -> Vec<String>;
-    
+
     /// Get the base command for this framework (e.g., "test", "run", "bench")
     fn base_command(&self) -> &'static str;
 }
@@ -51,13 +51,13 @@ pub trait Framework: Send + Sync {
 pub struct FrameworkOptions {
     /// Test-specific options
     pub test_options: Option<TestOptions>,
-    
+
     /// Binary-specific options  
     pub binary_options: Option<BinaryOptions>,
-    
+
     /// Benchmark-specific options
     pub benchmark_options: Option<BenchmarkOptions>,
-    
+
     /// DocTest-specific options
     pub doctest_options: Option<DocTestOptions>,
 }
@@ -101,25 +101,25 @@ impl Framework for TestFramework {
     fn name(&self) -> &'static str {
         "test"
     }
-    
+
     fn kind(&self) -> FrameworkKind {
         FrameworkKind::Test
     }
-    
+
     fn validate_options(&self, options: &FrameworkOptions) -> Result<()> {
         if let Some(test_opts) = &options.test_options {
             if test_opts.ignored && test_opts.include_ignored {
                 return Err(crate::error::Error::Other(
-                    "--ignored and --include-ignored cannot be used together".to_string()
+                    "--ignored and --include-ignored cannot be used together".to_string(),
                 ));
             }
         }
         Ok(())
     }
-    
+
     fn build_args(&self, options: &FrameworkOptions) -> Vec<String> {
         let mut args = vec![];
-        
+
         if let Some(test_opts) = &options.test_options {
             if test_opts.no_run {
                 args.push("--no-run".to_string());
@@ -141,10 +141,10 @@ impl Framework for TestFramework {
                 args.push(threads.to_string());
             }
         }
-        
+
         args
     }
-    
+
     fn base_command(&self) -> &'static str {
         "test"
     }
@@ -157,28 +157,28 @@ impl Framework for BinaryFramework {
     fn name(&self) -> &'static str {
         "run"
     }
-    
+
     fn kind(&self) -> FrameworkKind {
         FrameworkKind::Binary
     }
-    
+
     fn validate_options(&self, _options: &FrameworkOptions) -> Result<()> {
         Ok(())
     }
-    
+
     fn build_args(&self, options: &FrameworkOptions) -> Vec<String> {
         let mut args = vec![];
-        
+
         if let Some(binary_opts) = &options.binary_options {
             if !binary_opts.args.is_empty() {
                 args.push("--".to_string());
                 args.extend(binary_opts.args.clone());
             }
         }
-        
+
         args
     }
-    
+
     fn base_command(&self) -> &'static str {
         "run"
     }
@@ -191,18 +191,18 @@ impl Framework for BenchmarkFramework {
     fn name(&self) -> &'static str {
         "bench"
     }
-    
+
     fn kind(&self) -> FrameworkKind {
         FrameworkKind::Benchmark
     }
-    
+
     fn validate_options(&self, _options: &FrameworkOptions) -> Result<()> {
         Ok(())
     }
-    
+
     fn build_args(&self, options: &FrameworkOptions) -> Vec<String> {
         let mut args = vec![];
-        
+
         if let Some(bench_opts) = &options.benchmark_options {
             if bench_opts.no_run {
                 args.push("--no-run".to_string());
@@ -211,10 +211,10 @@ impl Framework for BenchmarkFramework {
                 args.push("--no-fail-fast".to_string());
             }
         }
-        
+
         args
     }
-    
+
     fn base_command(&self) -> &'static str {
         "bench"
     }
@@ -227,18 +227,18 @@ impl Framework for DocTestFramework {
     fn name(&self) -> &'static str {
         "test"
     }
-    
+
     fn kind(&self) -> FrameworkKind {
         FrameworkKind::DocTest
     }
-    
+
     fn validate_options(&self, _options: &FrameworkOptions) -> Result<()> {
         Ok(())
     }
-    
+
     fn build_args(&self, options: &FrameworkOptions) -> Vec<String> {
         let mut args = vec!["--doc".to_string()];
-        
+
         if let Some(doctest_opts) = &options.doctest_options {
             if doctest_opts.no_run {
                 args.push("--no-run".to_string());
@@ -248,10 +248,10 @@ impl Framework for DocTestFramework {
                 args.extend(doctest_opts.test_args.clone());
             }
         }
-        
+
         args
     }
-    
+
     fn base_command(&self) -> &'static str {
         "test"
     }

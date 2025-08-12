@@ -57,8 +57,10 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
 
         // Add package
         if let Some(pkg) = package {
-            args.push("--package".to_string());
-            args.push(pkg.to_string());
+            if !pkg.is_empty() {
+                args.push("--package".to_string());
+                args.push(pkg.to_string());
+            }
         }
 
         // Apply configuration
@@ -72,6 +74,12 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
         builder.apply_test_binary_args(&mut args, runnable, config, file_type);
 
         let mut command = CargoCommand::new(args);
+
+        // Set working directory to cargo root
+        if let Some(cargo_root) = builder.find_cargo_root(&runnable.file_path) {
+            command = command.with_working_dir(cargo_root.to_string_lossy().to_string());
+        }
+
         builder.apply_common_config(
             &mut command,
             config,
