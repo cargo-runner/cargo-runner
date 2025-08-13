@@ -1,6 +1,6 @@
 use crate::{
     error::Result,
-    parser::{RustParser, scope_detector::ScopeDetector},
+    parser::RustParser,
     patterns::{
         BenchmarkPattern, BinaryPattern, DocTestPattern, ModTestPattern, Pattern, TestFnPattern,
     },
@@ -33,14 +33,14 @@ impl RunnableDetector {
         line: Option<u32>,
     ) -> Result<Vec<Runnable>> {
         let source = std::fs::read_to_string(file_path)?;
-        let tree = self.parser.parse(&source)?;
-        let mut detector = ScopeDetector::new();
-        let extended_scopes = detector.detect_scopes(&tree, &source, file_path)?;
+        
+        // Use RustParser's methods instead of duplicating logic
+        let extended_scopes = self.parser.get_extended_scopes(&source, file_path)?;
+        let doc_tests = self.parser.find_doc_tests(&source)?;
 
         let mut runnables = Vec::new();
 
         // Detect doc tests
-        let doc_tests = detector.find_doc_tests(&tree.root_node(), &source);
         for (start, end, _text) in doc_tests {
             tracing::debug!(
                 "Found doc test at lines {}-{}", 

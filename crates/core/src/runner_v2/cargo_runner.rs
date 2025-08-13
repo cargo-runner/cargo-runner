@@ -6,7 +6,7 @@ use crate::{
     command::CargoCommand,
     config::Config,
     error::Result,
-    parser::{RustParser, module_resolver::ModuleResolver, scope_detector::ScopeDetector},
+    parser::{RustParser, module_resolver::ModuleResolver},
     patterns::RunnableDetector,
     types::{FileType, Runnable},
 };
@@ -51,10 +51,7 @@ impl CommandRunner for CargoRunner {
             // Parse the file to get all scopes for module resolution
             let source = std::fs::read_to_string(file_path)?;
             let mut parser = RustParser::new()?;
-            let tree = parser.parse(&source)?;
-            let mut scope_detector = ScopeDetector::new();
-            let extended_scopes = scope_detector.detect_scopes(&tree, &source, file_path)?;
-            let scopes: Vec<_> = extended_scopes.iter().map(|es| es.scope.clone()).collect();
+            let scopes = parser.get_scopes(&source, file_path)?;
 
             // Resolve module paths for each runnable
             for runnable in &mut runnables {
@@ -103,10 +100,7 @@ impl CommandRunner for CargoRunner {
             // Parse the file to get all scopes for module resolution
             let source = std::fs::read_to_string(file_path)?;
             let mut parser = RustParser::new()?;
-            let tree = parser.parse(&source)?;
-            let mut scope_detector = ScopeDetector::new();
-            let extended_scopes = scope_detector.detect_scopes(&tree, &source, file_path)?;
-            let scopes: Vec<_> = extended_scopes.iter().map(|es| es.scope.clone()).collect();
+            let scopes = parser.get_scopes(&source, file_path)?;
 
             // Resolve module path
             match resolver.resolve_module_path(file_path, &scopes, &runnable.scope) {

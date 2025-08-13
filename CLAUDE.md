@@ -4,16 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the cargo-runner project, a Rust library that provides sophisticated scope-based detection of runnable code (tests, benchmarks, binaries, doc tests) and builds appropriate cargo commands. It uses tree-sitter for AST parsing and supports configuration overrides and caching.
+This is **windrunner** (cargo-runner), a Rust tool that provides sophisticated scope-based detection of runnable code (tests, benchmarks, binaries, doc tests) and builds appropriate cargo commands. It uses tree-sitter for AST parsing and supports multiple build systems (Cargo, Bazel), configuration overrides, and caching.
 
 ## Development Commands
 
 ```bash
-# Build the project
+# Build the entire workspace
 cargo build
 
-# Run tests
+# Run all tests  
 cargo test
+
+# Run tests for a specific crate
+cargo test -p cargo-runner-core
+cargo test -p cargo-runner
+
+# Run a specific test
+cargo test test_detect_test_function -- --exact
 
 # Format code
 cargo fmt
@@ -21,104 +28,139 @@ cargo fmt
 # Run linter
 cargo clippy
 
-# Run a specific test
-cargo test test_detect_test_function -- --exact
-
-# Run examples
-cargo run --example basic_usage
-
 # Check compilation
 cargo check
+
+# Run examples
+cargo run --example showcase
+cargo run --example demo
+
+# Install the CLI tool
+cargo install --path crates/cli
+
+# Use the CLI
+cargo runner analyze src/main.rs:10
+cargo runner run src/main.rs:42
 ```
 
 ## Architecture
 
-### Core Components
+### Workspace Structure
 
-1. **Parser Module** (`src/parser/`)
+- **`crates/core/`**: Core library with all detection and command building logic
+- **`crates/cli/`**: CLI binary that uses the core library
+- **Root package**: Integration tests and examples
+
+### Core Components (`crates/core/src/`)
+
+1. **Parser Module** (`parser/`)
    - `RustParser`: Tree-sitter based Rust code parser
-   - `ScopeDetector`: Detects and builds scope hierarchy
+   - `ScopeDetector`: Detects and builds scope hierarchy (functions, modules, impl blocks)
    - `ModuleResolver`: Resolves full module paths for items
 
-2. **Pattern Module** (`src/patterns/`)
+2. **Pattern Module** (`patterns/`)
    - `RunnableDetector`: Main entry point for detecting runnables
-   - Pattern traits for different runnable types (Test, Benchmark, Binary, DocTest)
+   - Specialized detectors: `TestPattern`, `BenchmarkPattern`, `BinaryPattern`, `DocTestPattern`, `ModTestPattern`
    - Handles line-based filtering and scoring
 
-3. **Command Module** (`src/command/`)
-   - `CommandBuilder`: Builds cargo commands from runnables
-   - `CargoCommand`: Represents a cargo command with args and environment
+3. **Command Module** (`command/`)
+   - `CommandBuilder`: Builds commands from runnables
+   - Build system specific builders: `cargo/`, `bazel/`, `rustc/`
+   - `CargoCommand`: Represents executable command with args and environment
    - Target detection from file paths
 
-4. **Config Module** (`src/config/`)
+4. **Config Module** (`config/`)
    - JSON-based configuration with pattern matching
    - Override system for cargo args, exec args, and environment variables
-   - Glob pattern support for flexible matching
+   - Supports Cargo, Bazel, and Rustc configurations
 
+5. **Runner V2 Module** (`runner_v2/`)
+   - `UnifiedRunner`: Main API entry point that manages all build systems
+   - `CargoRunner`, `BazelRunner`: Build system specific runners
+   - Backward compatible with legacy `CargoRunner` API
 
-5. **Runner Module** (`src/runner_v2/`)
-   - Main API entry point (`UnifiedRunner`)
-   - Supports multiple build systems (Cargo, Bazel)
-   - Coordinates all components with clean architecture
-   - Provides high-level methods for runnable detection and command building
+6. **Build System Module** (`build_system/`)
+   - Auto-detects build system (Cargo via Cargo.toml, Bazel via BUILD files)
+   - Extensible for new build systems
 
 ### Key Data Structures
 
-- `Scope`: Represents a code range with type (Function, Test, Module, etc.)
-- `Runnable`: Detected runnable item with scope, kind, and module path
-- `RunnableKind`: Enum for different runnable types
-- `FunctionIdentity`: Used for configuration matching
-- `Config`: Configuration with overrides
+- `Scope`: Code range with type (Function, Test, Module, etc.) and position info
+- `Runnable`: Detected runnable item with scope, kind, module path, and label
+- `RunnableKind`: Enum for Test, Benchmark, Binary, DocTest, ModuleTests, Standalone, SingleFileScript
+- `CargoCommand`: Executable command with program, args, env, and working directory
+- `Config`: Configuration with overrides for different build systems
 
-## Usage Example
+## CLI Commands
 
-```rust
-use cargo_runner::{UnifiedRunner, Config};
+The CLI supports both direct invocation (`cargo-runner`) and as cargo subcommand (`cargo runner`):
 
-let mut runner = UnifiedRunner::new()?;
-let file_path = Path::new("src/lib.rs");
-
-// Get runnable at specific line
-if let Some(runnable) = runner.get_best_runnable_at_line(file_path, 42)? {
-    let command = runner.build_command_for_runnable(&runnable)?;
-    println!("Command: {}", command.to_shell_command());
-}
-
-// Get all runnables in file
-let all_runnables = runner.detect_all_runnables(file_path)?;
-```
+- **`analyze <filepath>`**: List all runnables in a file
+- **`run <filepath>`**: Run code at specific location (supports `file.rs:line` syntax)
+- **`init`**: Create configuration file with options for rustc, single-file scripts
+- **`override <filepath>`**: Create override configuration for specific locations
+- **`unset`**: Remove configuration files
 
 ## Configuration
 
-Create a `cargo-runner.json` or `.cargo-runner.json` file:
+Configuration files (`.cargo-runner.json` or `cargo-runner.json`) support:
 
 ```json
 {
-  "overrides": [
-    {
+  "cargo": {
+    "overrides": [{
       "matcher": {
-        "module_path": "*::tests::*"
+        "module_path": "*::tests::*",
+        "function_name": "test_*"
       },
       "cargo_args": ["--release"],
-      "exec_args": ["--nocapture"]
-    }
-  ]
+      "exec_args": ["--nocapture"],
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }]
+  },
+  "bazel": {
+    "overrides": [{
+      "matcher": {
+        "target": "//src:*_test"
+      },
+      "bazel_args": ["--test_output=all"]
+    }]
+  }
 }
 ```
 
-## Important Implementation Details
+## Testing Patterns
 
-1. **Tree-sitter Integration**: Uses tree-sitter-rust for accurate AST parsing
-2. **Attribute Detection**: Properly detects `#[test]`, `#[bench]`, etc. by checking previous siblings
-3. **Doc Test Detection**: Scans for `///` comments with code blocks
-4. **Module Path Resolution**: Combines file path and inline module hierarchy
-5. **Smart Scoring**: Prioritizes specific runnables over module-level runners
+Tests are organized by module with `#[cfg(test)]` blocks:
 
-## Testing
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_functionality() {
+        // test code
+    }
+}
+```
 
-The codebase includes comprehensive tests for all components. Key test areas:
-- Scope detection accuracy
-- Pattern matching for different runnable types
-- Module path resolution
-- Command building with various targets
-- Configuration override system
+## Build System Support
+
+1. **Cargo**: Default for Rust projects with Cargo.toml
+2. **Bazel**: Detected by BUILD/BUILD.bazel files
+3. **Rustc**: Fallback for standalone files without build system
+
+The `UnifiedRunner` automatically detects and uses the appropriate build system.
+
+## Key Implementation Details
+
+- **Tree-sitter Integration**: Provides accurate AST parsing without compilation
+- **Attribute Detection**: Checks previous siblings for `#[test]`, `#[bench]` attributes
+- **Doc Test Detection**: Scans `///` comments for code blocks with special handling
+- **Module Path Resolution**: Combines file path and inline module hierarchy
+- **Smart Scoring**: Prioritizes specific runnables over module-level runners
+- **Extended Scopes**: Tracks doc comments for better doc test detection
+- **Configuration Matching**: Uses glob patterns and specific matchers for flexibility
