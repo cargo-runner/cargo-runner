@@ -3,8 +3,8 @@
 use crate::{
     config::{Config, Override},
     error::Result,
-    runner_v2::options::CommandOptions,
-    runner_v2::validation::{ValidationRuleSet, bazel_validation_rules, cargo_validation_rules},
+    runners::options::CommandOptions,
+    runners::validation::{ValidationRuleSet, bazel_validation_rules, cargo_validation_rules},
 };
 
 /// Trait for validating configurations

@@ -13,8 +13,8 @@ pub mod parser;
 pub mod patterns;
 pub mod types;
 
-// New runner architecture
-pub mod runner_v2;
+// Runner architecture
+pub mod runners;
 
 // Re-export commonly used types and traits
 pub use error::{Error, Result};
@@ -24,8 +24,8 @@ pub use types::*;
 pub use command::{CargoCommand, CommandType};
 pub use config::Config;
 
-// Export the new unified runner
-pub use runner_v2::UnifiedRunner;
+// Export the unified runner
+pub use runners::UnifiedRunner;
 
 // Legacy alias for backwards compatibility
-pub use runner_v2::UnifiedRunner as CargoRunner;
+pub use runners::UnifiedRunner as CargoRunner;
