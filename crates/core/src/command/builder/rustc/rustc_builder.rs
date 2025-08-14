@@ -370,7 +370,7 @@ impl RustcCommandBuilder {
             .and_then(|p| p.to_str())
             .filter(|p| !p.is_empty())
             .unwrap_or(".");
-        
+
         if is_test {
             vec![
                 "--test".to_string(),
@@ -412,7 +412,7 @@ impl RustcCommandBuilder {
             .and_then(|p| p.to_str())
             .filter(|p| !p.is_empty())
             .unwrap_or(".");
-            
+
         vec![
             "--crate-type".to_string(),
             "bin".to_string(),
@@ -447,7 +447,7 @@ impl RustcCommandBuilder {
             .and_then(|p| p.to_str())
             .filter(|p| !p.is_empty())
             .unwrap_or(".");
-            
+
         vec![
             "--test".to_string(),
             source_file.to_str().unwrap_or("").to_string(),

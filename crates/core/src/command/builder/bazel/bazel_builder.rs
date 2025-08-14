@@ -379,7 +379,7 @@ impl BazelCommandBuilder {
                 .map(|cwd| cwd.join(&runnable.file_path))
                 .unwrap_or_else(|| runnable.file_path.clone())
         };
-        
+
         // Check if using linked projects
         if let Some(cargo_config) = &config.cargo {
             if let Some(linked_projects) = &cargo_config.linked_projects {
@@ -393,13 +393,11 @@ impl BazelCommandBuilder {
                 }
             }
         }
-        
+
         // Find the workspace root
         let workspace_root = abs_file_path
             .ancestors()
-            .find(|p| {
-                p.join("MODULE.bazel").exists()
-            });
+            .find(|p| p.join("MODULE.bazel").exists());
 
         if let Some(workspace_root) = workspace_root {
             tracing::debug!(
@@ -512,7 +510,7 @@ impl BazelCommandBuilder {
                         continue;
                     }
                 }
-                
+
                 // Parse the BUILD file to find targets
                 let targets = super::target_detection::parse_bazel_targets(&build_file);
                 // Get the file path relative to the project directory
@@ -524,11 +522,13 @@ impl BazelCommandBuilder {
                         (true, super::target_detection::BazelTargetKind::RustTest) => true,
                         (false, super::target_detection::BazelTargetKind::RustBinary) => {
                             // For binaries, check if the target includes this file in srcs
-                            target.srcs.contains(&relative_path.to_str().unwrap_or("").to_string())
+                            target
+                                .srcs
+                                .contains(&relative_path.to_str().unwrap_or("").to_string())
                         }
                         _ => false,
                     };
-                    
+
                     if is_match {
                         let bazel_target = format!("{}:{}", bazel_package, target.name);
                         return Some(bazel_target);
@@ -536,10 +536,10 @@ impl BazelCommandBuilder {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Get Bazel package path from linked project path
     /// e.g. /Users/uriah/Code/yoyo/combos/frontend/Cargo.toml -> //combos/frontend
     fn get_bazel_package_from_linked_project(&self, linked_project: &Path) -> Option<String> {
@@ -553,21 +553,24 @@ impl BazelCommandBuilder {
                 .find(|p| p.join("MODULE.bazel").exists())?
                 .to_path_buf()
         };
-        
+
         // Get the parent directory of the Cargo.toml
         let project_dir = linked_project.parent()?;
-        
+
         // Get relative path from PROJECT_ROOT to project directory
         let relative_path = project_dir.strip_prefix(&project_root).ok()?;
-        
+
         // Convert to Bazel package format
         if relative_path.as_os_str().is_empty() {
             Some("//".to_string())
         } else {
-            Some(format!("//{}", relative_path.display().to_string().replace('\\', "/")))
+            Some(format!(
+                "//{}",
+                relative_path.display().to_string().replace('\\', "/")
+            ))
         }
     }
-    
+
     /// Get override configuration for a runnable
     fn get_override<'a>(
         &self,

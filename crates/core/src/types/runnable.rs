@@ -78,7 +78,17 @@ pub struct RunnableWithScore {
 
 impl RunnableWithScore {
     pub fn new(runnable: Runnable) -> Self {
-        let range_size = runnable.scope.end.line - runnable.scope.start.line;
+        // For doc tests, use the parent scope size if available for better comparison
+        let range_size = if matches!(runnable.kind, RunnableKind::DocTest { .. }) {
+            if let Some(ref extended) = runnable.extended_scope {
+                extended.scope.end.line - extended.scope.start.line
+            } else {
+                runnable.scope.end.line - runnable.scope.start.line
+            }
+        } else {
+            runnable.scope.end.line - runnable.scope.start.line
+        };
+        
         let is_module_test = matches!(runnable.kind, RunnableKind::ModuleTests { .. });
         Self {
             runnable,
@@ -86,18 +96,36 @@ impl RunnableWithScore {
             is_module_test,
         }
     }
+    
+    /// Get priority score for the runnable (lower is better)
+    fn get_priority(&self) -> u32 {
+        match &self.runnable.kind {
+            // Specific tests have highest priority
+            RunnableKind::Test { .. } => 0,
+            RunnableKind::Benchmark { .. } => 0,
+            // Method doc tests have higher priority than type doc tests
+            RunnableKind::DocTest { method_name: Some(_), .. } => 1,
+            // Type/impl doc tests
+            RunnableKind::DocTest { method_name: None, .. } => 2,
+            // Binary
+            RunnableKind::Binary { .. } => 3,
+            // Module tests have lowest priority
+            RunnableKind::ModuleTests { .. } => 4,
+            // Others
+            _ => 5,
+        }
+    }
 }
 
 impl Ord for RunnableWithScore {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Module tests have lower priority than specific tests
-        if self.is_module_test && !other.is_module_test {
-            Ordering::Greater
-        } else if !self.is_module_test && other.is_module_test {
-            Ordering::Less
-        } else {
-            // Smaller scopes have higher priority
-            self.range_size.cmp(&other.range_size)
+        // First compare by scope size - smaller scope is more specific and wins
+        match self.range_size.cmp(&other.range_size) {
+            Ordering::Equal => {
+                // If same size, use priority (method doc test > impl doc test > struct doc test)
+                self.get_priority().cmp(&other.get_priority())
+            }
+            other => other,
         }
     }
 }

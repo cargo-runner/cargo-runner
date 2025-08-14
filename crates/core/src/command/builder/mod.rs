@@ -226,7 +226,7 @@ impl<'a> CommandBuilder<'a> {
                         .map(|cwd| cwd.join(&self.runnable.file_path))
                         .unwrap_or_else(|| self.runnable.file_path.clone())
                 };
-                
+
                 let cargo_root = file_path
                     .ancestors()
                     .find(|p| p.join("Cargo.toml").exists());

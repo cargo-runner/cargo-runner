@@ -172,8 +172,11 @@ impl TestCommandBuilder {
             path_str.contains("/bin/")
         );
         if is_default_test
-            && ((path_str.contains("/src/") || path_str.starts_with("src/") || path_str == "lib.rs")
-                && !path_str.ends_with("/main.rs") && !path_str.ends_with("main.rs")
+            && ((path_str.contains("/src/")
+                || path_str.starts_with("src/")
+                || path_str == "lib.rs")
+                && !path_str.ends_with("/main.rs")
+                && !path_str.ends_with("main.rs")
                 && !path_str.contains("/bin/"))
         {
             tracing::debug!(
@@ -209,9 +212,13 @@ impl TestCommandBuilder {
 
         // For tests in binary files (src/main.rs, src/bin/*.rs), add --bin flag
         // Only if using default cargo test command
-        if is_default_test && (path_str.ends_with("/src/main.rs") || path_str.contains("/src/bin/"))
+        let is_main_rs = path_str.ends_with("/src/main.rs") 
+            || path_str == "src/main.rs" 
+            || path_str == "main.rs";
+            
+        if is_default_test && (is_main_rs || path_str.contains("/src/bin/"))
         {
-            if path_str.ends_with("/src/main.rs") {
+            if is_main_rs {
                 // For src/main.rs, use package name as binary name
                 if let Some(pkg) = package {
                     tracing::debug!("Adding --bin {} for tests in src/main.rs", pkg);

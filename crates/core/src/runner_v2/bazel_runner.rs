@@ -51,7 +51,7 @@ impl CommandRunner for BazelRunner {
             runnable, None, // Bazel doesn't use package in the same way
             config, file_type,
         )?;
-        
+
         Ok(command)
     }
 

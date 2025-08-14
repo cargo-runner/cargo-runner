@@ -137,8 +137,11 @@ impl ModuleTestCommandBuilder {
         // For tests in library source files (src/**/*.rs, excluding main.rs and bin/), add --lib flag
         // Only if using default cargo test command
         if is_default_test
-            && ((path_str.contains("/src/") || path_str.starts_with("src/") || path_str == "lib.rs")
-                && !path_str.ends_with("/main.rs") && !path_str.ends_with("main.rs")
+            && ((path_str.contains("/src/")
+                || path_str.starts_with("src/")
+                || path_str == "lib.rs")
+                && !path_str.ends_with("/main.rs")
+                && !path_str.ends_with("main.rs")
                 && !path_str.contains("/bin/"))
         {
             tracing::debug!(
@@ -204,15 +207,23 @@ impl ModuleTestCommandBuilder {
         if let crate::types::RunnableKind::ModuleTests { module_name } = &runnable.kind {
             // For file-level commands on lib.rs files, don't add module filter
             // This allows running all tests in the library with just --lib
+            // But we should still add the module filter if module_name is not empty
             let path_str = runnable.file_path.to_str().unwrap_or("");
             tracing::debug!(
-                "add_module_filter: path_str={}, args={:?}, contains_lib={}",
+                "add_module_filter: path_str={}, args={:?}, contains_lib={}, module_name={}",
                 path_str,
                 args,
-                args.contains(&"--lib".to_string())
+                args.contains(&"--lib".to_string()),
+                module_name
             );
-            if args.contains(&"--lib".to_string()) && 
-               (path_str.ends_with("/lib.rs") || path_str == "lib.rs" || path_str.ends_with("/src/lib.rs")) {
+
+            // Skip module filter only for empty module names (file-level commands)
+            if args.contains(&"--lib".to_string())
+                && (path_str.ends_with("/lib.rs")
+                    || path_str == "lib.rs"
+                    || path_str.ends_with("/src/lib.rs"))
+                && module_name.is_empty()
+            {
                 tracing::debug!("Skipping module filter for file-level lib.rs command");
                 // Still apply test binary args if any
                 self.apply_test_binary_args(args, runnable, config, file_type);

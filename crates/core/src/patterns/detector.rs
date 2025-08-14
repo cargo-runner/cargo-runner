@@ -33,7 +33,7 @@ impl RunnableDetector {
         line: Option<u32>,
     ) -> Result<Vec<Runnable>> {
         let source = std::fs::read_to_string(file_path)?;
-        
+
         // Use RustParser's methods instead of duplicating logic
         let extended_scopes = self.parser.get_extended_scopes(&source, file_path)?;
         let doc_tests = self.parser.find_doc_tests(&source)?;
@@ -43,8 +43,8 @@ impl RunnableDetector {
         // Detect doc tests
         for (start, end, _text) in doc_tests {
             tracing::debug!(
-                "Found doc test at lines {}-{}", 
-                start.line + 1, 
+                "Found doc test at lines {}-{}",
+                start.line + 1,
                 end.line + 1
             );
             let scope = Scope {
@@ -75,8 +75,34 @@ impl RunnableDetector {
 
                     contains && at_start
                 })
-                // Prefer the smallest scope (most specific)
-                .min_by_key(|es| es.scope.end.line - es.scope.start.line)
+                // Prioritize by scope type first (Function > Impl > Struct), then by size
+                .min_by(|a, b| {
+                    use std::cmp::Ordering;
+                    
+                    // First, prioritize by scope kind
+                    let priority_a = match a.scope.kind {
+                        ScopeKind::Function => 0,  // Highest priority
+                        ScopeKind::Impl => 1,      // Medium priority
+                        ScopeKind::Struct => 2,    // Lower priority
+                        _ => 3,
+                    };
+                    let priority_b = match b.scope.kind {
+                        ScopeKind::Function => 0,
+                        ScopeKind::Impl => 1,
+                        ScopeKind::Struct => 2,
+                        _ => 3,
+                    };
+                    
+                    match priority_a.cmp(&priority_b) {
+                        Ordering::Equal => {
+                            // If same priority, prefer smaller scope (more specific)
+                            let size_a = a.scope.end.line - a.scope.start.line;
+                            let size_b = b.scope.end.line - b.scope.start.line;
+                            size_a.cmp(&size_b)
+                        }
+                        other => other,
+                    }
+                })
                 .cloned();
 
             if let Some(parent_ext) = parent_extended {
@@ -207,15 +233,18 @@ impl RunnableDetector {
 
         // Filter by line if specified
         if let Some(line) = line {
+            // Find all runnables that contain the line
             let mut scored_runnables: Vec<RunnableWithScore> = runnables
                 .into_iter()
                 .filter(|r| {
-                    // For doc tests with extended scope, check if line is within the extended scope
+                    // For doc tests with extended scope, check if line is within the parent scope
                     if matches!(r.kind, RunnableKind::DocTest { .. }) {
                         if let Some(ref extended) = r.extended_scope {
-                            // Check if line is within the extended scope (includes doc comments)
-                            line >= extended.scope.start.line && line <= extended.scope.end.line
+                            // For doc tests, check if the line is within the parent scope
+                            // (the function/impl/struct that contains this doc test)
+                            extended.scope.contains_line(line)
                         } else {
+                            // Fallback to checking the doc test scope itself
                             r.scope.contains_line(line)
                         }
                     } else {
@@ -225,6 +254,7 @@ impl RunnableDetector {
                 .map(RunnableWithScore::new)
                 .collect();
 
+            // Sort by scope size (smallest first) and priority
             scored_runnables.sort();
 
             Ok(scored_runnables.into_iter().map(|r| r.runnable).collect())

@@ -66,7 +66,7 @@ pub fn find_bazel_target_for_file(
     if is_test {
         // For test files, we need to find which rust_library contains this file
         // and then find which rust_test references that library
-        
+
         // First, find if any rust_library contains this file
         let mut library_name = None;
         for target in &targets {
@@ -77,7 +77,7 @@ pub fn find_bazel_target_for_file(
                 }
             }
         }
-        
+
         // If we found a library, look for a test that references it
         if let Some(lib_name) = library_name {
             for target in &targets {
@@ -98,7 +98,7 @@ pub fn find_bazel_target_for_file(
                 }
             }
         }
-        
+
         // Fall back to any rust_test target
         for target in &targets {
             if target.kind == BazelTargetKind::RustTest {
@@ -135,7 +135,7 @@ pub fn parse_bazel_targets(build_file_path: &Path) -> Vec<BazelTarget> {
     if let Ok(content) = fs::read_to_string(build_file_path) {
         // Split into rule blocks
         let rule_blocks = extract_rule_blocks(&content);
-        
+
         for block in rule_blocks {
             if let Some(rule_type) = get_rule_type(&block) {
                 if let Some(name) = extract_attribute(&block, "name") {
@@ -145,10 +145,10 @@ pub fn parse_bazel_targets(build_file_path: &Path) -> Vec<BazelTarget> {
                         "rust_library" => BazelTargetKind::RustLibrary,
                         _ => continue,
                     };
-                    
+
                     let srcs = extract_srcs(&block);
                     let crate_ref = extract_attribute(&block, "crate");
-                    
+
                     targets.push(BazelTarget {
                         name,
                         kind,
@@ -169,20 +169,20 @@ fn extract_rule_blocks(content: &str) -> Vec<String> {
     let mut current_block = String::new();
     let mut in_rule = false;
     let mut paren_count = 0;
-    
+
     for line in content.lines() {
         let trimmed = line.trim();
-        
+
         // Check if we're starting a new rule
         if !in_rule && (trimmed.starts_with("rust_") || trimmed.starts_with("load(")) {
             in_rule = true;
             current_block.clear();
         }
-        
+
         if in_rule {
             current_block.push_str(line);
             current_block.push('\n');
-            
+
             // Count parentheses to determine when rule ends
             for ch in line.chars() {
                 match ch {
@@ -200,7 +200,7 @@ fn extract_rule_blocks(content: &str) -> Vec<String> {
             }
         }
     }
-    
+
     blocks
 }
 
@@ -225,7 +225,7 @@ fn extract_attribute(block: &str, attr_name: &str) -> Option<String> {
     if let Some(pos) = block.find(&pattern) {
         let after_attr = &block[pos + pattern.len()..];
         let value_part = after_attr.trim_start();
-        
+
         if value_part.starts_with('"') {
             // String value
             if let Some(end_pos) = value_part[1..].find('"') {
@@ -250,11 +250,11 @@ fn extract_attribute(block: &str, attr_name: &str) -> Option<String> {
 /// Extract srcs list from a rule block
 fn extract_srcs(block: &str) -> Vec<String> {
     let mut srcs = Vec::new();
-    
+
     if let Some(srcs_pos) = block.find("srcs =") {
         let after_srcs = &block[srcs_pos + 6..];
         let trimmed = after_srcs.trim_start();
-        
+
         if trimmed.starts_with('[') {
             // Find the closing bracket
             if let Some(end_pos) = trimmed.find(']') {
@@ -277,7 +277,7 @@ fn extract_srcs(block: &str) -> Vec<String> {
             }
         }
     }
-    
+
     srcs
 }
 

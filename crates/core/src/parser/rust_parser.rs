@@ -52,10 +52,7 @@ impl RustParser {
         detector.detect_scopes(&tree, source, file_path)
     }
 
-    pub fn find_doc_tests(
-        &mut self,
-        source: &str,
-    ) -> Result<Vec<(Position, Position, String)>> {
+    pub fn find_doc_tests(&mut self, source: &str) -> Result<Vec<(Position, Position, String)>> {
         let tree = self.parse(source)?;
         let detector = ScopeDetector::new();
         Ok(detector.find_doc_tests(&tree.root_node(), source))

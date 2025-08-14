@@ -32,10 +32,15 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
                 struct_or_module_name,
                 method_name,
             } => {
+                // Strip "impl " prefix if present (used to differentiate impl blocks from structs)
+                let clean_name = struct_or_module_name
+                    .strip_prefix("impl ")
+                    .unwrap_or(struct_or_module_name);
+
                 if let Some(method) = method_name {
-                    format!("{}::{}", struct_or_module_name, method)
+                    format!("{}::{}", clean_name, method)
                 } else {
-                    struct_or_module_name.clone()
+                    clean_name.to_string()
                 }
             }
             _ => {

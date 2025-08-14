@@ -943,15 +943,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
 
 [[package]]
-name = "windrunner"
-version = "0.1.0"
-dependencies = [
- "cargo-runner-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "winnow"
 version = "0.7.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"

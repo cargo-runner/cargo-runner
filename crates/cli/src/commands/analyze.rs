@@ -9,8 +9,20 @@ use crate::utils::parser::parse_filepath_with_line;
 pub fn analyze_command(filepath_arg: &str, verbose: bool, show_config: bool) -> Result<()> {
     debug!("Analyzing file: {}", filepath_arg);
 
-    // Parse filepath and line number
+    // Parse filepath and line number first
     let (filepath, line) = parse_filepath_with_line(filepath_arg);
+    
+    // Check if file exists - resolve to absolute path
+    let filepath_path = Path::new(&filepath);
+    let absolute_path = if filepath_path.is_absolute() {
+        filepath_path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(filepath_path)
+    };
+    
+    if !absolute_path.exists() {
+        return Err(anyhow::anyhow!("File not found: {}", absolute_path.display()));
+    }
 
     let mut runner = cargo_runner_core::UnifiedRunner::new()?;
 

@@ -103,10 +103,14 @@ impl Commands {
     /// Execute the command
     pub fn execute(self) -> Result<()> {
         use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/cargo-runner-execute.log") {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/cargo-runner-execute.log")
+        {
             writeln!(f, "DEBUG Commands::execute called with: {:?}", self).ok();
         }
-        
+
         match self {
             Commands::Analyze {
                 filepath,
@@ -114,8 +118,16 @@ impl Commands {
                 config,
             } => analyze_command(&filepath, verbose, config),
             Commands::Run { filepath, dry_run } => {
-                if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open("/tmp/cargo-runner-execute.log") {
-                    writeln!(f, "DEBUG calling run_command with filepath={:?}, dry_run={}", filepath, dry_run).ok();
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .append(true)
+                    .open("/tmp/cargo-runner-execute.log")
+                {
+                    writeln!(
+                        f,
+                        "DEBUG calling run_command with filepath={:?}, dry_run={}",
+                        filepath, dry_run
+                    )
+                    .ok();
                 }
                 run_command(&filepath, dry_run)
             }
