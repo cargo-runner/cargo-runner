@@ -4,6 +4,7 @@
 //! - Parse Rust source files and detect runnable items (tests, benchmarks, binaries)
 //! - Generate appropriate cargo commands for running specific items
 //! - Support various project structures and configurations
+pub mod bazel;
 pub mod build_system;
 pub mod command;
 pub mod config;

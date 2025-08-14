@@ -46,6 +46,12 @@ pub fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
             }
         }
     } else {
+        // Check for Bazel doc test limitation
+        if let Some((_, msg)) = command.env.iter().find(|(k, _)| k == "_BAZEL_DOC_TEST_LIMITATION") {
+            eprintln!("Note: {}", msg);
+            eprintln!("Running all doc tests for the crate instead.");
+        }
+        
         let shell_cmd = command.to_shell_command();
         info!("Running: {}", shell_cmd);
         if let Some(ref dir) = command.working_dir {
