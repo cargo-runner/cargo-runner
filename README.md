@@ -78,12 +78,31 @@ cargo runner analyze /path/to/src/lib.rs:42
 
 **Example output:**
 ```
-Runnables in src/lib.rs:
-  Line 10: test "test_addition" 
-  Line 25: test "test_subtraction"
-  Line 40: benchmark "bench_multiply"
-  Line 55: doc test "Example::new"
-  Line 70: module tests "mod tests"
+✅ Found 7 runnable(s):
+
+1. Run doc test for 'User'
+   📏 Scope: lines 2-13
+   🚀 Final command: cargo test --doc --package project-a -- User
+
+2. Run doc test for 'User::new'
+   📏 Scope: lines 32-55
+   🚀 Final command: cargo test --doc --package project-a -- User::new
+
+3. Run doc test for 'User::echo'
+   📏 Scope: lines 57-67
+   🚀 Final command: cargo test --doc --package project-a -- User::echo
+
+4. Run all tests in module 'tests'
+   📏 Scope: lines 70-90
+   🚀 Final command: cargo test --package project-a --lib -- tests
+
+5. Run test 'test_it_works'
+   📏 Scope: lines 74-78
+   🚀 Final command: cargo test --package project-a --lib -- tests::test_it_works --exact
+
+6. Run test 'test_user'
+   📏 Scope: lines 80-89
+   🚀 Final command: cargo test --package project-a --lib -- tests::test_user --exact
 ```
 
 ## How It Works
@@ -151,12 +170,27 @@ Running: cargo test test_parse_config -- --exact
 $ cargo runner analyze /home/user/myproject/src/parser.rs
 
 # Output:
-Runnables found in /home/user/myproject/src/parser.rs:
-  Line 23: test "test_parse_string"
-  Line 45: test "test_parse_number" 
-  Line 67: test "test_parse_array"
-  Line 89: module "tests" (contains 3 tests)
-  Line 120: doc test "Parser::new"
+✅ Found 5 runnable(s):
+
+1. Run test 'test_parse_string'
+   📏 Scope: lines 23-35
+   🚀 Final command: cargo test --package myproject --lib -- tests::test_parse_string --exact
+
+2. Run test 'test_parse_number'
+   📏 Scope: lines 45-58
+   🚀 Final command: cargo test --package myproject --lib -- tests::test_parse_number --exact
+
+3. Run test 'test_parse_array'
+   📏 Scope: lines 67-79
+   🚀 Final command: cargo test --package myproject --lib -- tests::test_parse_array --exact
+
+4. Run all tests in module 'tests'
+   📏 Scope: lines 89-125
+   🚀 Final command: cargo test --package myproject --lib -- tests
+
+5. Run doc test for 'Parser::new'
+   📏 Scope: lines 120-135
+   🚀 Final command: cargo test --doc --package myproject -- Parser::new
 ```
 
 <details>
