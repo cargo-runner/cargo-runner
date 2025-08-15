@@ -413,4 +413,127 @@ mod tests {
         // Function names are not included in module paths - they're added by the command builder
         assert_eq!(module_path, "models::user::tests");
     }
+    
+    #[test]
+    fn test_bin_file_module_path() {
+        let resolver = ModuleResolver::with_package_name("my_crate".to_string());
+        
+        // Test that files in src/bin/ don't include 'bin' in the module path
+        let scopes = vec![
+            Scope {
+                start: Position {
+                    line: 1,
+                    character: 0,
+                },
+                end: Position {
+                    line: 100,
+                    character: 0,
+                },
+                kind: ScopeKind::File(crate::FileScope::Unknown),
+                name: None,
+            },
+            Scope {
+                start: Position {
+                    line: 10,
+                    character: 0,
+                },
+                end: Position {
+                    line: 50,
+                    character: 0,
+                },
+                kind: ScopeKind::Module,
+                name: Some("tests".to_string()),
+            },
+            Scope {
+                start: Position {
+                    line: 20,
+                    character: 0,
+                },
+                end: Position {
+                    line: 30,
+                    character: 0,
+                },
+                kind: ScopeKind::Function,
+                name: Some("test_proxy_binary".to_string()),
+            },
+        ];
+        
+        // Test src/bin/proxy.rs
+        let file_path = Path::new("/project/src/bin/proxy.rs");
+        let target = &scopes[2]; // test_proxy_binary
+        
+        let module_path = resolver
+            .resolve_module_path(file_path, &scopes, target)
+            .unwrap();
+        // The module path should NOT include 'bin::'
+        assert_eq!(module_path, "tests");
+    }
+    
+    #[test]
+    fn test_bin_subdir_module_path() {
+        let resolver = ModuleResolver::with_package_name("my_crate".to_string());
+        
+        // Test files in subdirectories under src/bin/
+        let scopes = vec![
+            Scope {
+                start: Position {
+                    line: 1,
+                    character: 0,
+                },
+                end: Position {
+                    line: 100,
+                    character: 0,
+                },
+                kind: ScopeKind::File(crate::FileScope::Unknown),
+                name: None,
+            },
+            Scope {
+                start: Position {
+                    line: 10,
+                    character: 0,
+                },
+                end: Position {
+                    line: 50,
+                    character: 0,
+                },
+                kind: ScopeKind::Module,
+                name: Some("server".to_string()),
+            },
+            Scope {
+                start: Position {
+                    line: 15,
+                    character: 0,
+                },
+                end: Position {
+                    line: 40,
+                    character: 0,
+                },
+                kind: ScopeKind::Module,
+                name: Some("tests".to_string()),
+            },
+            Scope {
+                start: Position {
+                    line: 20,
+                    character: 0,
+                },
+                end: Position {
+                    line: 30,
+                    character: 0,
+                },
+                kind: ScopeKind::Function,
+                name: Some("test_server".to_string()),
+            },
+        ];
+        
+        // Test src/bin/myapp/server.rs
+        let file_path = Path::new("/project/src/bin/myapp/server.rs");
+        let target = &scopes[3]; // test_server function
+        
+        let module_path = resolver
+            .resolve_module_path(file_path, &scopes, target)
+            .unwrap();
+        // For files under src/bin/, the bin/ prefix is excluded entirely
+        // So the module path is just the inline modules
+        assert_eq!(module_path, "server::tests");
+    }
 }

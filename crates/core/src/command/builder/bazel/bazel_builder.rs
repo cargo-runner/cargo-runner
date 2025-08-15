@@ -835,3 +835,7 @@ impl BazelCommandBuilder {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "bazel_builder_test.rs"]
+mod bazel_builder_test;

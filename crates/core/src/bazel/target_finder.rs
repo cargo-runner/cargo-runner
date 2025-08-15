@@ -450,4 +450,137 @@ rust_test(
         assert_eq!(targets[1].name, "mylib_test");
         assert_eq!(targets[1].kind, BazelTargetKind::Test);
     }
+    
+    #[test]
+    fn test_find_test_target_for_binary() {
+        let temp_dir = TempDir::new().unwrap();
+        let build_file = temp_dir.path().join("BUILD.bazel");
+        
+        // Create a BUILD file with a binary and a test that references it
+        let content = r#"
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+rust_binary(
+    name = "bench",
+    srcs = ["benches/fibonacci_benchmark.rs"],
+    crate_root = "benches/fibonacci_benchmark.rs",
+)
+
+rust_test(
+    name = "bench_test",
+    crate = ":bench",
+)
+"#;
+        
+        fs::write(&build_file, content).unwrap();
+        
+        // Create the benchmark file
+        let benches_dir = temp_dir.path().join("benches");
+        fs::create_dir(&benches_dir).unwrap();
+        let bench_file = benches_dir.join("fibonacci_benchmark.rs");
+        fs::write(&bench_file, "fn main() {}").unwrap();
+        
+        let mut finder = BazelTargetFinder::new().unwrap();
+        
+        // Find the test target for the benchmark file
+        let target = finder.find_runnable_target(
+            &bench_file,
+            temp_dir.path(),
+            Some(BazelTargetKind::Test),
+        ).unwrap();
+        
+        assert!(target.is_some());
+        let target = target.unwrap();
+        assert_eq!(target.name, "bench_test");
+        assert_eq!(target.kind, BazelTargetKind::Test);
+        assert_eq!(target.attributes.crate_ref, Some(":bench".to_string()));
+    }
+    
+    #[test]
+    fn test_target_includes_file_with_glob() {
+        let temp_dir = TempDir::new().unwrap();
+        let build_file = temp_dir.path().join("BUILD.bazel");
+        
+        let content = r#"
+load("@rules_rust//rust:defs.bzl", "rust_test_suite")
+
+rust_test_suite(
+    name = "integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+)
+"#;
+        
+        fs::write(&build_file, content).unwrap();
+        
+        // Create test file structure
+        let tests_dir = temp_dir.path().join("tests");
+        fs::create_dir_all(&tests_dir).unwrap();
+        let test_file = tests_dir.join("integration_test.rs");
+        fs::write(&test_file, "#[test] fn test() {}").unwrap();
+        
+        let mut finder = BazelTargetFinder::new().unwrap();
+        let targets = finder.find_targets_for_file(&test_file, temp_dir.path()).unwrap();
+        
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].name, "integration_tests");
+        assert_eq!(targets[0].kind, BazelTargetKind::TestSuite);
+    }
+    
+    #[test]
+    fn test_integration_test_target_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let build_file = temp_dir.path().join("BUILD.bazel");
+        
+        let content = r#"
+load("@rules_rust//rust:defs.bzl", "rust_test_suite", "rust_library")
+
+rust_library(
+    name = "mylib",
+    srcs = ["src/lib.rs"],
+)
+
+rust_test_suite(
+    name = "integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":mylib"],
+)
+"#;
+        
+        fs::write(&build_file, content).unwrap();
+        
+        // Create test file in tests directory
+        let tests_dir = temp_dir.path().join("tests");
+        fs::create_dir_all(&tests_dir).unwrap();
+        let test_file = tests_dir.join("integration_test.rs");
+        fs::write(&test_file, "#[test] fn test_integration() {}").unwrap();
+        
+        let mut finder = BazelTargetFinder::new().unwrap();
+        
+        // Test the specific integration test finder
+        let target = finder.find_integration_test_target(&test_file, temp_dir.path()).unwrap();
+        
+        assert!(target.is_some());
+        let target = target.unwrap();
+        assert_eq!(target.name, "integration_tests");
+        assert_eq!(target.kind, BazelTargetKind::TestSuite);
+        assert_eq!(target.label, "//:integration_tests");
+    }
+    
+    #[test]
+    fn test_glob_pattern_matching() {
+        let finder = BazelTargetFinder::new().unwrap();
+        
+        // Test various glob patterns
+        assert!(finder.matches_glob_pattern("tests/foo.rs", "tests/**"));
+        assert!(finder.matches_glob_pattern("tests/subdir/bar.rs", "tests/**"));
+        assert!(!finder.matches_glob_pattern("src/tests/foo.rs", "tests/**"));
+        
+        assert!(finder.matches_glob_pattern("foo.rs", "*.rs"));
+        assert!(finder.matches_glob_pattern("src/foo.rs", "**/*.rs"));
+        assert!(finder.matches_glob_pattern("tests/integration/test.rs", "tests/**/*.rs"));
+        
+        assert!(finder.matches_glob_pattern("benches/bench.rs", "benches/*.rs"));
+        assert!(!finder.matches_glob_pattern("benches/sub/bench.rs", "benches/*.rs"));
+        assert!(finder.matches_glob_pattern("benches/sub/bench.rs", "benches/**/*.rs"));
+    }
 }
