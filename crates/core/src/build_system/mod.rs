@@ -14,21 +14,33 @@ pub struct DefaultBuildSystemDetector;
 
 impl BuildSystemDetector for DefaultBuildSystemDetector {
     fn detect(project_path: &Path) -> Option<BuildSystem> {
+        tracing::debug!("DefaultBuildSystemDetector::detect checking path: {:?}", project_path);
+        
         // Check for Bazel first since a project might have both
-        if project_path.join("BUILD.bazel").exists()
-            || project_path.join("BUILD").exists()
-            || project_path.join("MODULE.bazel").exists()
-            || project_path.join("WORKSPACE").exists()
-            || project_path.join("WORKSPACE.bazel").exists()
-        {
+        // For Bazel detection, we require BUILD files, not just MODULE.bazel/WORKSPACE
+        // This prevents standalone files from being detected as Bazel just because
+        // they're under a directory tree with a MODULE.bazel file far up the hierarchy
+        let build_bazel = project_path.join("BUILD.bazel");
+        let build = project_path.join("BUILD");
+        
+        if build_bazel.exists() {
+            tracing::info!("Found BUILD.bazel at: {:?}", build_bazel);
+            return Some(BuildSystem::Bazel);
+        }
+        
+        if build.exists() {
+            tracing::info!("Found BUILD at: {:?}", build);
             return Some(BuildSystem::Bazel);
         }
 
         // Check for Cargo
-        if project_path.join("Cargo.toml").exists() {
+        let cargo_toml = project_path.join("Cargo.toml");
+        if cargo_toml.exists() {
+            tracing::debug!("Found Cargo.toml at: {:?}", cargo_toml);
             return Some(BuildSystem::Cargo);
         }
 
+        tracing::debug!("No build system found at: {:?}", project_path);
         None
     }
 }

@@ -6,12 +6,11 @@ use crate::{
     command::CargoCommand,
     config::Config,
     error::Result,
-    parser::{module_resolver::ModuleResolver, RustParser},
     patterns::RunnableDetector,
     types::{FileType, Runnable},
 };
 
-use super::traits::CommandRunner;
+use super::{common::resolve_module_paths, traits::CommandRunner};
 
 /// Bazel-specific command runner
 pub struct BazelRunner;
@@ -31,35 +30,8 @@ impl CommandRunner for BazelRunner {
         let mut detector = RunnableDetector::new()?;
         let mut runnables = detector.detect_runnables(file_path, None)?;
         
-        // Resolve module paths for each runnable
-        // Create module resolver - for Bazel we use default since no package name
-        let resolver = ModuleResolver::new();
-        
-        // Parse the file to get all scopes for module resolution
-        let source = std::fs::read_to_string(file_path)?;
-        let mut parser = RustParser::new()?;
-        let scopes = parser.get_scopes(&source, file_path)?;
-        
-        // Resolve module paths for each runnable
-        for runnable in &mut runnables {
-            match resolver.resolve_module_path(file_path, &scopes, &runnable.scope) {
-                Ok(module_path) => {
-                    tracing::debug!(
-                        "Resolved module path for {}: {}",
-                        runnable.label,
-                        module_path
-                    );
-                    runnable.module_path = module_path;
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to resolve module path for {}: {}",
-                        runnable.label,
-                        e
-                    );
-                }
-            }
-        }
+        // Resolve module paths using common function
+        resolve_module_paths(&mut runnables, file_path, None)?;
         
         Ok(runnables)
     }
@@ -67,33 +39,9 @@ impl CommandRunner for BazelRunner {
     fn get_runnable_at_line(&self, file_path: &Path, line: u32) -> Result<Option<Runnable>> {
         let mut detector = RunnableDetector::new()?;
         if let Some(mut runnable) = detector.get_best_runnable_at_line(file_path, line)? {
-            // Resolve module path for the runnable
-            let resolver = ModuleResolver::new();
-            
-            // Parse the file to get all scopes for module resolution
-            let source = std::fs::read_to_string(file_path)?;
-            let mut parser = RustParser::new()?;
-            let scopes = parser.get_scopes(&source, file_path)?;
-            
-            // Resolve module path
-            match resolver.resolve_module_path(file_path, &scopes, &runnable.scope) {
-                Ok(module_path) => {
-                    tracing::debug!(
-                        "Resolved module path for {}: {}",
-                        runnable.label,
-                        module_path
-                    );
-                    runnable.module_path = module_path;
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to resolve module path for {}: {}",
-                        runnable.label,
-                        e
-                    );
-                }
-            }
-            
+            // Resolve module path using common function
+            use super::common::resolve_module_path_single;
+            resolve_module_path_single(&mut runnable, file_path, None)?;
             Ok(Some(runnable))
         } else {
             Ok(None)

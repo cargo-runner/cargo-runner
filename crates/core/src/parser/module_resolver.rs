@@ -132,6 +132,13 @@ impl ModuleResolver {
             if path_without_ext == "main" || path_without_ext == "lib" {
                 return Ok(components);
             }
+            
+            // Handle binary files in src/bin/
+            if path_without_ext.starts_with("bin/") {
+                // For files in src/bin/, we don't include the bin prefix in the module path
+                // The file src/bin/proxy.rs has an implicit module path of just the inline modules
+                return Ok(components);
+            }
 
             // Split path into module components
             for component in path_without_ext.split('/') {

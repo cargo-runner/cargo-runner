@@ -618,6 +618,75 @@ fn main() {
     }
     
     #[test]
+    fn test_main_rs_test_detection() {
+        // This test verifies that tests in main.rs use the rust_test target
+        let temp_dir = TempDir::new().unwrap();
+        let workspace_root = temp_dir.path();
+        
+        // Create MODULE.bazel to mark workspace root
+        fs::write(workspace_root.join("MODULE.bazel"), "").unwrap();
+        
+        // Create server directory structure
+        let server_dir = workspace_root.join("server");
+        fs::create_dir(&server_dir).unwrap();
+        let src_dir = server_dir.join("src");
+        fs::create_dir(&src_dir).unwrap();
+        
+        // Create BUILD.bazel with rust_binary and rust_test
+        let build_content = r#"
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+rust_binary(
+    name = "server_bin",
+    srcs = ["src/main.rs"],
+    crate_root = "src/main.rs",
+)
+
+rust_test(
+    name = "server_tests",
+    crate = ":server_bin",
+)
+"#;
+        fs::write(server_dir.join("BUILD.bazel"), build_content).unwrap();
+        
+        // Create main.rs with tests
+        let main_file = src_dir.join("main.rs");
+        fs::write(&main_file, r#"
+fn main() {
+    println!("Hello, world!");
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_something() {
+        assert!(true);
+    }
+}
+"#).unwrap();
+        
+        println!("\nTest setup (main.rs with tests):");
+        println!("  Main file: {:?}", main_file);
+        println!("  Workspace root: {:?}", workspace_root);
+        
+        // Test the target finder
+        let mut finder = BazelTargetFinder::new().unwrap();
+        
+        // Find test target for main.rs
+        let test_target = finder.find_runnable_target(
+            &main_file,
+            workspace_root,
+            Some(BazelTargetKind::Test),
+        ).unwrap();
+        
+        assert!(test_target.is_some(), "Should find rust_test target for main.rs");
+        let target = test_target.unwrap();
+        println!("Found target: {} ({})", target.label, target.name);
+        assert_eq!(target.name, "server_tests");
+        assert_eq!(target.label, "//server:server_tests");
+    }
+    
+    #[test]
     fn test_command_generation_for_server_integration_test() {
         use crate::types::{Runnable, RunnableKind, Scope, Position, ScopeKind, FileType};
         use crate::command::builder::{CommandBuilderImpl, bazel::BazelCommandBuilder};

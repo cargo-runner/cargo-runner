@@ -108,6 +108,15 @@ impl BazelCommandBuilder {
         file_type: FileType,
     ) -> Result<CargoCommand> {
         tracing::debug!("build_module_tests_command called");
+        
+        // Check if this is a benchmark file - if so, we should run the binary instead
+        let is_benchmark_file = runnable.file_path.components().any(|c| c.as_os_str() == "benches");
+        
+        if is_benchmark_file {
+            tracing::debug!("Detected benchmark file - redirecting to binary command");
+            // For benchmark files, run the binary instead of tests
+            return self.build_binary_command(runnable, None, bazel_config, config, file_type);
+        }
 
         // Get the test framework or use defaults
         let framework = bazel_config
@@ -120,6 +129,9 @@ impl BazelCommandBuilder {
         // Build module filter (no exact matching for module tests)
         let test_filter = if !runnable.module_path.is_empty() {
             Some(runnable.module_path.clone())
+        } else if let RunnableKind::ModuleTests { module_name } = &runnable.kind {
+            // For module tests, use the module name as the filter
+            Some(module_name.clone())
         } else {
             None
         };
@@ -152,6 +164,9 @@ impl BazelCommandBuilder {
         // Check if this is a build.rs file
         let is_build_script = runnable.file_path.file_name().map(|f| f == "build.rs").unwrap_or(false);
         
+        // Check if this is a benchmark file
+        let is_benchmark_file = runnable.file_path.components().any(|c| c.as_os_str() == "benches");
+        
         // Get the binary framework or use defaults
         let mut framework = bazel_config
             .and_then(|bc| bc.binary_framework.clone())
@@ -162,8 +177,22 @@ impl BazelCommandBuilder {
             framework.subcommand = Some("build".to_string());
             tracing::debug!("Using 'bazel build' for build.rs file");
         }
+        
+        // For benchmark files, add optimization flag
+        if is_benchmark_file {
+            if framework.args.is_none() {
+                framework.args = Some(vec![]);
+            }
+            if let Some(ref mut args) = framework.args {
+                if !args.contains(&"-c".to_string()) && !args.contains(&"--compilation_mode".to_string()) {
+                    args.insert(0, "-c".to_string());
+                    args.insert(1, "opt".to_string());
+                    tracing::debug!("Added optimization flag for benchmark binary");
+                }
+            }
+        }
 
-        // Determine the target
+        // Determine the target (is_test=false for binaries)
         let target = self.determine_target(runnable, bazel_config, config, false);
 
         // Build the command
@@ -397,6 +426,24 @@ impl BazelCommandBuilder {
             // Support custom commands (like bazelisk)
             CargoCommand::new_shell(command_name.to_string(), args)
         };
+
+        // Set working directory to workspace root for Bazel
+        let abs_path = if runnable.file_path.is_absolute() {
+            runnable.file_path.clone()
+        } else {
+            std::env::current_dir()
+                .ok()
+                .map(|cwd| cwd.join(&runnable.file_path))
+                .unwrap_or_else(|| runnable.file_path.clone())
+        };
+        
+        if let Some(workspace_root) = abs_path
+            .ancestors()
+            .find(|p| p.join("MODULE.bazel").exists() || p.join("WORKSPACE").exists()) 
+        {
+            command.working_dir = Some(workspace_root.to_string_lossy().to_string());
+            tracing::debug!("Set working directory for Bazel command: {:?}", workspace_root);
+        }
 
         // Apply environment variables
         if let Some(env) = &framework.extra_env {

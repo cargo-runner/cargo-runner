@@ -123,6 +123,37 @@ impl BazelTargetFinder {
     ) -> Result<Option<BazelTarget>> {
         let targets = self.find_targets_for_file(file_path, workspace_root)?;
         
+        // Special case: if looking for tests, check if there's a rust_test that references
+        // a binary/library containing this file
+        if let Some(BazelTargetKind::Test) = kind_filter {
+            // Find any binary or library target that contains this file
+            let bin_or_lib = targets.iter().find(|t| 
+                matches!(t.kind, BazelTargetKind::Binary | BazelTargetKind::Library)
+            );
+            
+            if let Some(bin_or_lib_target) = bin_or_lib {
+                tracing::debug!("Found binary/library target {} containing file", bin_or_lib_target.name);
+                
+                // Now find rust_test targets that reference this binary/library
+                let build_file = self.find_build_file(file_path, workspace_root)?;
+                let all_targets = self.find_targets_in_build_file(&build_file)?;
+                
+                for target in all_targets {
+                    if matches!(target.kind, BazelTargetKind::Test) {
+                        // Check if this test references our binary/library
+                        if let Some(crate_ref) = &target.attributes.crate_ref {
+                            let crate_name = crate_ref.strip_prefix(':').unwrap_or(crate_ref);
+                            if crate_name == bin_or_lib_target.name {
+                                tracing::debug!("Found rust_test target {} that tests {}", 
+                                             target.label, bin_or_lib_target.name);
+                                return Ok(Some(target));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         // Filter to runnable targets
         let runnable_targets: Vec<_> = targets.into_iter()
             .filter(|t| t.kind.is_runnable())

@@ -6,12 +6,14 @@ use crate::{
     command::CargoCommand,
     config::Config,
     error::Result,
-    parser::{RustParser, module_resolver::ModuleResolver},
     patterns::RunnableDetector,
     types::{FileType, Runnable},
 };
 
-use super::traits::{CommandRunner, RunnerCommand};
+use super::{
+    common::{get_cargo_package_name, resolve_module_paths, resolve_module_path_single},
+    traits::{CommandRunner, RunnerCommand},
+};
 
 /// Cargo-specific command runner
 pub struct CargoRunner;
@@ -34,45 +36,8 @@ impl CommandRunner for CargoRunner {
         // Now resolve module paths for all runnables
         if !runnables.is_empty() {
             // Get package name from Cargo.toml
-            let package_name = if let Some(cargo_toml) = ModuleResolver::find_cargo_toml(file_path)
-            {
-                ModuleResolver::get_package_name_from_cargo_toml(&cargo_toml).ok()
-            } else {
-                None
-            };
-
-            // Create module resolver
-            let resolver = if let Some(pkg) = package_name {
-                ModuleResolver::with_package_name(pkg)
-            } else {
-                ModuleResolver::new()
-            };
-
-            // Parse the file to get all scopes for module resolution
-            let source = std::fs::read_to_string(file_path)?;
-            let mut parser = RustParser::new()?;
-            let scopes = parser.get_scopes(&source, file_path)?;
-
-            // Resolve module paths for each runnable
-            for runnable in &mut runnables {
-                match resolver.resolve_module_path(file_path, &scopes, &runnable.scope) {
-                    Ok(module_path) => {
-                        tracing::debug!(
-                            "Resolved module path for {}: {}",
-                            runnable.label,
-                            module_path
-                        );
-                        runnable.module_path = module_path;
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to resolve module path for {}: {}",
-                            runnable.label,
-                            e
-                        );
-                    }
-                }
-            }
+            let package_name = get_cargo_package_name(file_path);
+            resolve_module_paths(&mut runnables, file_path, package_name.as_deref())?;
         }
 
         Ok(runnables)
@@ -82,45 +47,8 @@ impl CommandRunner for CargoRunner {
         let mut detector = RunnableDetector::new()?;
         if let Some(mut runnable) = detector.get_best_runnable_at_line(file_path, line)? {
             // Resolve module path for the runnable
-            // Get package name from Cargo.toml
-            let package_name = if let Some(cargo_toml) = ModuleResolver::find_cargo_toml(file_path)
-            {
-                ModuleResolver::get_package_name_from_cargo_toml(&cargo_toml).ok()
-            } else {
-                None
-            };
-
-            // Create module resolver
-            let resolver = if let Some(pkg) = package_name {
-                ModuleResolver::with_package_name(pkg)
-            } else {
-                ModuleResolver::new()
-            };
-
-            // Parse the file to get all scopes for module resolution
-            let source = std::fs::read_to_string(file_path)?;
-            let mut parser = RustParser::new()?;
-            let scopes = parser.get_scopes(&source, file_path)?;
-
-            // Resolve module path
-            match resolver.resolve_module_path(file_path, &scopes, &runnable.scope) {
-                Ok(module_path) => {
-                    tracing::debug!(
-                        "Resolved module path for {}: {}",
-                        runnable.label,
-                        module_path
-                    );
-                    runnable.module_path = module_path;
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to resolve module path for {}: {}",
-                        runnable.label,
-                        e
-                    );
-                }
-            }
-
+            let package_name = get_cargo_package_name(file_path);
+            resolve_module_path_single(&mut runnable, file_path, package_name.as_deref())?;
             Ok(Some(runnable))
         } else {
             Ok(None)
@@ -134,15 +62,9 @@ impl CommandRunner for CargoRunner {
         _file_type: FileType,
     ) -> Result<Self::Command> {
         use crate::command::builder::CommandBuilder;
-        use crate::parser::module_resolver::ModuleResolver;
 
         // Get the actual package name from Cargo.toml
-        let package = if let Some(cargo_toml) = ModuleResolver::find_cargo_toml(&runnable.file_path)
-        {
-            ModuleResolver::get_package_name_from_cargo_toml(&cargo_toml).ok()
-        } else {
-            None
-        };
+        let package = get_cargo_package_name(&runnable.file_path);
 
         // Build command using CommandBuilder
         let mut builder = CommandBuilder::for_runnable(runnable);

@@ -3,6 +3,7 @@
 pub mod bazel_runner;
 pub mod builder;
 pub mod cargo_runner;
+pub mod common;
 pub mod framework;
 pub mod options;
 pub mod rustc_runner;

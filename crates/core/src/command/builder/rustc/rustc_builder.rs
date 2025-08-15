@@ -50,6 +50,10 @@ impl CommandBuilderImpl for RustcCommandBuilder {
 }
 
 impl RustcCommandBuilder {
+    /// Convert kebab-case to snake_case for valid Rust identifiers
+    fn to_snake_case(&self, name: &str) -> String {
+        name.replace('-', "_")
+    }
     fn build_test_command(
         &self,
         runnable: &Runnable,
@@ -60,7 +64,9 @@ impl RustcCommandBuilder {
         tracing::debug!("build_test_command called for test: {}", test_name);
         let framework = self.get_test_framework(config);
         let file_name = self.get_file_name(runnable)?;
-        let output_name = format!("{}_test", file_name);
+        // Convert to snake_case for consistency
+        let snake_case_name = self.to_snake_case(&file_name);
+        let output_name = format!("{}_test", snake_case_name);
 
         // Build phase
         let mut build_args = self.create_build_args(
@@ -121,7 +127,9 @@ impl RustcCommandBuilder {
     ) -> Result<CargoCommand> {
         let framework = self.get_test_framework(config);
         let file_name = self.get_file_name(runnable)?;
-        let output_name = format!("{}_test", file_name);
+        // Convert to snake_case for consistency
+        let snake_case_name = self.to_snake_case(&file_name);
+        let output_name = format!("{}_test", snake_case_name);
 
         // Build phase
         let mut build_args = self.create_build_args(
@@ -155,12 +163,15 @@ impl RustcCommandBuilder {
     ) -> Result<CargoCommand> {
         let framework = self.get_binary_framework(config);
         let file_name = self.get_file_name(runnable)?;
-        let crate_name = bin_name.unwrap_or(&file_name);
-        let output_name = crate_name;
+        let original_name = bin_name.unwrap_or(&file_name);
+        // Convert kebab-case to snake_case for crate name
+        let crate_name = self.to_snake_case(original_name);
+        // Keep the original name for output file for consistency
+        let output_name = self.to_snake_case(original_name);
 
         // Build phase
         let mut build_args =
-            self.create_binary_build_args(&framework, &runnable.file_path, crate_name, output_name);
+            self.create_binary_build_args(&framework, &runnable.file_path, &crate_name, &output_name);
 
         // Apply configuration
         self.apply_build_config(&mut build_args, runnable, config, file_type, &framework);
@@ -186,7 +197,9 @@ impl RustcCommandBuilder {
     ) -> Result<CargoCommand> {
         let framework = self.get_benchmark_framework(config);
         let file_name = self.get_file_name(runnable)?;
-        let output_name = format!("{}_bench", file_name);
+        // Convert to snake_case for consistency
+        let snake_case_name = self.to_snake_case(&file_name);
+        let output_name = format!("{}_bench", snake_case_name);
 
         // Build phase
         let mut build_args =
@@ -295,10 +308,10 @@ impl RustcCommandBuilder {
                     "--crate-type".to_string(),
                     "bin".to_string(),
                     "--crate-name".to_string(),
-                    "{file_name}".to_string(),
+                    "{crate_name}".to_string(),
                     "{file_path}".to_string(),
                     "-o".to_string(),
-                    "{parent_dir}/{file_name}".to_string(),
+                    "{parent_dir}/{output_name}".to_string(),
                 ]),
                 extra_args: None,
                 extra_test_binary_args: None,
@@ -307,7 +320,7 @@ impl RustcCommandBuilder {
                 extra_env: None,
             }),
             exec: Some(RustcPhaseConfig {
-                command: Some("{parent_dir}/{file_name}".to_string()),
+                command: Some("{parent_dir}/{output_name}".to_string()),
                 args: None,
                 extra_args: None,
                 extra_test_binary_args: None,

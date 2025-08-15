@@ -74,6 +74,8 @@ impl UnifiedRunner {
                 .join(path)
         };
 
+        tracing::debug!("detect_build_system: starting with path {:?}", abs_path);
+
         // Start from the file's directory and walk up to find build files
         let start_path = if abs_path.is_file() {
             abs_path.parent().unwrap_or(&abs_path)
@@ -81,18 +83,66 @@ impl UnifiedRunner {
             &abs_path
         };
 
+        // Determine boundaries - DO NOT search beyond these!
+        let home_dir = std::env::var("HOME")
+            .ok()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/"));
+        
+        let project_boundary = if let Ok(project_dir) = std::env::var("PROJECT_DIR") {
+            Some(PathBuf::from(project_dir))
+        } else {
+            None
+        };
+
         let mut check_path = start_path;
+        let mut depth = 0;
+        const MAX_DEPTH: usize = 10; // Reasonable depth limit
+        
+        tracing::debug!("detect_build_system: starting from directory {:?}", check_path);
+        tracing::debug!("detect_build_system: home boundary: {:?}", home_dir);
+        if let Some(ref boundary) = project_boundary {
+            tracing::debug!("detect_build_system: PROJECT_DIR boundary: {:?}", boundary);
+        }
 
         // Walk up the directory tree looking for build files
         loop {
+            // Check depth limit
+            if depth >= MAX_DEPTH {
+                tracing::debug!("detect_build_system: reached max depth {}, stopping", MAX_DEPTH);
+                break;
+            }
+            // Check boundaries BEFORE checking for build system
+            if let Some(ref boundary) = project_boundary {
+                if !check_path.starts_with(boundary) {
+                    tracing::debug!("detect_build_system: reached PROJECT_DIR boundary, stopping");
+                    break;
+                }
+            }
+            
+            if !check_path.starts_with(&home_dir) {
+                tracing::debug!("detect_build_system: reached HOME boundary, stopping");
+                break;
+            }
+            
+            tracing::debug!("detect_build_system: checking directory {:?}", check_path);
+            
             if let Some(build_system) = DefaultBuildSystemDetector::detect(check_path) {
+                tracing::info!("detect_build_system: found {:?} at {:?}", build_system, check_path);
                 return Ok(build_system);
             }
 
             // Go up one directory
             match check_path.parent() {
-                Some(parent) => check_path = parent,
-                None => break,
+                Some(parent) => {
+                    tracing::debug!("detect_build_system: moving up to parent {:?}", parent);
+                    check_path = parent;
+                    depth += 1;
+                }
+                None => {
+                    tracing::debug!("detect_build_system: reached root, no build system found");
+                    break;
+                }
             }
         }
 
@@ -406,19 +456,47 @@ impl UnifiedRunner {
             tracing::debug!("  [{}] {:?} - {:?}", i, runnable.kind, runnable.label);
         }
 
-        // Sort runnables to prioritize non-doc test runnables for file-level commands
+        // Check if this is a benchmark file
+        let is_benchmark_file = file_path.components().any(|c| c.as_os_str() == "benches");
+        
+        // Sort runnables to prioritize based on file type
         let mut sorted_runnables = runnables;
         sorted_runnables.sort_by(|a, b| {
             use crate::types::RunnableKind;
             match (&a.kind, &b.kind) {
+                // For benchmark files, prioritize Binary/Benchmark over tests
+                (RunnableKind::Binary { .. }, RunnableKind::Test { .. }) if is_benchmark_file => {
+                    std::cmp::Ordering::Less
+                }
+                (RunnableKind::Binary { .. }, RunnableKind::ModuleTests { .. }) if is_benchmark_file => {
+                    std::cmp::Ordering::Less
+                }
+                (RunnableKind::Benchmark { .. }, RunnableKind::Test { .. }) if is_benchmark_file => {
+                    std::cmp::Ordering::Less
+                }
+                (RunnableKind::Benchmark { .. }, RunnableKind::ModuleTests { .. }) if is_benchmark_file => {
+                    std::cmp::Ordering::Less
+                }
+                (RunnableKind::Test { .. }, RunnableKind::Binary { .. }) if is_benchmark_file => {
+                    std::cmp::Ordering::Greater
+                }
+                (RunnableKind::ModuleTests { .. }, RunnableKind::Binary { .. }) if is_benchmark_file => {
+                    std::cmp::Ordering::Greater
+                }
+                (RunnableKind::Test { .. }, RunnableKind::Benchmark { .. }) if is_benchmark_file => {
+                    std::cmp::Ordering::Greater
+                }
+                (RunnableKind::ModuleTests { .. }, RunnableKind::Benchmark { .. }) if is_benchmark_file => {
+                    std::cmp::Ordering::Greater
+                }
                 // Deprioritize doc tests for file-level commands
                 (RunnableKind::DocTest { .. }, _) => std::cmp::Ordering::Greater,
                 (_, RunnableKind::DocTest { .. }) => std::cmp::Ordering::Less,
-                // Prefer module tests over individual tests for file-level
-                (RunnableKind::ModuleTests { .. }, RunnableKind::Test { .. }) => {
+                // For non-benchmark files, prefer module tests over individual tests
+                (RunnableKind::ModuleTests { .. }, RunnableKind::Test { .. }) if !is_benchmark_file => {
                     std::cmp::Ordering::Less
                 }
-                (RunnableKind::Test { .. }, RunnableKind::ModuleTests { .. }) => {
+                (RunnableKind::Test { .. }, RunnableKind::ModuleTests { .. }) if !is_benchmark_file => {
                     std::cmp::Ordering::Greater
                 }
                 _ => std::cmp::Ordering::Equal,
