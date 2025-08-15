@@ -7,7 +7,6 @@ A sophisticated scope-based runnable detection tool for Rust that supports multi
 - 🔍 **Smart Runnable Detection**: Automatically detects tests, benchmarks, binaries, and doc tests at any position in your code
 - 🏗️ **Multi Build System Support**: Works with Cargo, Bazel, and standalone Rust files
 - 🎯 **Precise Scope Detection**: Uses tree-sitter for accurate AST parsing
-- ⚙️ **Flexible Configuration**: Override commands with pattern matching
 - 🚀 **Fast & Reliable**: No compilation required for detection
 
 ## Installation
@@ -24,145 +23,289 @@ cd cargo-runner
 cargo install --path crates/cli
 ```
 
-## Usage
+## Commands
 
-### Basic Commands
+### `cargo runner init`
 
-```bash
-# Analyze a file to see all runnables
-cargo runner analyze src/main.rs
-
-# Run code at a specific line
-cargo runner run src/main.rs:42
-
-# Run without specific line (runs file-appropriate command)
-cargo runner run src/lib.rs
-```
-
-### Build System Support
-
-#### Cargo (Default)
-Automatically detected when `Cargo.toml` is present.
+Initialize cargo-runner in your project. This command sets up the necessary configuration for your build system.
 
 ```bash
-# Runs: cargo test --exact test_name
-cargo runner run src/lib.rs:10
+# Initialize in current directory
+cargo runner init
 
-# For benchmarks in benches/
-# Runs: cargo bench benchmark_name
-cargo runner run benches/my_bench.rs:25
+# Initialize with specific options
+cargo runner init --rustc          # Enable rustc support for standalone files
+cargo runner init --single-file    # Enable single-file script support
 ```
 
-#### Bazel
-Automatically detected when `BUILD.bazel` or `BUILD` files are present.
+### `cargo runner run`
+
+Run the code at a specific location in a file. The tool will automatically detect what to run based on the cursor position.
 
 ```bash
-# Runs: bazel test //target:test_target --test_arg --nocapture --test_arg --exact --test_arg test_name
-cargo runner run src/lib.rs:10
+# Run test at line 42
+cargo runner run /path/to/src/lib.rs:42
 
-# For benchmarks (runs with optimization)
-# Runs: bazel run -c opt //target:bench
-cargo runner run benches/fibonacci.rs
+# Run benchmark at line 156  
+cargo runner run /path/to/benches/benchmark.rs:156
+
+# Run binary (detects main function)
+cargo runner run /path/to/src/main.rs
+
+# Run file without specific line (runs appropriate command for file type)
+cargo runner run /path/to/src/bin/server.rs
 ```
 
-**Bazel-specific features:**
-- Automatic target detection from BUILD files
-- Handles `rust_test` targets that reference binaries via `crate` attribute
-- Correct module path resolution for `src/bin/` files
-- Automatic workspace root detection for proper execution
+**What it detects:**
+- Test functions (`#[test]`)
+- Benchmark functions (`#[bench]`)
+- Binary files with `main()` function
+- Module tests (`mod tests`)
+- Doc tests in comments
+- Integration tests in `tests/` directory
 
-#### Rustc (Standalone Files)
-For standalone Rust files without a build system.
+### `cargo runner analyze`
+
+Analyze a file to see all runnable items it contains. This is useful for understanding what can be run in a file.
 
 ```bash
-# Compiles and runs tests
-cargo runner run standalone_test.rs:15
+# Analyze entire file
+cargo runner analyze /path/to/src/lib.rs
 
-# Single-file scripts with shebang
-cargo runner run script.rs
+# Analyze at specific line (shows what would run at that position)
+cargo runner analyze /path/to/src/lib.rs:42
 ```
 
-### Configuration
-
-Create a `.cargo-runner.json` file in your project root:
-
-```json
-{
-  "cargo": {
-    "test_framework": {
-      "command": "cargo",
-      "subcommand": "nextest run"
-    }
-  },
-  "bazel": {
-    "test_framework": {
-      "test_args": ["--nocapture", "--exact", "{test_filter}"]
-    },
-    "binary_framework": {
-      "args": ["-c", "opt"]
-    }
-  }
-}
+**Example output:**
+```
+Runnables in src/lib.rs:
+  Line 10: test "test_addition" 
+  Line 25: test "test_subtraction"
+  Line 40: benchmark "bench_multiply"
+  Line 55: doc test "Example::new"
+  Line 70: module tests "mod tests"
 ```
 
-### Override Commands
+## How It Works
 
-Use pattern matching to customize commands for specific cases:
+### Build System Detection
 
-```json
-{
-  "overrides": [
-    {
-      "match": {
-        "path": "tests/integration/*",
-        "type": "test"
-      },
-      "cargo": {
-        "env": { "TEST_ENV": "integration" },
-        "extra_test_binary_args": ["--test-threads=1"]
-      }
-    }
-  ]
-}
+Cargo Runner automatically detects your build system in this order:
+
+1. **Bazel** - Looks for `BUILD.bazel` or `BUILD` files
+2. **Cargo** - Looks for `Cargo.toml`
+3. **Rustc** - Fallback for standalone `.rs` files
+
+### Generated Commands Examples
+
+When you run `cargo runner run /path/to/file.rs:line`, it generates the appropriate command:
+
+**Cargo:**
+```bash
+# Test function
+cargo test test_function_name -- --exact
+
+# Benchmark
+cargo bench bench_name
+
+# Binary
+cargo run --bin binary_name
 ```
 
-## Examples
+**Bazel:**
+```bash
+# Test function
+bazel test //target:test_target --test_arg --nocapture --test_arg --exact --test_arg test_name
 
-### Running Tests
+# Benchmark (with optimization)
+bazel run -c opt //target:bench
+
+# Binary
+bazel run //target:binary
+```
+
+**Rustc (standalone files):**
+```bash
+# Compile and run tests
+rustc --test file.rs -o /tmp/test && /tmp/test test_name
+
+# Run single-file script
+rustc file.rs -o /tmp/binary && /tmp/binary
+```
+
+## Real-World Examples
+
+### Example 1: Running a specific test
 
 ```bash
-# Run a specific test function
-cargo runner run src/lib.rs:42
+# You have a test at line 45 in your library
+$ cargo runner run /home/user/myproject/src/lib.rs:45
 
-# Run all tests in a module
-cargo runner run src/utils/mod.rs:10
-
-# Run with custom configuration
-echo '{"cargo": {"test_framework": {"subcommand": "nextest run"}}}' > .cargo-runner.json
-cargo runner run src/lib.rs:42
+# Output:
+Running: cargo test test_parse_config -- --exact
 ```
 
-### Working with Bazel
+### Example 2: Analyzing a file
 
 ```bash
-# Detects and uses Bazel targets automatically
-cargo runner run server/src/main.rs:100
+$ cargo runner analyze /home/user/myproject/src/parser.rs
 
-# Runs benchmarks with optimization
-cargo runner run server/benches/perf.rs
-
-# Module tests with proper filtering
-cargo runner run server/src/bin/proxy.rs:5  # Runs: bazel test //server:proxy_test --test_arg tests
+# Output:
+Runnables found in /home/user/myproject/src/parser.rs:
+  Line 23: test "test_parse_string"
+  Line 45: test "test_parse_number" 
+  Line 67: test "test_parse_array"
+  Line 89: module "tests" (contains 3 tests)
+  Line 120: doc test "Parser::new"
 ```
 
-### Binary Detection
+<details>
+<summary>📋 Detailed analyze output example</summary>
+
+```
+🔍 Analyzing: project-a/src/lib.rs
+================================================================================
+
+📄 File-level command:
+   🔧 Command breakdown:
+      • command: cargo
+      • subcommand: test
+      • package: project-a
+      • extraArgs: ["--lib"]
+   🚀 Final command: cargo test --package project-a --lib
+   📦 Type: Library (lib.rs)
+   📏 Scope: lines 1-90
+
+✅ Found 7 runnable(s):
+
+1. Run doc test for 'User'
+   📏 Scope: lines 2-13
+   📍 Module path: project-a
+   🧪 Contains doc tests
+   🔧 Command breakdown:
+      • command: cargo
+      • subcommand: test
+      • package: project-a
+      • extraArgs: ["--doc"]
+      • extraTestBinaryArgs: ["User"]
+   🚀 Final command: cargo test --doc --package project-a -- User
+   📦 Type: Doc test for 'User'
+   📁 Module path: project-a
+
+2. Run doc test for 'impl User'
+   📏 Scope: lines 15-68
+   📍 Module path: project-a
+   🧪 Contains doc tests
+   🔧 Command breakdown:
+      • command: cargo
+      • subcommand: test
+      • package: project-a
+      • extraArgs: ["--doc"]
+      • extraTestBinaryArgs: ["User"]
+   🚀 Final command: cargo test --doc --package project-a -- User
+   📦 Type: Doc test for 'impl User'
+   📁 Module path: project-a
+
+3. Run doc test for 'User::new'
+   📏 Scope: lines 32-55
+   📍 Module path: project-a
+   🧪 Contains doc tests
+   🔧 Command breakdown:
+      • command: cargo
+      • subcommand: test
+      • package: project-a
+      • extraArgs: ["--doc"]
+      • extraTestBinaryArgs: ["User::new"]
+   🚀 Final command: cargo test --doc --package project-a -- User::new
+   📦 Type: Doc test for 'User'::new
+   📁 Module path: project-a
+
+4. Run doc test for 'User::echo'
+   📏 Scope: lines 57-67
+   📍 Module path: project-a
+   🧪 Contains doc tests
+   🔧 Command breakdown:
+      • command: cargo
+      • subcommand: test
+      • package: project-a
+      • extraArgs: ["--doc"]
+      • extraTestBinaryArgs: ["User::echo"]
+   🚀 Final command: cargo test --doc --package project-a -- User::echo
+   📦 Type: Doc test for 'User'::echo
+   📁 Module path: project-a
+
+5. Run all tests in module 'tests'
+   📏 Scope: lines 70-90
+   🏷️  Attributes: 1 lines
+   🔧 Command breakdown:
+      • command: cargo
+      • subcommand: test
+      • package: project-a
+      • extraArgs: ["--lib"]
+      • extraTestBinaryArgs: ["tests"]
+   🚀 Final command: cargo test --package project-a --lib -- tests
+   📦 Type: Test module 'tests'
+
+6. Run test 'test_it_works'
+   📏 Scope: lines 74-78
+   📍 Module path: tests
+   🏷️  Attributes: 1 lines
+   🔧 Command breakdown:
+      • command: cargo
+      • subcommand: test
+      • package: project-a
+      • extraArgs: ["--lib"]
+      • extraTestBinaryArgs: ["tests::test_it_works", "--exact"]
+   🚀 Final command: cargo test --package project-a --lib -- tests::test_it_works --exact
+   📦 Type: Test function 'test_it_works'
+   📁 Module path: tests
+
+7. Run test 'test_user'
+   📏 Scope: lines 80-89
+   📍 Module path: tests
+   🏷️  Attributes: 1 lines
+   🔧 Command breakdown:
+      • command: cargo
+      • subcommand: test
+      • package: project-a
+      • extraArgs: ["--lib"]
+      • extraTestBinaryArgs: ["tests::test_user", "--exact"]
+   🚀 Final command: cargo test --package project-a --lib -- tests::test_user --exact
+   📦 Type: Test function 'test_user'
+   📁 Module path: tests
+
+🎯 Command to run:
+   cargo test --package project-a --lib -- tests::test_user --exact
+
+================================================================================
+```
+
+</details>
+
+### Example 3: Working with Bazel
 
 ```bash
-# In src/main.rs or src/bin/
-cargo runner run src/bin/server.rs  # Runs: cargo run --bin server
+# Running a test in a Bazel project
+$ cargo runner run /home/user/bazel-project/server/src/handler.rs:78
 
-# With Bazel
-cargo runner run src/bin/proxy.rs   # Runs: bazel run //server:proxy
+# Output:
+Detected Bazel workspace at /home/user/bazel-project
+Running: bazel test //server:handler_test --test_arg --nocapture --test_arg --exact --test_arg test_handle_request
+```
+
+For testing cargo-runner with complex Bazel setups, check out: https://github.com/codeitlikemiley/complex-bazel-setup
+
+### Example 4: Standalone Rust files
+
+```bash
+# Initialize for standalone file support
+$ cargo runner init --rustc
+
+# Run tests in a standalone file
+$ cargo runner run /tmp/my_script.rs:25
+
+# Output:
+Running: rustc --test /tmp/my_script.rs -o /tmp/cargo-runner-test && /tmp/cargo-runner-test test_calculation
 ```
 
 ## Advanced Features
@@ -190,10 +333,6 @@ Automatic detection order:
 1. Bazel (presence of `BUILD.bazel` or `BUILD`)
 2. Cargo (presence of `Cargo.toml`)
 3. Rustc (fallback for standalone files)
-
-## Configuration Reference
-
-See [config-analyze.md](config-analyze.md) for complete configuration options.
 
 ## Contributing
 
