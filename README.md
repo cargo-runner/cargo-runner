@@ -1,4 +1,4 @@
-# Windrunner (cargo-runner)
+# Cargo Runner
 
 A sophisticated scope-based runnable detection tool for Rust that supports multiple build systems (Cargo, Bazel, Rustc) and provides intelligent command generation for tests, benchmarks, binaries, and doc tests.
 
@@ -19,8 +19,8 @@ cargo install cargo-runner
 Or clone and build from source:
 
 ```bash
-git clone https://github.com/codeitlikemiley/windrunner
-cd windrunner
+git clone https://github.com/cargo-runner/cargo-runner
+cd cargo-runner
 cargo install --path crates/cli
 ```
 
