@@ -3,3 +3,8 @@
 .cargo-runner.json
 *.md
 !README.md
+# Ignore all .rs files in the root directory
+/*.rs
+# Ignore all test_* folders in the root directory
+/test_*/
+.vscode/settings.json
