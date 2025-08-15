@@ -23,7 +23,18 @@ cd cargo-runner
 cargo install --path crates/cli
 ```
 
-## Commands
+## Usage:
+
+### Set up your project
+
+```sh
+cargo new my-project
+cd my-project
+cargo runner init
+```
+
+This would work for simple or complex rust projects , all rust projects during init are added to `linkedProjects` in `.cargo-runner.json` file.
+
 
 ### `cargo runner init`
 
@@ -31,11 +42,11 @@ Initialize cargo-runner in your project. This command sets up the necessary conf
 
 ```bash
 # Initialize in current directory
-cargo runner init
+cargo runner init # generate config for cargo / bazel 
 
 # Initialize with specific options
-cargo runner init --rustc          # Enable rustc support for standalone files
-cargo runner init --single-file    # Enable single-file script support
+cargo runner init --rustc          # generate config so you can override rustc to your needs
+cargo runner init --single-file    # generate config so you can override single-file script to your needs
 ```
 
 ### `cargo runner run`
@@ -77,121 +88,6 @@ cargo runner analyze /path/to/src/lib.rs:42
 ```
 
 **Example output:**
-```
-✅ Found 7 runnable(s):
-
-1. Run doc test for 'User'
-   📏 Scope: lines 2-13
-   🚀 Final command: cargo test --doc --package project-a -- User
-
-2. Run doc test for 'User::new'
-   📏 Scope: lines 32-55
-   🚀 Final command: cargo test --doc --package project-a -- User::new
-
-3. Run doc test for 'User::echo'
-   📏 Scope: lines 57-67
-   🚀 Final command: cargo test --doc --package project-a -- User::echo
-
-4. Run all tests in module 'tests'
-   📏 Scope: lines 70-90
-   🚀 Final command: cargo test --package project-a --lib -- tests
-
-5. Run test 'test_it_works'
-   📏 Scope: lines 74-78
-   🚀 Final command: cargo test --package project-a --lib -- tests::test_it_works --exact
-
-6. Run test 'test_user'
-   📏 Scope: lines 80-89
-   🚀 Final command: cargo test --package project-a --lib -- tests::test_user --exact
-```
-
-## How It Works
-
-### Build System Detection
-
-Cargo Runner automatically detects your build system in this order:
-
-1. **Bazel** - Looks for `BUILD.bazel` or `BUILD` files
-2. **Cargo** - Looks for `Cargo.toml`
-3. **Rustc** - Fallback for standalone `.rs` files
-
-### Generated Commands Examples
-
-When you run `cargo runner run /path/to/file.rs:line`, it generates the appropriate command:
-
-**Cargo:**
-```bash
-# Test function
-cargo test test_function_name -- --exact
-
-# Benchmark
-cargo bench bench_name
-
-# Binary
-cargo run --bin binary_name
-```
-
-**Bazel:**
-```bash
-# Test function
-bazel test //target:test_target --test_arg --nocapture --test_arg --exact --test_arg test_name
-
-# Benchmark (with optimization)
-bazel run -c opt //target:bench
-
-# Binary
-bazel run //target:binary
-```
-
-**Rustc (standalone files):**
-```bash
-# Compile and run tests
-rustc --test file.rs -o /tmp/test && /tmp/test test_name
-
-# Run single-file script
-rustc file.rs -o /tmp/binary && /tmp/binary
-```
-
-## Real-World Examples
-
-### Example 1: Running a specific test
-
-```bash
-# You have a test at line 45 in your library
-$ cargo runner run /home/user/myproject/src/lib.rs:45
-
-# Output:
-Running: cargo test test_parse_config -- --exact
-```
-
-### Example 2: Analyzing a file
-
-```bash
-$ cargo runner analyze /home/user/myproject/src/parser.rs
-
-# Output:
-✅ Found 5 runnable(s):
-
-1. Run test 'test_parse_string'
-   📏 Scope: lines 23-35
-   🚀 Final command: cargo test --package myproject --lib -- tests::test_parse_string --exact
-
-2. Run test 'test_parse_number'
-   📏 Scope: lines 45-58
-   🚀 Final command: cargo test --package myproject --lib -- tests::test_parse_number --exact
-
-3. Run test 'test_parse_array'
-   📏 Scope: lines 67-79
-   🚀 Final command: cargo test --package myproject --lib -- tests::test_parse_array --exact
-
-4. Run all tests in module 'tests'
-   📏 Scope: lines 89-125
-   🚀 Final command: cargo test --package myproject --lib -- tests
-
-5. Run doc test for 'Parser::new'
-   📏 Scope: lines 120-135
-   🚀 Final command: cargo test --doc --package myproject -- Parser::new
-```
 
 <details>
 <summary>📋 Detailed analyze output example</summary>
@@ -316,31 +212,21 @@ $ cargo runner analyze /home/user/myproject/src/parser.rs
 
 </details>
 
-### Example 3: Working with Bazel
 
-```bash
-# Running a test in a Bazel project
-$ cargo runner run /home/user/bazel-project/server/src/handler.rs:78
+## How It Works
 
-# Output:
-Detected Bazel workspace at /home/user/bazel-project
-Running: bazel test //server:handler_test --test_arg --nocapture --test_arg --exact --test_arg test_handle_request
-```
+### Build System Detection
+
+Cargo Runner automatically detects your build system in this order:
+
+1. **Bazel** - Looks for `BUILD.bazel` or `BUILD` files
+2. **Cargo** - Looks for `Cargo.toml`
+3. **Rustc** - Fallback for standalone `.rs` files
+
+## Usage with Bazel
 
 For testing cargo-runner with complex Bazel setups, check out: https://github.com/codeitlikemiley/complex-bazel-setup
 
-### Example 4: Standalone Rust files
-
-```bash
-# Initialize for standalone file support
-$ cargo runner init --rustc
-
-# Run tests in a standalone file
-$ cargo runner run /tmp/my_script.rs:25
-
-# Output:
-Running: rustc --test /tmp/my_script.rs -o /tmp/cargo-runner-test && /tmp/cargo-runner-test test_calculation
-```
 
 ## Advanced Features
 
@@ -354,12 +240,8 @@ Running: rustc --test /tmp/my_script.rs -o /tmp/cargo-runner-test && /tmp/cargo-
 
 ### Module Path Resolution
 
-The tool correctly resolves module paths for:
-- Standard library structure (`src/lib.rs`, `src/main.rs`)
-- Binary crates in `src/bin/`
-- Integration tests in `tests/`
-- Benchmarks in `benches/`
-- Workspace members
+The tool correctly resolves module paths for individual tests for binaries, integration tests, and benchmarks.
+e.g. `tests::test_user`
 
 ### Build System Detection
 
@@ -368,10 +250,13 @@ Automatic detection order:
 2. Cargo (presence of `Cargo.toml`)
 3. Rustc (fallback for standalone files)
 
+Bazel project have both `Cargo.toml` , and `MODULE.bazel` and `BUILD.bazel` files.
+We don't support `WORKSPACE` file for now it would be deprecated this year 2025.
+
 ## Contributing
 
 Contributions are welcome! Please read our contributing guidelines and submit PRs.
 
 ## License
 
-MIT or Apache-2.0, at your option.
+MIT
