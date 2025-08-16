@@ -220,6 +220,28 @@ pub fn bazel_validation_rules() -> ValidationRuleSet {
     rules
 }
 
+/// Get rustc-specific validation rules
+pub fn rustc_validation_rules() -> ValidationRuleSet {
+    let rules = ValidationRuleSet::new();
+
+    // Rustc is for single files, so most cargo/bazel options don't apply
+    // For now, we'll use minimal validation
+    // In the future, we could add rules to prevent using workspace/package options
+    
+    rules
+}
+
+/// Get cargo-script-specific validation rules
+pub fn cargo_script_validation_rules() -> ValidationRuleSet {
+    let rules = ValidationRuleSet::new();
+
+    // Cargo script is for single files with inline dependencies
+    // It supports most cargo options but not workspace/package operations
+    // For now, we'll use minimal validation similar to rustc
+    
+    rules
+}
+
 /// Helper function to check if a field is active in CommandOptions
 fn is_field_active(options: &CommandOptions, field_path: &str) -> bool {
     match field_path {

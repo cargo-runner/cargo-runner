@@ -1,0 +1,51 @@
+{
+  "version": "2.0",
+  "build_system": "Cargo",
+  "frameworks": {
+    "test": "cargo-test"
+  },
+  "files": {
+    "src/lib.rs": {
+      "args": {
+        "test_binary": ["--nocapture"]
+      }
+    }
+  },
+  "functions": {
+    "// Simple function names - will match any function with this name": "",
+    "test_user": {
+      "args": {
+        "test_binary": ["--test-threads=1"]
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/test"
+      }
+    },
+    
+    "// Module-qualified function names - only match specific functions": "",
+    "auth::tests::test_user": {
+      "args": {
+        "test_binary": ["--test-threads=2"]
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/auth_test"
+      }
+    },
+    
+    "users::tests::test_user": {
+      "args": {
+        "test_binary": ["--test-threads=4"]
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/users_test"
+      }
+    },
+    
+    "// Can still use simple names for functions that are unique": "",
+    "test_admin": {
+      "args": {
+        "test_binary": ["--ignored"]
+      }
+    }
+  }
+}

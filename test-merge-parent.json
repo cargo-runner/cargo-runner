@@ -1,0 +1,14 @@
+{
+  "version": "2.0",
+  "build_system": "Cargo",
+  "frameworks": {
+    "test": "cargo-test",
+    "binary": "cargo-run"
+  },
+  "args": {
+    "all": ["--color=always"]
+  },
+  "env": {
+    "RUST_LOG": "info"
+  }
+}

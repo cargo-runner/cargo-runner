@@ -1,0 +1,123 @@
+{
+  "version": "2.0",
+  "build_system": "Cargo",
+  "frameworks": {
+    "test": "cargo-test",
+    "binary": "cargo-run",
+    "benchmark": "cargo-bench",
+    "doctest": "cargo-test"
+  },
+  "args": {
+    "all": ["--verbose"],
+    "test": ["--nocapture"]
+  },
+  "env": {
+    "RUST_LOG": "info"
+  },
+  
+  "// === Crate-level overrides ===": "",
+  "crates": {
+    "web-server": {
+      "frameworks": {
+        "binary": "cargo-shuttle"
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/web_dev"
+      }
+    },
+    "ui-app": {
+      "frameworks": {
+        "binary": "dx-serve"
+      }
+    }
+  },
+  
+  "// === File-level overrides ===": "",
+  "files": {
+    "src/main.rs": {
+      "frameworks": {
+        "binary": "cargo-tauri"
+      }
+    },
+    "examples/leptos_*.rs": {
+      "frameworks": {
+        "binary": "cargo-leptos"
+      }
+    },
+    "src/lib.rs": {
+      "args": {
+        "test_binary": ["--test-threads=4"]
+      }
+    }
+  },
+  
+  "// === Module-level overrides ===": "",
+  "modules": {
+    "integration": {
+      "frameworks": {
+        "test": "cargo-nextest"
+      },
+      "args": {
+        "test_binary": ["--test-threads=1"]
+      },
+      "env": {
+        "TEST_ENV": "integration"
+      }
+    },
+    "benches": {
+      "args": {
+        "benchmark": ["--bench-time=10"]
+      }
+    }
+  },
+  
+  "// === Function-level overrides ===": "",
+  "functions": {
+    "// Simple function names - match any function with this name": "",
+    "test_database": {
+      "args": {
+        "test_binary": ["--test-threads=1", "--nocapture"]
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/test_db"
+      }
+    },
+    
+    "// Module-qualified names - only match specific functions": "",
+    "auth::tests::test_login": {
+      "args": {
+        "test_binary": ["--test-threads=1"]
+      },
+      "env": {
+        "AUTH_SECRET": "test_secret",
+        "DATABASE_URL": "postgres://localhost/auth_test"
+      }
+    },
+    
+    "users::tests::test_create_user": {
+      "args": {
+        "test_binary": ["--test-threads=2"]
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/users_test"
+      }
+    },
+    
+    "// Deeply nested module paths": "",
+    "api::v2::endpoints::tests::test_health_check": {
+      "args": {
+        "test_binary": ["--ignored"]
+      },
+      "env": {
+        "API_VERSION": "v2"
+      }
+    },
+    
+    "// Binary/example overrides": "",
+    "main": {
+      "args": {
+        "binary": ["--release"]
+      }
+    }
+  }
+}

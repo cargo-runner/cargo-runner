@@ -170,6 +170,11 @@ impl ModuleResolver {
                     components.push(component.to_string());
                 }
             }
+        } else if path_str.find("/examples/").is_some() {
+            // Handle example files - they don't have a module prefix
+            // Examples are like binaries, they're standalone programs
+            // So we return empty components, just like src/main.rs
+            return Ok(components);
         }
 
         Ok(components)

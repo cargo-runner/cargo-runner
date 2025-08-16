@@ -1,0 +1,33 @@
+{
+  "cargo": {
+    "test_framework": {
+      "command": "cargo",
+      "subcommand": "test"
+    }
+  },
+  "overrides": [
+    {
+      "match": {
+        "module_path": "*::tests",
+        "function_name": "test_*"
+      },
+      "cargo": {
+        "test_framework": {
+          "command": "cargo",
+          "subcommand": "nextest run"
+        }
+      }
+    },
+    {
+      "match": {
+        "file_path": "src/bin/dioxus_app.rs"
+      },
+      "cargo": {
+        "binary_framework": {
+          "command": "dx",
+          "subcommand": "serve"
+        }
+      }
+    }
+  ]
+}

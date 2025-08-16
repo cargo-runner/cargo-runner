@@ -1,0 +1,9 @@
+{
+  "build_system": "cargo",
+  "framework": {
+    "test": {
+      "command": "cargo",
+      "subcommand": "nextest run"
+    }
+  }
+}

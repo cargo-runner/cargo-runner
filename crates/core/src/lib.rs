@@ -22,7 +22,7 @@ pub use types::*;
 
 // Re-export main API components
 pub use command::{CargoCommand, CommandType};
-pub use config::Config;
+pub use config::V2Config as Config;
 
 // Export the unified runner
 pub use runners::UnifiedRunner;

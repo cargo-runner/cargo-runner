@@ -1,0 +1,37 @@
+{
+  "cargo": {
+    "binary_framework": {
+      "command": "cargo",
+      "subcommand": "run"
+    }
+  },
+  "overrides": [
+    {
+      "match": {
+        "file_path": "src/bin/dioxus_*.rs"
+      },
+      "cargo": {
+        "binary_framework": {
+          "command": "dx",
+          "subcommand": "serve",
+          "extra_args": ["--hot-reload"],
+          "extra_env": {
+            "DIOXUS_LOG": "info"
+          }
+        }
+      }
+    },
+    {
+      "match": {
+        "file_path": "examples/dioxus_*.rs"
+      },
+      "cargo": {
+        "binary_framework": {
+          "command": "dx",
+          "subcommand": "serve",
+          "extra_args": ["--example", "{file_name}"]
+        }
+      }
+    }
+  ]
+}

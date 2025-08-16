@@ -1,0 +1,37 @@
+{
+  "version": "2.0",
+  "build_system": "Cargo",
+  "frameworks": {
+    "test": "cargo-test"
+  },
+  "args": {
+    "all": ["--verbose"]
+  },
+  
+  "crates": {
+    "cargo-runner-core": {
+      "frameworks": {
+        "test": "cargo-nextest"
+      }
+    }
+  },
+  
+  "modules": {
+    "config::v2": {
+      "args": {
+        "test": ["--features", "v2-config"]
+      }
+    }
+  },
+  
+  "functions": {
+    "test_json_*": {
+      "args": {
+        "test_binary": ["--nocapture"]
+      },
+      "env": {
+        "TEST_MODE": "json"
+      }
+    }
+  }
+}

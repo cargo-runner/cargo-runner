@@ -1,12 +1,9 @@
-//! New runner architecture with clear separation of concerns
+//! Runner architecture for v2 configuration system
 
-pub mod bazel_runner;
 pub mod builder;
-pub mod cargo_runner;
 pub mod common;
 pub mod framework;
 pub mod options;
-pub mod rustc_runner;
 pub mod traits;
 pub mod unified_runner;
 pub mod validation;

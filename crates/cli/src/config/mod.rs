@@ -1,5 +1,6 @@
 pub mod generators;
 pub mod templates;
+pub mod v2_generators;
 pub mod workspace;
 
 pub use generators::{create_default_config, create_root_config, create_workspace_config};

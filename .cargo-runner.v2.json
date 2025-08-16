@@ -1,0 +1,9 @@
+{
+  "version": "2.0",
+  "workspace": {
+    "build_system": "Cargo",
+    "framework_test": "cargo-test",
+    "framework_bench": "cargo-bench", 
+    "framework_binary": "cargo-run"
+  }
+}

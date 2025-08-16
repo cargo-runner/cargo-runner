@@ -8,9 +8,6 @@ use std::path::Path;
 
 /// Core trait that all command runners must implement
 pub trait CommandRunner: Send + Sync {
-    /// The configuration type this runner uses
-    type Config;
-
     /// The command type this runner produces
     type Command: RunnerCommand;
 
@@ -20,11 +17,12 @@ pub trait CommandRunner: Send + Sync {
     /// Get the best runnable at a specific line
     fn get_runnable_at_line(&self, file_path: &Path, line: u32) -> Result<Option<Runnable>>;
 
-    /// Build a command for the given runnable
+    /// Build a command for the given runnable using v2 config context
     fn build_command(
         &self,
         runnable: &Runnable,
-        config: &Self::Config,
+        context: &crate::config::v2::ScopeContext,
+        v2_config: &crate::config::v2::V2Config,
         file_type: FileType,
     ) -> Result<Self::Command>;
 

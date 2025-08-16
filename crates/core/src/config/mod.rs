@@ -1,23 +1,13 @@
 //! Configuration management for cargo-runner
+//! 
+//! This module provides the v2 configuration system.
 
-mod bazel_config;
-mod cargo_config;
-mod features;
-mod merge;
-pub mod override_config;
-mod rustc_config;
-mod settings;
-pub mod test_framework;
-pub mod utils;
-pub mod validation;
+// V2 configuration system
+pub mod v2;
 
-// Re-export main types
-pub use bazel_config::{BazelConfig, BazelFramework};
-pub use cargo_config::{BinaryFramework, CargoConfig, SingleFileScriptConfig};
-pub use features::Features;
-pub use merge::{ConfigInfo, ConfigMerger};
-pub use override_config::Override;
-pub use rustc_config::{RustcConfig, RustcFramework, RustcPhaseConfig};
-pub use settings::Config;
-pub use test_framework::TestFramework;
-pub use utils::is_valid_channel;
+// Re-export v2 types as primary config
+pub use v2::{
+    V2Config, ConfigBuilder, ConfigLayer, ConfigLoader, ConfigResolver,
+    FrameworkKind, FrameworkStrategy, JsonConfig, LayerConfig, LayerConfigExt,
+    Scope, ScopeKind, ScopeContext, StrategyRegistry, scope_context_from_identity,
+};

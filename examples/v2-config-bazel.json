@@ -1,0 +1,47 @@
+{
+  "version": "2.0",
+  "linked_projects": [
+    "./MODULE.bazel"
+  ],
+  "workspace": {
+    "build_system": "Bazel",
+    "frameworks": {
+      "test": "bazel-test",
+      "binary": "bazel-run",
+      "benchmark": "bazel-bench",
+      "doctest": "bazel-test",
+      "build": "bazel-build"
+    },
+    "args": {
+      "all": ["--color=yes"],
+      "test": ["--test_output=errors"],
+      "build": ["--compilation_mode=opt"]
+    },
+    "env": {
+      "BAZEL_USE_CPP_ONLY_TOOLCHAIN": "1"
+    }
+  },
+  
+  "files": {
+    "src/server/*.rs": {
+      "args": {
+        "test": ["--test_env=SERVER_TEST=1"],
+        "binary": ["--", "--port=8080"]
+      }
+    },
+    
+    "src/client/*.rs": {
+      "args": {
+        "build": ["--platforms=//platforms:wasm"]
+      }
+    }
+  },
+  
+  "modules": {
+    "integration_tests": {
+      "args": {
+        "test": ["--test_timeout=300", "--test_output=all"]
+      }
+    }
+  }
+}

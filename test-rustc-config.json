@@ -1,0 +1,8 @@
+{
+  "version": "2.0",
+  "build_system": "Rustc",
+  "frameworks": {
+    "test": "rustc-test",
+    "binary": "rustc-run"
+  }
+}

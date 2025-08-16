@@ -3,11 +3,9 @@ use std::{env, fs, path::PathBuf};
 use tracing::info;
 use walkdir::WalkDir;
 
-use crate::config::generators::{
-    create_default_config, create_root_config, create_workspace_config,
-};
-use crate::config::templates::{
-    create_combined_config, create_rustc_config, create_single_file_script_config,
+use crate::config::v2_generators::{
+    create_v2_default_config, create_v2_root_config, create_v2_workspace_config,
+    create_v2_combined_config, create_v2_rustc_config, create_v2_single_file_script_config,
 };
 use crate::config::workspace::{get_package_name, is_workspace_only};
 
@@ -31,7 +29,7 @@ pub fn init_command(
     // Handle special config types
     if rustc || single_file_script {
         // Generate a single config file in the current directory
-        let config_path = project_root.join(".cargo-runner.json");
+        let config_path = project_root.join(".cargo-runner-v2.json");
 
         if config_path.exists() && !force {
             println!("❌ Config already exists at: {}", config_path.display());
@@ -41,13 +39,13 @@ pub fn init_command(
 
         let config = if rustc && single_file_script {
             println!("🦀 Generating combined rustc and single-file-script configuration");
-            create_combined_config()
+            create_v2_combined_config()
         } else if rustc {
             println!("🦀 Generating rustc configuration for standalone files");
-            create_rustc_config()
+            create_v2_rustc_config()
         } else {
             println!("📜 Generating single-file-script configuration");
-            create_single_file_script_config()
+            create_v2_single_file_script_config()
         };
 
         fs::write(&config_path, config)
@@ -112,9 +110,9 @@ pub fn init_command(
     let mut skipped = 0;
 
     // Create root config with linkedProjects
-    let root_config_path = project_root.join(".cargo-runner.json");
+    let root_config_path = project_root.join(".cargo-runner-v2.json");
     if !root_config_path.exists() || force {
-        let root_config = create_root_config(&project_root, &cargo_tomls)?;
+        let root_config = create_v2_root_config(&project_root, &cargo_tomls)?;
         fs::write(&root_config_path, root_config).with_context(|| {
             format!(
                 "Failed to write root config to {}",
@@ -139,7 +137,7 @@ pub fn init_command(
         }
 
         let project_dir = cargo_toml.parent().unwrap();
-        let config_path = project_dir.join(".cargo-runner.json");
+        let config_path = project_dir.join(".cargo-runner-v2.json");
 
         // Check if config already exists
         if config_path.exists() && !force {
@@ -151,12 +149,12 @@ pub fn init_command(
         // Check if this is a workspace-only Cargo.toml
         let config = if is_workspace_only(cargo_toml)? {
             // Create workspace config (no package name)
-            create_workspace_config()
+            create_v2_workspace_config()
         } else {
             // Read package name from Cargo.toml
             let package_name = get_package_name(cargo_toml)?;
             // Create package configuration
-            create_default_config(&package_name)
+            create_v2_default_config(&package_name)
         };
 
         // Write configuration file

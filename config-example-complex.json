@@ -1,0 +1,73 @@
+{
+  "build_system": "cargo",
+  "framework": {
+    "test": {
+      "command": "cargo",
+      "subcommand": "test"
+    },
+    "binary": {
+      "command": "cargo", 
+      "subcommand": "run"
+    },
+    "benchmark": {
+      "command": "cargo",
+      "subcommand": "bench",
+      "channel": "nightly"
+    }
+  },
+  "extra_args": ["--nocapture"],
+  "extra_test_binary_args": ["--show-output"],
+  "extra_env": {
+    "RUST_LOG": "info"
+  },
+  "overrides": [
+    {
+      "scope": {
+        "crate": "cargo-runner-core"
+      },
+      "framework": {
+        "test": {
+          "command": "cargo",
+          "subcommand": "nextest run"
+        }
+      }
+    },
+    {
+      "scope": {
+        "file": "src/bin/dioxus_app.rs"
+      },
+      "framework": {
+        "binary": {
+          "command": "dx",
+          "subcommand": "serve"
+        }
+      },
+      "extra_args": ["--hot-reload"],
+      "extra_env": {
+        "DIOXUS_LOG": "debug"
+      }
+    },
+    {
+      "scope": {
+        "module": "parser::tests"
+      },
+      "framework": {
+        "test": {
+          "channel": "nightly"
+        }
+      },
+      "extra_env": {
+        "RUST_BACKTRACE": "1"
+      }
+    },
+    {
+      "scope": {
+        "function": "parser::tests::test_complex_parsing"
+      },
+      "extra_env": {
+        "RUST_BACKTRACE": "full",
+        "RUST_LOG": "trace"
+      }
+    }
+  ]
+}

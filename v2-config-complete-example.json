@@ -1,0 +1,180 @@
+{
+  "version": "2.0",
+  "linked_projects": [
+    "/Users/uriah/Code/windrunner/Cargo.toml",
+    "/Users/uriah/Code/windrunner/crates/core/Cargo.toml",
+    "/Users/uriah/Code/windrunner/crates/cli/Cargo.toml"
+  ],
+  
+  "comment": "Top-level defaults for the entire workspace",
+  "build_system": "Cargo",
+  "frameworks": {
+    "test": "cargo-test",
+    "binary": "cargo-run",
+    "benchmark": "cargo-bench",
+    "doctest": "cargo-doctest",
+    "build": "cargo-build"
+  },
+  "args": {
+    "all": ["--color=always"],
+    "test": ["--workspace"]
+  },
+  "env": {
+    "RUST_LOG": "info"
+  },
+  
+  "comment": "Override for specific crates/packages",
+  "crates": {
+    "my-web-app": {
+      "comment": "This crate uses trunk for serving",
+      "frameworks": {
+        "binary": "trunk-serve",
+        "build": "trunk-build"
+      },
+      "args": {
+        "binary": ["--open"]
+      }
+    },
+    
+    "my-leptos-app": {
+      "comment": "This crate uses leptos",
+      "frameworks": {
+        "binary": "leptos-watch"
+      },
+      "env": {
+        "LEPTOS_OUTPUT_NAME": "app",
+        "LEPTOS_SITE_ADDR": "127.0.0.1:3000"
+      }
+    },
+    
+    "integration-tests": {
+      "comment": "This test crate needs single-threaded execution",
+      "frameworks": {
+        "test": "cargo-nextest"
+      },
+      "args": {
+        "test": ["--test-threads=1", "--nocapture"]
+      }
+    }
+  },
+  
+  "comment": "Override for specific files or file patterns",
+  "files": {
+    "examples/leptos_*.rs": {
+      "comment": "All leptos examples use leptos-watch",
+      "frameworks": {
+        "binary": "leptos-watch"
+      }
+    },
+    
+    "examples/dioxus_*.rs": {
+      "comment": "All dioxus examples use dx serve",
+      "frameworks": {
+        "binary": "dx-serve"
+      }
+    },
+    
+    "examples/trunk_*.rs": {
+      "comment": "All trunk examples use trunk serve",
+      "frameworks": {
+        "binary": "trunk-serve"
+      },
+      "args": {
+        "binary": ["--open", "--port", "8080"]
+      }
+    },
+    
+    "tests/e2e/*.rs": {
+      "comment": "E2E tests need special environment",
+      "args": {
+        "test": ["--features", "e2e"],
+        "test_binary": ["--test-threads=1"]
+      },
+      "env": {
+        "E2E_ENABLED": "true",
+        "HEADLESS": "true"
+      }
+    },
+    
+    "benches/heavy_*.rs": {
+      "comment": "Heavy benchmarks need more samples",
+      "args": {
+        "benchmark": ["--sample-size", "1000", "--warm-up-time", "5"]
+      }
+    }
+  },
+  
+  "comment": "Override for specific modules",
+  "modules": {
+    "database::tests": {
+      "comment": "Database tests need single-threaded execution",
+      "args": {
+        "test_binary": ["--test-threads=1"]
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/test_db",
+        "TEST_DATABASE": "true"
+      }
+    },
+    
+    "integration": {
+      "comment": "All integration tests use nextest",
+      "frameworks": {
+        "test": "cargo-nextest"
+      },
+      "args": {
+        "test": ["--retries", "3"]
+      }
+    },
+    
+    "benchmarks": {
+      "comment": "Benchmark module configuration",
+      "frameworks": {
+        "benchmark": "cargo-bench"
+      },
+      "args": {
+        "benchmark": ["--features", "bench-utils"]
+      }
+    }
+  },
+  
+  "comment": "Override for specific functions",
+  "functions": {
+    "test_flaky_*": {
+      "comment": "Flaky tests need retries",
+      "frameworks": {
+        "test": "cargo-nextest"
+      },
+      "args": {
+        "test": ["--retries", "5"]
+      }
+    },
+    
+    "test_db_*": {
+      "comment": "Database tests need isolation",
+      "args": {
+        "test_binary": ["--test-threads=1", "--nocapture"]
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/test_isolated"
+      }
+    },
+    
+    "bench_*_memory": {
+      "comment": "Memory benchmarks need special flags",
+      "args": {
+        "benchmark": ["--features", "memory-profiling"]
+      },
+      "env": {
+        "MEMORY_PROFILING": "true"
+      }
+    },
+    
+    "main": {
+      "comment": "Special configuration for main functions",
+      "args": {
+        "binary": ["--release"]
+      }
+    }
+  }
+}

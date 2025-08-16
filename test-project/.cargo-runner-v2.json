@@ -1,0 +1,8 @@
+{
+  "version": "2.0",
+  "build_system": "Cargo",
+  "frameworks": {
+    "test": "cargo-test",
+    "doctest": "cargo-doctest"
+  }
+}

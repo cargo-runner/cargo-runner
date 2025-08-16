@@ -1,0 +1,25 @@
+{
+  "_comment": "Basic Cargo project configuration",
+  "version": "2.0",
+  "linked_projects": [
+    "/path/to/Cargo.toml"
+  ],
+  "workspace": {
+    "build_system": "Cargo",
+    "frameworks": {
+      "test": "cargo-test",
+      "binary": "cargo-run",
+      "benchmark": "cargo-bench",
+      "doctest": "cargo-doctest",
+      "build": "cargo-build"
+    },
+    "args": {
+      "all": ["--verbose"],
+      "test": ["--nocapture"],
+      "build": ["--release"]
+    },
+    "env": {
+      "RUST_LOG": "debug"
+    }
+  }
+}

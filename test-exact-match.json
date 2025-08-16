@@ -1,0 +1,24 @@
+{
+  "cargo": {
+    "test_framework": {
+      "command": "cargo",
+      "subcommand": "test",
+      "extra_args": ["--nocapture"]
+    }
+  },
+  "overrides": [
+    {
+      "match": {
+        "module_path": "parser::scope_detector::tests",
+        "function_name": "test_detect_function_scope"
+      },
+      "cargo": {
+        "test_framework": {
+          "command": "cargo",
+          "subcommand": "nextest",
+          "extra_args": ["run", "--no-capture"]
+        }
+      }
+    }
+  ]
+}

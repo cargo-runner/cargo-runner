@@ -12,7 +12,7 @@ pub fn unset_command(clean: bool) -> Result<()> {
         println!("📍 Current PROJECT_ROOT: {}", root);
 
         if clean {
-            println!("🧹 Cleaning .cargo-runner.json files...");
+            println!("🧹 Cleaning .cargo-runner.json and .cargo-runner-v2.json files...");
 
             use walkdir::WalkDir;
             let mut removed = 0;
@@ -22,7 +22,7 @@ pub fn unset_command(clean: bool) -> Result<()> {
                 .into_iter()
                 .filter_map(|e| e.ok())
             {
-                if entry.file_name() == ".cargo-runner.json" {
+                if entry.file_name() == ".cargo-runner.json" || entry.file_name() == ".cargo-runner-v2.json" {
                     if let Err(e) = fs::remove_file(entry.path()) {
                         eprintln!("   ⚠️  Failed to remove {}: {}", entry.path().display(), e);
                     } else {

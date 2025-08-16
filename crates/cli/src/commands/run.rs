@@ -21,17 +21,17 @@ pub fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
 
     debug!("Running file: {} at line: {:?}", filepath, line);
 
-    let mut runner = cargo_runner_core::UnifiedRunner::new()?;
-    let filepath_path = std::path::Path::new(&filepath);
+    // Use UnifiedRunner::with_path to load v2 config from the file's location
+    let mut runner = cargo_runner_core::UnifiedRunner::with_path(&absolute_path)?;
     let command = if line.is_none() {
         // For file-level commands (no line specified), use get_file_command
         // which has special logic to prefer test commands over doc tests
         runner
-            .get_file_command(filepath_path)?
+            .get_file_command(&absolute_path)?
             .ok_or_else(|| anyhow::anyhow!("No runnable found in file"))?
     } else {
         // For line-specific commands, use the regular method
-        runner.get_command_at_position_with_dir(filepath_path, line.map(|l| l as u32))?
+        runner.get_command_at_position_with_dir(&absolute_path, line.map(|l| l as u32))?
     };
 
     if dry_run {

@@ -1,0 +1,22 @@
+{
+  "version": "2.0",
+  "files": {
+    "cargo_script_demo.rs": {
+      "build_system": "CargoScript",
+      "frameworks": {
+        "binary": "cargo-script-run",
+        "test": "cargo-script-test"
+      }
+    },
+    "simple_cargo_script.rs": {
+      "build_system": "CargoScript",
+      "frameworks": {
+        "binary": "cargo-script-run",
+        "test": "cargo-script-test"
+      }
+    },
+    "*.rs": {
+      "build_system": "Cargo"
+    }
+  }
+}

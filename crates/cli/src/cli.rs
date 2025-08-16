@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::commands::{
-    analyze_command, init_command, override_command, run_command, unset_command,
+    analyze_command, init_command, run_command, unset_command,
 };
 
 #[derive(Parser)]
@@ -78,25 +78,6 @@ pub enum Commands {
         #[arg(short, long)]
         clean: bool,
     },
-    /// Create override configuration for a specific file location
-    #[command(visible_alias = "o")]
-    Override {
-        /// File path with optional line number (e.g., src/main.rs:10)
-        filepath: String,
-
-        /// Create override at project root level
-        #[arg(short, long)]
-        root: bool,
-
-        /// Override arguments in the format: [-- <OVERRIDE_ARGS>...]
-        ///
-        /// Examples:
-        ///   cargo runner override src/main.rs:10 -- --extra-args --release
-        ///   cargo runner override src/main.rs:10 -- --remove-args
-        ///   cargo runner override src/main.rs:10 -- --extra-env RUST_LOG=debug
-        #[arg(last = true)]
-        override_args: Vec<String>,
-    },
 }
 
 impl Commands {
@@ -138,11 +119,6 @@ impl Commands {
                 single_file_script,
             } => init_command(cwd.as_deref(), force, rustc, single_file_script),
             Commands::Unset { clean } => unset_command(clean),
-            Commands::Override {
-                filepath,
-                root,
-                override_args,
-            } => override_command(&filepath, root, override_args),
         }
     }
 }

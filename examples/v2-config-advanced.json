@@ -1,0 +1,120 @@
+{
+  "version": "2.0",
+  "linked_projects": [
+    "./Cargo.toml"
+  ],
+  "workspace": {
+    "build_system": "Cargo",
+    "frameworks": {
+      "test": "cargo-nextest",
+      "binary": "cargo-run",
+      "benchmark": "cargo-bench",
+      "doctest": "cargo-doctest",
+      "build": "cargo-build"
+    },
+    "args": {
+      "all": ["--color=always"],
+      "test": ["--workspace"],
+      "build": ["--all-features"]
+    },
+    "env": {
+      "RUST_BACKTRACE": "1"
+    }
+  },
+  
+  "crates": {
+    "my-web-app": {
+      "frameworks": {
+        "binary": "trunk-serve",
+        "build": "cargo-build"
+      },
+      "args": {
+        "build": ["--target", "wasm32-unknown-unknown"]
+      }
+    },
+    
+    "my-leptos-app": {
+      "frameworks": {
+        "binary": "leptos-watch"
+      },
+      "env": {
+        "LEPTOS_OUTPUT_NAME": "app"
+      }
+    },
+    
+    "my-dioxus-app": {
+      "frameworks": {
+        "binary": "dx-serve"
+      }
+    }
+  },
+  
+  "files": {
+    "tests/integration/*.rs": {
+      "frameworks": {
+        "test": "cargo-test"
+      },
+      "args": {
+        "test": ["--test-threads=1"],
+        "test_binary": ["--show-output"]
+      },
+      "env": {
+        "TEST_ENV": "integration"
+      }
+    },
+    
+    "benches/*.rs": {
+      "args": {
+        "benchmark": ["--bench", ".*"]
+      }
+    },
+    
+    "examples/demo.rs": {
+      "frameworks": {
+        "binary": "cargo-run"
+      },
+      "args": {
+        "binary": ["--release", "--", "--demo-mode"]
+      }
+    }
+  },
+  
+  "modules": {
+    "tests::e2e": {
+      "args": {
+        "test": ["--features", "e2e-tests"],
+        "test_binary": ["--test-threads=1", "--nocapture"]
+      },
+      "env": {
+        "E2E_TESTS": "true",
+        "HEADLESS": "true"
+      }
+    },
+    
+    "benchmarks": {
+      "frameworks": {
+        "benchmark": "cargo-bench"
+      },
+      "args": {
+        "benchmark": ["--features", "bench"]
+      }
+    }
+  },
+  
+  "functions": {
+    "test_database_*": {
+      "args": {
+        "test_binary": ["--test-threads=1"]
+      },
+      "env": {
+        "DATABASE_URL": "postgres://localhost/test"
+      }
+    },
+    
+    "bench_*_performance": {
+      "args": {
+        "benchmark": ["--sample-size", "100"]
+      }
+    }
+  }
+}

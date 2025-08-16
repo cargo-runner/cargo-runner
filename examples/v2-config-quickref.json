@@ -1,0 +1,80 @@
+{
+  "// Quick Reference": "V2 Configuration Structure",
+  
+  "// Required": "version field",
+  "version": "2.0",
+  
+  "// Optional": "linked_projects for working directory resolution",
+  "linked_projects": [
+    "./Cargo.toml",
+    "../other-project/Cargo.toml"
+  ],
+  
+  "// Workspace": "Default configuration for entire workspace",
+  "workspace": {
+    "// Build System": "Cargo (default) or Bazel",
+    "build_system": "Cargo",
+    
+    "// Framework Strategies": "Map runnable types to commands",
+    "frameworks": {
+      "test": "cargo-test | cargo-nextest | bazel-test",
+      "binary": "cargo-run | leptos-watch | dx-serve | trunk-serve | bazel-run", 
+      "benchmark": "cargo-bench | bazel-bench",
+      "doctest": "cargo-doctest | bazel-test",
+      "build": "cargo-build | bazel-build"
+    },
+    
+    "// Arguments": "Additional command line arguments",
+    "args": {
+      "all": ["args added to all commands"],
+      "test": ["args for test commands"],
+      "binary": ["args for binary commands"],
+      "benchmark": ["args for benchmark commands"],
+      "build": ["args for build commands"],
+      "test_binary": ["args after -- for test binaries"]
+    },
+    
+    "// Environment": "Environment variables",
+    "env": {
+      "KEY": "value",
+      "RUST_LOG": "debug"
+    }
+  },
+  
+  "// Crate Overrides": "Configuration per crate/package",
+  "crates": {
+    "package-name": {
+      "// Same options as workspace": "..."
+    }
+  },
+  
+  "// File Overrides": "Configuration for file patterns",
+  "files": {
+    "src/bin/*.rs": {
+      "// Same options as workspace": "..."
+    },
+    "tests/**/*.rs": {
+      "// Glob patterns supported": "..."
+    }
+  },
+  
+  "// Module Overrides": "Configuration for Rust modules",
+  "modules": {
+    "tests::integration": {
+      "// Same options as workspace": "..."
+    },
+    "core::*": {
+      "// Wildcards supported": "..."
+    }
+  },
+  
+  "// Function Overrides": "Configuration for function name patterns",
+  "functions": {
+    "test_*": {
+      "// Same options as workspace": "..."
+    },
+    "*_benchmark": {
+      "// Pattern matching supported": "..."
+    }
+  }
+}

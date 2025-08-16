@@ -145,8 +145,8 @@ impl RunnableDetector {
                         } else {
                             impl_name
                         };
-                        // Return with "impl" marker to differentiate from struct doc tests
-                        (format!("impl {}", type_name), None)
+                        // Return just the type name
+                        (type_name.to_string(), None)
                     } else {
                         // Struct
                         (parent.name.clone().unwrap_or_default(), None)

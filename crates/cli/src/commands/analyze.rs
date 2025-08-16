@@ -24,7 +24,7 @@ pub fn analyze_command(filepath_arg: &str, verbose: bool, show_config: bool) -> 
         return Err(anyhow::anyhow!("File not found: {}", absolute_path.display()));
     }
 
-    let mut runner = cargo_runner_core::UnifiedRunner::new()?;
+    let mut runner = cargo_runner_core::UnifiedRunner::with_path(&absolute_path)?;
 
     if verbose {
         // Show JSON output for verbose mode
@@ -64,7 +64,7 @@ pub fn print_formatted_analysis(
 
     // Show config details if requested
     if show_config {
-        print_config_details(runner, filepath)?;
+        print_v2_config_details(runner, filepath)?;
     }
 
     let path = Path::new(filepath);
@@ -151,51 +151,18 @@ pub fn print_formatted_analysis(
 
         for (i, runnable) in runnables.iter().enumerate() {
             println!("{}. {}", i + 1, runnable.label);
+            println!(
+                "   📏 Scope: lines {}-{}",
+                runnable.scope.start.line + 1,
+                runnable.scope.end.line + 1
+            );
 
-            // Show scope with 1-based line numbers
-            // For doc tests, show the extended scope if available
-            if matches!(
-                runnable.kind,
-                cargo_runner_core::RunnableKind::DocTest { .. }
-            ) {
-                if let Some(ref extended) = runnable.extended_scope {
-                    println!(
-                        "   📏 Scope: lines {}-{}",
-                        extended.scope.start.line + 1,
-                        extended.scope.end.line + 1
-                    );
-                } else {
-                    println!(
-                        "   📏 Scope: lines {}-{}",
-                        runnable.scope.start.line + 1,
-                        runnable.scope.end.line + 1
-                    );
-                }
-            } else {
-                println!(
-                    "   📏 Scope: lines {}-{}",
-                    runnable.scope.start.line + 1,
-                    runnable.scope.end.line + 1
-                );
-            }
-
-            // Debug: show if this runnable contains the requested line
-            if let Some(line_num) = line {
-                let contains = runnable.scope.contains_line(line_num as u32);
-                debug!(
-                    "Runnable '{}' contains line {}? {}",
-                    runnable.label,
-                    line_num + 1,
-                    contains
-                );
-            }
-
-            // Debug: show module path
+            // Show module path if applicable
             if !runnable.module_path.is_empty() {
                 println!("   📍 Module path: {}", runnable.module_path);
             }
 
-            // Show attributes if present
+            // Show extended scope info if present
             if let Some(ref extended) = runnable.extended_scope {
                 if extended.attribute_lines > 0 {
                     println!("   🏷️  Attributes: {} lines", extended.attribute_lines);
@@ -206,83 +173,10 @@ pub fn print_formatted_analysis(
             }
 
             // Build and show command
-            if let Some(command) = runner.build_command_for_runnable(runnable)? {
+            if let Ok(command) = runner.build_command(runnable) {
                 print_command_breakdown(&command);
                 // Store the final command
                 final_command = Some(command.to_shell_command());
-            }
-
-            // Show matching override if config details requested
-            if show_config {
-                if let Some(override_config) = runner.get_override_for_runnable(runnable) {
-                    println!("   🔀 Matched override:");
-                    println!("      • match: {:?}", override_config.identity);
-
-                    // Show cargo config if present
-                    if let Some(cargo) = &override_config.cargo {
-                        println!("      • cargo config:");
-                        if cargo.command.is_some() {
-                            println!("        - command: {:?}", cargo.command);
-                        }
-                        if cargo.subcommand.is_some() {
-                            println!("        - subcommand: {:?}", cargo.subcommand);
-                        }
-                        if let Some(features) = &cargo.features {
-                            match features {
-                                cargo_runner_core::config::Features::All(s) if s == "all" => {
-                                    println!("        - features: all");
-                                }
-                                cargo_runner_core::config::Features::Selected(selected) => {
-                                    println!("        - features: {:?}", selected);
-                                }
-                                _ => {}
-                            }
-                        }
-                        if cargo.extra_args.is_some() {
-                            println!("        - extra_args: {:?}", cargo.extra_args);
-                        }
-                        if cargo.extra_test_binary_args.is_some() {
-                            println!(
-                                "        - extra_test_binary_args: {:?}",
-                                cargo.extra_test_binary_args
-                            );
-                        }
-                        if cargo.extra_env.is_some() {
-                            println!("        - extra_env: {:?}", cargo.extra_env);
-                        }
-                    }
-
-                    // Show rustc config if present
-                    if let Some(rustc) = &override_config.rustc {
-                        println!("      • rustc config:");
-                        if rustc.test_framework.is_some() {
-                            println!("        - test_framework: present");
-                        }
-                        if rustc.binary_framework.is_some() {
-                            println!("        - binary_framework: present");
-                        }
-                        if rustc.benchmark_framework.is_some() {
-                            println!("        - benchmark_framework: present");
-                        }
-                    }
-
-                    // Show single_file_script config if present
-                    if let Some(sfs) = &override_config.single_file_script {
-                        println!("      • single_file_script config:");
-                        if sfs.extra_args.is_some() {
-                            println!("        - extra_args: {:?}", sfs.extra_args);
-                        }
-                        if sfs.extra_test_binary_args.is_some() {
-                            println!(
-                                "        - extra_test_binary_args: {:?}",
-                                sfs.extra_test_binary_args
-                            );
-                        }
-                        if sfs.extra_env.is_some() {
-                            println!("        - extra_env: {:?}", sfs.extra_env);
-                        }
-                    }
-                }
             }
 
             // Show type
@@ -300,126 +194,106 @@ pub fn print_formatted_analysis(
         }
     }
 
-    // Display final command at the end
+    // Show the final command to run
     if let Some(cmd) = final_command {
         println!("\n🎯 Command to run:");
         println!("   {}", cmd);
     }
 
     println!("\n{}", "=".repeat(80));
+
     Ok(())
 }
 
-fn print_config_details(_runner: &cargo_runner_core::UnifiedRunner, filepath: &str) -> Result<()> {
-    use cargo_runner_core::config::ConfigMerger;
-    use std::path::Path;
+fn print_v2_config_details(runner: &cargo_runner_core::UnifiedRunner, _filepath: &str) -> Result<()> {
 
     println!("\n📁 Configuration Details:");
     println!("   {}", "-".repeat(75));
 
-    // Get the merged configs
-    let path = Path::new(filepath);
-    let mut merger = ConfigMerger::new();
-    merger.load_configs_for_path(path)?;
-
-    // Show which configs were loaded
-    let config_info = merger.get_config_info();
-
-    if let Some(root_path) = &config_info.root_config_path {
-        println!("   🏯 Root config: {}", root_path.display());
-    } else {
-        println!("   🏯 Root config: None");
-    }
-
-    if let Some(workspace_path) = &config_info.workspace_config_path {
-        println!("   📦 Workspace config: {}", workspace_path.display());
-    } else {
-        println!("   📦 Workspace config: None");
-    }
-
-    if let Some(package_path) = &config_info.package_config_path {
-        println!("   📦 Package config: {}", package_path.display());
-    } else {
-        println!("   📦 Package config: None");
-    }
-
-    // Show the merged config summary
-    let merged_config = merger.get_merged_config();
-    println!("\n   🔀 Merged configuration:");
-
-    // Show cargo configuration if present
-    if let Some(cargo_config) = &merged_config.cargo {
-        if let Some(command) = &cargo_config.command {
-            println!("      • command: {}", command);
-        }
-        if let Some(subcommand) = &cargo_config.subcommand {
-            println!("      • subcommand: {}", subcommand);
-        }
-        if let Some(channel) = &cargo_config.channel {
-            println!("      • channel: {}", channel);
-        }
-        if let Some(features) = &cargo_config.features {
-            match features {
-                cargo_runner_core::config::Features::All(s) if s == "all" => {
-                    println!("      • features: all");
+    // Get v2 config if available
+    if let Some(v2_config) = Some(runner.v2_config()) {
+        println!("   🆕 V2 Config loaded");
+        
+        // Show workspace configuration
+        if let Some(workspace_layer) = v2_config.layers().iter().find(|l| matches!(l.scope, cargo_runner_core::config::v2::Scope::Workspace)) {
+            println!("\n   📦 Workspace configuration:");
+            
+            // Build system
+            if let Some(build_system) = &workspace_layer.config.build_system {
+                println!("      • build_system: {:?}", build_system);
+            }
+            
+            // Frameworks
+            let frameworks = &workspace_layer.config.frameworks;
+            if frameworks.test.is_some() || frameworks.binary.is_some() || 
+               frameworks.benchmark.is_some() || frameworks.doctest.is_some() || 
+               frameworks.build.is_some() {
+                println!("      • frameworks:");
+                if let Some(test) = &frameworks.test {
+                    println!("        - test: {}", test);
                 }
-                cargo_runner_core::config::Features::Selected(selected) => {
-                    println!("      • features: {:?}", selected);
+                if let Some(binary) = &frameworks.binary {
+                    println!("        - binary: {}", binary);
                 }
-                _ => {}
+                if let Some(benchmark) = &frameworks.benchmark {
+                    println!("        - benchmark: {}", benchmark);
+                }
+                if let Some(doctest) = &frameworks.doctest {
+                    println!("        - doctest: {}", doctest);
+                }
+                if let Some(build) = &frameworks.build {
+                    println!("        - build: {}", build);
+                }
+            }
+            
+            // Arguments
+            let args = &workspace_layer.config.args;
+            if args.all.is_some() || args.test.is_some() || args.binary.is_some() || 
+               args.benchmark.is_some() || args.build.is_some() || args.test_binary.is_some() {
+                println!("      • args:");
+                if let Some(all) = &args.all {
+                    println!("        - all: {:?}", all);
+                }
+                if let Some(test) = &args.test {
+                    println!("        - test: {:?}", test);
+                }
+                if let Some(binary) = &args.binary {
+                    println!("        - binary: {:?}", binary);
+                }
+                if let Some(benchmark) = &args.benchmark {
+                    println!("        - benchmark: {:?}", benchmark);
+                }
+                if let Some(build) = &args.build {
+                    println!("        - build: {:?}", build);
+                }
+                if let Some(test_binary) = &args.test_binary {
+                    println!("        - test_binary: {:?}", test_binary);
+                }
+            }
+            
+            // Environment
+            if !workspace_layer.config.env.vars.is_empty() {
+                println!("      • env: {} variables", workspace_layer.config.env.vars.len());
+                for (key, value) in &workspace_layer.config.env.vars {
+                    println!("        - {}: {}", key, value);
+                }
             }
         }
-        if let Some(extra_args) = &cargo_config.extra_args {
-            if !extra_args.is_empty() {
-                println!("      • extra_args: {:?}", extra_args);
+        
+        // Show other layers if present
+        let other_layers: Vec<_> = v2_config.layers().iter()
+            .filter(|l| !matches!(l.scope, cargo_runner_core::config::v2::Scope::Workspace))
+            .collect();
+            
+        if !other_layers.is_empty() {
+            println!("\n   📑 Additional config layers: {}", other_layers.len());
+            for layer in other_layers {
+                println!("      • {:?}", layer.scope);
             }
         }
-        if let Some(extra_env) = &cargo_config.extra_env {
-            if !extra_env.is_empty() {
-                println!("      • extra_env: {} variables", extra_env.len());
-            }
-        }
-        if let Some(linked_projects) = &cargo_config.linked_projects {
-            println!(
-                "      • linked_projects: {} projects",
-                linked_projects.len()
-            );
-        }
-    }
-
-    // Show rustc configuration if present
-    if let Some(rustc_config) = &merged_config.rustc {
-        println!("      • rustc config:");
-        if rustc_config.test_framework.is_some() {
-            println!("         - test_framework: configured");
-        }
-        if rustc_config.binary_framework.is_some() {
-            println!("         - binary_framework: configured");
-        }
-        if rustc_config.benchmark_framework.is_some() {
-            println!("         - benchmark_framework: configured");
-        }
-    }
-
-    // Show single file script configuration if present
-    if let Some(sfs_config) = &merged_config.single_file_script {
-        println!("      • single_file_script config:");
-        if let Some(extra_args) = &sfs_config.extra_args {
-            if !extra_args.is_empty() {
-                println!("         - extra_args: {:?}", extra_args);
-            }
-        }
-        if let Some(extra_env) = &sfs_config.extra_env {
-            if !extra_env.is_empty() {
-                println!("         - extra_env: {} variables", extra_env.len());
-            }
-        }
-    }
-    if !merged_config.overrides.is_empty() {
-        println!(
-            "      • overrides: {} configured",
-            merged_config.overrides.len()
-        );
+    } else {
+        println!("   ❌ No V2 configuration found");
+        println!("   💡 Create a .cargo-runner-v2.json file to configure the runner");
     }
 
     println!();

@@ -1,0 +1,40 @@
+{
+  "version": "2.0",
+  "build_system": "Cargo",
+  "frameworks": {
+    "test": "cargo-test",
+    "binary": "cargo-run",
+    "benchmark": "cargo-bench",
+    "doctest": "cargo-doctest",
+    "build": "cargo-build"
+  },
+  "files": {
+    "// For standalone test.rs file": "",
+    "test.rs": {
+      "// Unfortunately, rustc strategies aren't implemented yet": "",
+      "// You would need something like:": "",
+      "// \"frameworks\": { \"binary\": \"rustc-run\" }": "",
+      "// For now, this will still use cargo": "",
+      "frameworks": {
+        "binary": "cargo-run"
+      }
+    },
+    
+    "// For single file scripts": "",
+    "sfc.rs": {
+      "// Same issue - would need rustc-run strategy": "",
+      "frameworks": {
+        "binary": "cargo-run"
+      }
+    },
+    
+    "// Pattern for all standalone .rs files in root": "",
+    "*.rs": {
+      "// Would need rustc strategies": "",
+      "frameworks": {
+        "binary": "cargo-run",
+        "test": "cargo-test"
+      }
+    }
+  }
+}

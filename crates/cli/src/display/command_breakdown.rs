@@ -104,8 +104,25 @@ pub fn print_command_breakdown(command: &CargoCommand) {
                 }
             }
         }
+        CommandType::Shell => {
+            // Handle shell commands (like dx, trunk, etc.)
+            if !command.args.is_empty() {
+                let program = &command.args[0];
+                println!("      • command: {}", program);
+                
+                if command.args.len() > 1 {
+                    let subcommand = &command.args[1];
+                    println!("      • subcommand: {}", subcommand);
+                    
+                    let extra_args: Vec<_> = command.args.iter().skip(2).collect();
+                    if !extra_args.is_empty() {
+                        println!("      • extraArgs: {:?}", extra_args);
+                    }
+                }
+            }
+        }
         _ => {
-            // Original cargo command parsing
+            // Cargo and other command types
             let args = &command.args;
             let (subcommand, package, extra_args, test_binary_args) = parse_cargo_command(args);
 
@@ -113,6 +130,23 @@ pub fn print_command_breakdown(command: &CargoCommand) {
 
             if let Some(subcmd) = subcommand {
                 println!("      • subcommand: {}", subcmd);
+                
+                // Handle special cargo subcommands
+                match subcmd.as_str() {
+                    "leptos" => {
+                        // cargo leptos watch
+                        if args.len() > 1 && args[1] == "watch" {
+                            println!("      • leptos-command: watch");
+                        }
+                    }
+                    "nextest" => {
+                        // cargo nextest run
+                        if args.len() > 1 && args[1] == "run" {
+                            println!("      • nextest-command: run");
+                        }
+                    }
+                    _ => {}
+                }
             }
 
             if let Some(pkg) = package {
