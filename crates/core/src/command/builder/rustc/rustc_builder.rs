@@ -62,7 +62,9 @@ impl RustcCommandBuilder {
         file_type: FileType,
     ) -> Result<CargoCommand> {
         tracing::debug!("build_test_command called for test: {}", test_name);
-        let framework = self.get_test_framework(config);
+        // NUKE-CONFIG: Removed test framework
+        // TODO: Just use hardcoded rustc --test
+        let framework = self.default_test_framework();
         let file_name = self.get_file_name(runnable)?;
         // Convert to snake_case for consistency
         let snake_case_name = self.to_snake_case(&file_name);
@@ -125,7 +127,9 @@ impl RustcCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        let framework = self.get_test_framework(config);
+        // NUKE-CONFIG: Removed test framework
+        // TODO: Just use hardcoded rustc --test
+        let framework = self.default_test_framework();
         let file_name = self.get_file_name(runnable)?;
         // Convert to snake_case for consistency
         let snake_case_name = self.to_snake_case(&file_name);
@@ -161,7 +165,9 @@ impl RustcCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) -> Result<CargoCommand> {
-        let framework = self.get_binary_framework(config);
+        // NUKE-CONFIG: Removed binary framework
+        // TODO: Just use hardcoded rustc binary build
+        let framework = self.default_binary_framework();
         let file_name = self.get_file_name(runnable)?;
         let original_name = bin_name.unwrap_or(&file_name);
         // Convert kebab-case to snake_case for crate name

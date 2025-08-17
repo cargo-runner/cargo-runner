@@ -27,12 +27,10 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
         let builder = BenchmarkCommandBuilder;
         let mut args = vec![];
 
-        // Add channel
-        if let Some(channel) = builder.get_channel(config, file_type) {
-            args.push(format!("+{}", channel));
-        }
-
+        // NUKE-CONFIG: Removed channel selection
+        // TODO: Add back criterion support with simple tool selection
         args.push("bench".to_string());
+        let _ = (config, file_type); // Suppress warnings
 
         // Add package
         if let Some(pkg) = package {
@@ -42,8 +40,8 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
             }
         }
 
-        // Apply configuration
-        builder.apply_args(&mut args, runnable, config, file_type);
+        // NUKE-CONFIG: Removed apply_args
+        // TODO: Add simple extra_args support later
 
         // Add benchmark filter
         if let RunnableKind::Benchmark { bench_name } = &runnable.kind {
@@ -58,13 +56,7 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
             command = command.with_working_dir(cargo_root.to_string_lossy().to_string());
         }
 
-        builder.apply_common_config(
-            &mut command,
-            config,
-            file_type,
-            builder.get_extra_env(config, file_type),
-        );
-        builder.apply_env(&mut command, runnable, config, file_type);
+        // NUKE-CONFIG: Removed all env configuration
 
         Ok(command)
     }

@@ -33,109 +33,11 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         let mut args = vec![];
         let mut command_type = CommandType::Cargo;
 
-        // Get binary framework for later use
-        let binary_framework = builder.get_binary_framework(config, file_type);
-
-        // Check for override that might change command/subcommand
-        tracing::debug!("Checking for overrides...");
-        let override_config = builder.get_override(runnable, config, file_type);
-        let has_override_command = override_config
-            .and_then(|o| o.cargo.as_ref())
-            .and_then(|c| c.command.as_ref())
-            .is_some();
-        tracing::debug!("has_override_command: {}", has_override_command);
-
-        // Handle override command first (takes precedence)
-        if let Some(override_config) = override_config {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(cmd) = &override_cargo.command {
-                    if cmd != "cargo" {
-                        command_type = CommandType::Shell;
-                        args.push(cmd.clone());
-
-                        // Add subcommand if specified
-                        if let Some(subcommand) = &override_cargo.subcommand {
-                            args.extend(subcommand.split_whitespace().map(String::from));
-                        }
-                    } else {
-                        // Standard cargo with channel
-                        if let Some(channel) = &override_cargo.channel {
-                            args.push(format!("+{}", channel));
-                        } else if let Some(channel) = builder.get_channel(config, file_type) {
-                            args.push(format!("+{}", channel));
-                        }
-
-                        if let Some(subcommand) = &override_cargo.subcommand {
-                            args.extend(subcommand.split_whitespace().map(String::from));
-                        } else {
-                            args.push("run".to_string());
-                        }
-                    }
-                }
-            }
-        }
-
-        // Only use binary framework if no override command was found
-        if !has_override_command && binary_framework.is_some() {
-            let binary_framework = binary_framework.as_ref().unwrap();
-            // Handle custom command
-            if let Some(cmd) = &binary_framework.command {
-                if cmd != "cargo" {
-                    command_type = CommandType::Shell;
-                    args.push(cmd.clone());
-
-                    // Add subcommand if specified
-                    if let Some(subcommand) = &binary_framework.subcommand {
-                        args.extend(subcommand.split_whitespace().map(String::from));
-                    }
-                } else {
-                    // Standard cargo with channel
-                    if let Some(channel) = &binary_framework.channel {
-                        args.push(format!("+{}", channel));
-                    } else if let Some(channel) = builder.get_channel(config, file_type) {
-                        args.push(format!("+{}", channel));
-                    }
-
-                    // Add subcommand
-                    if let Some(subcommand) = &binary_framework.subcommand {
-                        args.extend(subcommand.split_whitespace().map(String::from));
-                    } else {
-                        args.push("run".to_string());
-                    }
-                }
-            } else {
-                // No custom command, use standard cargo
-                if let Some(channel) = &binary_framework.channel {
-                    args.push(format!("+{}", channel));
-                } else if let Some(channel) = builder.get_channel(config, file_type) {
-                    args.push(format!("+{}", channel));
-                }
-
-                if let Some(subcommand) = &binary_framework.subcommand {
-                    args.extend(subcommand.split_whitespace().map(String::from));
-                } else {
-                    args.push("run".to_string());
-                }
-            }
-
-            // Add framework features (only for cargo commands)
-            if command_type == CommandType::Cargo {
-                if let Some(features) = &binary_framework.features {
-                    args.extend(features.to_args());
-                }
-            }
-
-            // Add framework args
-            if let Some(framework_args) = &binary_framework.extra_args {
-                args.extend(framework_args.clone());
-            }
-        } else if !has_override_command {
-            // Standard binary command (only if no override was applied)
-            if let Some(channel) = builder.get_channel(config, file_type) {
-                args.push(format!("+{}", channel));
-            }
-            args.push("run".to_string());
-        }
+        // NUKE-CONFIG: Removed all binary framework and override command logic
+        // TODO: Add back support for dioxus/leptos/tauri with simple tool selection
+        // For now, just use cargo run
+        args.push("run".to_string());
+        let _ = (config, file_type); // Suppress warnings
 
         // Add package (only for cargo commands)
         if command_type == CommandType::Cargo {
@@ -146,38 +48,14 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
                 }
             }
 
+            // NUKE-CONFIG: Simplified binary name logic - always use default run
             // Add binary name
-            // Check if we're using the default cargo run command
-            // We're using default run if:
-            // 1. We have "run" in the args
-            // 2. We're using cargo (not a custom command like dx)
-            // 3. No custom subcommand (like "leptos serve")
-            let has_custom_command = binary_framework
-                .as_ref()
-                .and_then(|bf| bf.command.as_ref())
-                .map(|cmd| cmd != "cargo")
-                .unwrap_or(false);
-
-            let has_custom_subcommand = binary_framework
-                .as_ref()
-                .and_then(|bf| bf.subcommand.as_ref())
-                .is_some();
-
-            let is_default_run =
-                args.contains(&"run".to_string()) && !has_custom_command && !has_custom_subcommand;
-
-            tracing::debug!(
-                "Check default run: args={:?}, has_custom_command={}, has_custom_subcommand={}, is_default_run={}",
-                args,
-                has_custom_command,
-                has_custom_subcommand,
-                is_default_run
-            );
+            let is_default_run = true;
             builder.add_target(&mut args, runnable, package, is_default_run)?;
         }
 
-        // Apply configuration
-        builder.apply_args(&mut args, runnable, config, file_type);
+        // NUKE-CONFIG: Removed apply_args
+        // TODO: Add simple extra_args support later
 
         let mut command = match command_type {
             CommandType::Shell => {
@@ -194,22 +72,10 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
             command = command.with_working_dir(cargo_root.to_string_lossy().to_string());
         }
 
-        // Apply binary framework env
-        if let Some(ref binary_framework) = binary_framework {
-            if let Some(extra_env) = &binary_framework.extra_env {
-                for (key, value) in extra_env {
-                    command.env.push((key.clone(), value.clone()));
-                }
-            }
-        }
+        // NUKE-CONFIG: Removed binary framework env
 
-        builder.apply_common_config(
-            &mut command,
-            config,
-            file_type,
-            builder.get_extra_env(config, file_type),
-        );
-        builder.apply_env(&mut command, runnable, config, file_type);
+        // NUKE-CONFIG: Removed all env configuration
+        // TODO: Add back simple env vars if needed
 
         Ok(command)
     }
@@ -311,28 +177,9 @@ impl BinaryCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) {
-        // Apply features first
-        self.apply_features(
-            args,
-            runnable,
-            config,
-            file_type,
-            self.get_features(config, file_type),
-        );
-
-        // Apply override args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_args) = &override_cargo.extra_args {
-                    args.extend(extra_args.clone());
-                }
-            }
-        }
-
-        // Apply global args
-        if let Some(extra_args) = self.get_extra_args(config, file_type) {
-            args.extend(extra_args.clone());
-        }
+        // NUKE-CONFIG: Removed all config application
+        let _ = (runnable, config, file_type); // Suppress warnings
+        // TODO: Add simple extra_args support later
     }
 
     fn apply_env(
@@ -342,15 +189,7 @@ impl BinaryCommandBuilder {
         config: &Config,
         file_type: FileType,
     ) {
-        // Apply override env vars
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_env) = &override_cargo.extra_env {
-                    for (key, value) in extra_env {
-                        command.env.push((key.clone(), value.clone()));
-                    }
-                }
-            }
-        }
+        // NUKE-CONFIG: Removed all env configuration
+        let _ = (command, runnable, config, file_type); // Suppress warnings
     }
 }
