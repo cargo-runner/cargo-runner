@@ -123,8 +123,8 @@ impl ScopeDetector {
         }
 
         // Check Cargo.toml for custom paths
-        use crate::parser::module_resolver::ModuleResolver;
-        let has_cargo_toml = ModuleResolver::find_cargo_toml(file_path).is_some();
+        use crate::parser::module_resolver::BasicModuleResolver;
+        let has_cargo_toml = BasicModuleResolver::find_cargo_toml(file_path).is_some();
 
         if has_cargo_toml {
             if let Some(file_type) = self.check_cargo_toml_for_file_type(file_path)? {
@@ -147,10 +147,10 @@ impl ScopeDetector {
     }
 
     fn check_cargo_toml_for_file_type(&self, file_path: &Path) -> Result<Option<FileScope>> {
-        use crate::parser::module_resolver::ModuleResolver;
+        use crate::parser::module_resolver::BasicModuleResolver;
 
         // Find the Cargo.toml file
-        let cargo_toml_path = if let Some(path) = ModuleResolver::find_cargo_toml(file_path) {
+        let cargo_toml_path = if let Some(path) = BasicModuleResolver::find_cargo_toml(file_path) {
             path
         } else {
             return Ok(None);

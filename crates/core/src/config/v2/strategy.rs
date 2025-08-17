@@ -2,6 +2,7 @@
 //!
 //! Defines the strategy trait and common implementations.
 
+use super::target_detection::{build_test_path, detect_target_from_path};
 use crate::command::CargoCommand;
 use crate::types::RunnableKind;
 use std::path::Path;
@@ -95,30 +96,10 @@ impl FrameworkStrategy for CargoTestStrategy {
             args.push(package.clone());
         }
 
-        // Check if we need --bin, --lib, --example, or --bench based on file path
+        // Add target flags based on file path
         if let Some(file_path) = &context.file_path {
-            if file_path.contains("/benches/") || file_path.contains("\\benches\\") {
-                // For benchmark files, use --bench flag
-                if let Some(stem) = Path::new(file_path).file_stem() {
-                    args.push("--bench".into());
-                    args.push(stem.to_string_lossy().to_string());
-                }
-            } else if file_path.contains("/examples/") || file_path.contains("\\examples\\") {
-                // For example files, use --example flag
-                if let Some(stem) = Path::new(file_path).file_stem() {
-                    args.push("--example".into());
-                    args.push(stem.to_string_lossy().to_string());
-                }
-            } else if file_path.ends_with("src/main.rs") || file_path.ends_with("/src/main.rs") {
-                // For src/main.rs, add --bin flag
-                if let Some(package) = &context.package_name {
-                    args.push("--bin".into());
-                    args.push(package.clone());
-                }
-            } else if file_path.ends_with("src/lib.rs") || file_path.ends_with("/src/lib.rs") {
-                // For src/lib.rs, add --lib flag
-                args.push("--lib".into());
-            }
+            let target_type = detect_target_from_path(file_path, context.package_name.as_deref());
+            target_type.add_to_args(&mut args);
         }
 
         // Check if this is a DocTest
@@ -154,51 +135,9 @@ impl FrameworkStrategy for CargoTestStrategy {
                     // For specific test functions, add the test filter
                     args.push("--".into());
 
-                    // Build test path - for benchmark files, use shorter path
-                    if let Some(file_path) = &context.file_path {
-                        if file_path.contains("/benches/") || file_path.contains("\\benches\\") {
-                            // For tests in benchmark files, strip the bench file prefix
-                            if let Some(module) = &context.module_path {
-                                // Remove "benches::filename::" prefix to get just the module path
-                                let parts: Vec<&str> = module.split("::").collect();
-                                if parts.len() > 2 && parts[0] == "benches" {
-                                    // Skip "benches::filename::" and use the rest
-                                    let short_module = parts[2..].join("::");
-                                    if !short_module.is_empty() {
-                                        args.push(format!("{}::{}", short_module, test_name));
-                                    } else {
-                                        args.push(test_name.clone());
-                                    }
-                                } else {
-                                    args.push(test_name.clone());
-                                }
-                            } else {
-                                args.push(test_name.clone());
-                            }
-                        } else {
-                            // Regular test path
-                            if let Some(module) = &context.module_path {
-                                if !module.is_empty() {
-                                    args.push(format!("{}::{}", module, test_name));
-                                } else {
-                                    args.push(test_name.clone());
-                                }
-                            } else {
-                                args.push(test_name.clone());
-                            }
-                        }
-                    } else {
-                        // No file path, use regular format
-                        if let Some(module) = &context.module_path {
-                            if !module.is_empty() {
-                                args.push(format!("{}::{}", module, test_name));
-                            } else {
-                                args.push(test_name.clone());
-                            }
-                        } else {
-                            args.push(test_name.clone());
-                        }
-                    }
+                    // Build test path
+                    let test_path = build_test_path(context.module_path.as_deref(), test_name);
+                    args.push(test_path);
 
                     args.push("--exact".into());
                 }
@@ -206,27 +145,7 @@ impl FrameworkStrategy for CargoTestStrategy {
                     // For module tests, add filter without --exact
                     if !module_name.is_empty() {
                         args.push("--".into());
-                        // For benchmark files, use just the module name without prefix
-                        if let Some(file_path) = &context.file_path {
-                            if file_path.contains("/benches/") || file_path.contains("\\benches\\")
-                            {
-                                // Remove "benches::filename::" prefix
-                                let parts: Vec<&str> = module_name.split("::").collect();
-                                if parts.len() > 2 && parts[0] == "benches" {
-                                    let short_module = parts[2..].join("::");
-                                    args.push(short_module);
-                                } else if parts.len() == 1 {
-                                    // Already short form
-                                    args.push(module_name.clone());
-                                } else {
-                                    args.push(module_name.clone());
-                                }
-                            } else {
-                                args.push(module_name.clone());
-                            }
-                        } else {
-                            args.push(module_name.clone());
-                        }
+                        args.push(module_name.clone());
                         // No --exact for module tests
                     }
                     // Otherwise run all tests in the crate
@@ -237,11 +156,8 @@ impl FrameworkStrategy for CargoTestStrategy {
                         args.push("--".into());
 
                         // Build full test path
-                        if let Some(module) = &context.module_path {
-                            args.push(format!("{}::{}", module, test_name));
-                        } else {
-                            args.push(test_name.clone());
-                        }
+                        let test_path = build_test_path(context.module_path.as_deref(), test_name);
+                        args.push(test_path);
 
                         args.push("--exact".into());
                     }
@@ -300,104 +216,23 @@ impl FrameworkStrategy for CargoNextestStrategy {
             args.push(package.clone());
         }
 
-        // Check if we need --bin, --lib, --example, or --bench based on file path
+        // Add target flags based on file path
         if let Some(file_path) = &context.file_path {
-            if file_path.contains("/benches/") || file_path.contains("\\benches\\") {
-                // For benchmark files, use --bench flag
-                if let Some(stem) = Path::new(file_path).file_stem() {
-                    args.push("--bench".into());
-                    args.push(stem.to_string_lossy().to_string());
-                }
-            } else if file_path.contains("/examples/") || file_path.contains("\\examples\\") {
-                // For example files, use --example flag
-                if let Some(stem) = Path::new(file_path).file_stem() {
-                    args.push("--example".into());
-                    args.push(stem.to_string_lossy().to_string());
-                }
-            } else if file_path.ends_with("src/main.rs") || file_path.ends_with("/src/main.rs") {
-                // For src/main.rs, add --bin flag
-                if let Some(package) = &context.package_name {
-                    args.push("--bin".into());
-                    args.push(package.clone());
-                }
-            } else if file_path.ends_with("src/lib.rs") || file_path.ends_with("/src/lib.rs") {
-                // For src/lib.rs, add --lib flag
-                args.push("--lib".into());
-            }
+            let target_type = detect_target_from_path(file_path, context.package_name.as_deref());
+            target_type.add_to_args(&mut args);
         }
 
         // Add test filter based on runnable kind
         match &context.runnable_kind {
             RunnableKind::Test { test_name, .. } => {
-                // For specific test functions, add the test filter
-                if let Some(file_path) = &context.file_path {
-                    if file_path.contains("/benches/") || file_path.contains("\\benches\\") {
-                        // For tests in benchmark files, strip the bench file prefix
-                        if let Some(module) = &context.module_path {
-                            // Remove "benches::filename::" prefix to get just the module path
-                            let parts: Vec<&str> = module.split("::").collect();
-                            if parts.len() > 2 && parts[0] == "benches" {
-                                // Skip "benches::filename::" and use the rest
-                                let short_module = parts[2..].join("::");
-                                if !short_module.is_empty() {
-                                    args.push(format!("{}::{}", short_module, test_name));
-                                } else {
-                                    args.push(test_name.clone());
-                                }
-                            } else {
-                                args.push(test_name.clone());
-                            }
-                        } else {
-                            args.push(test_name.clone());
-                        }
-                    } else {
-                        // Regular test path
-                        if let Some(module) = &context.module_path {
-                            if !module.is_empty() {
-                                args.push(format!("{}::{}", module, test_name));
-                            } else {
-                                args.push(test_name.clone());
-                            }
-                        } else {
-                            args.push(test_name.clone());
-                        }
-                    }
-                } else {
-                    // No file path, use regular format
-                    if let Some(module) = &context.module_path {
-                        if !module.is_empty() {
-                            args.push(format!("{}::{}", module, test_name));
-                        } else {
-                            args.push(test_name.clone());
-                        }
-                    } else {
-                        args.push(test_name.clone());
-                    }
-                }
+                // Build test path
+                let test_path = build_test_path(context.module_path.as_deref(), test_name);
+                args.push(test_path);
             }
             RunnableKind::ModuleTests { module_name } => {
                 // For module tests, only add filter if module is specified
                 if !module_name.is_empty() {
-                    // For benchmark files, use just the module name without prefix
-                    if let Some(file_path) = &context.file_path {
-                        if file_path.contains("/benches/") || file_path.contains("\\benches\\") {
-                            // Remove "benches::filename::" prefix
-                            let parts: Vec<&str> = module_name.split("::").collect();
-                            if parts.len() > 2 && parts[0] == "benches" {
-                                let short_module = parts[2..].join("::");
-                                args.push(short_module);
-                            } else if parts.len() == 1 {
-                                // Already short form
-                                args.push(module_name.clone());
-                            } else {
-                                args.push(module_name.clone());
-                            }
-                        } else {
-                            args.push(module_name.clone());
-                        }
-                    } else {
-                        args.push(module_name.clone());
-                    }
+                    args.push(module_name.clone());
                 }
                 // Otherwise run all tests in the crate
             }
@@ -538,30 +373,10 @@ impl FrameworkStrategy for CargoBenchStrategy {
             args.push(package.clone());
         }
 
-        // Check if we need --bin, --lib, --example, or --bench based on file path
+        // Add target flags based on file path
         if let Some(file_path) = &context.file_path {
-            if file_path.contains("/benches/") || file_path.contains("\\benches\\") {
-                // For benchmark files, use --bench flag
-                if let Some(stem) = Path::new(file_path).file_stem() {
-                    args.push("--bench".into());
-                    args.push(stem.to_string_lossy().to_string());
-                }
-            } else if file_path.contains("/examples/") || file_path.contains("\\examples\\") {
-                // For example files, use --example flag
-                if let Some(stem) = Path::new(file_path).file_stem() {
-                    args.push("--example".into());
-                    args.push(stem.to_string_lossy().to_string());
-                }
-            } else if file_path.ends_with("src/main.rs") || file_path.ends_with("/src/main.rs") {
-                // For src/main.rs, add --bin flag
-                if let Some(package) = &context.package_name {
-                    args.push("--bin".into());
-                    args.push(package.clone());
-                }
-            } else if file_path.ends_with("src/lib.rs") || file_path.ends_with("/src/lib.rs") {
-                // For src/lib.rs, add --lib flag
-                args.push("--lib".into());
-            }
+            let target_type = detect_target_from_path(file_path, context.package_name.as_deref());
+            target_type.add_to_args(&mut args);
         }
 
         // Add default args
@@ -1351,41 +1166,42 @@ impl RustcRunStrategy {
 
 impl FrameworkStrategy for RustcRunStrategy {
     fn build_command(&self, context: &CommandContext) -> Result<CargoCommand, String> {
-        let file_path = context.file_path.as_ref()
+        let file_path = context
+            .file_path
+            .as_ref()
             .ok_or_else(|| "No file path provided for rustc-run".to_string())?;
-        
+
         // Extract the file stem for the output binary name
         let file_stem = Path::new(file_path)
             .file_stem()
             .and_then(|s| s.to_str())
             .ok_or_else(|| "Invalid file path".to_string())?;
-        
+
         // Create a temp directory for the binary
         let temp_dir = std::env::temp_dir();
         let output_path = temp_dir.join(file_stem);
-        
+
         // Build rustc compile command
         let mut compile_args = vec![
             file_path.clone(),
             "-o".to_string(),
             output_path.to_string_lossy().to_string(),
         ];
-        
+
         // Add optimization in release mode (could be configurable)
         compile_args.push("-O".to_string());
-        
+
         // Create compile command
-        let compile_cmd = format!("rustc {} && {}", 
+        let compile_cmd = format!(
+            "rustc {} && {}",
             compile_args.join(" "),
             output_path.to_string_lossy()
         );
-        
+
         // Use shell command to compile and run
-        let mut command = CargoCommand::new_shell("sh".to_string(), vec![
-            "-c".to_string(),
-            compile_cmd,
-        ]);
-        
+        let mut command =
+            CargoCommand::new_shell("sh".to_string(), vec!["-c".to_string(), compile_cmd]);
+
         // Set command type to Shell
         command.command_type = crate::command::CommandType::Shell;
 
@@ -1421,19 +1237,21 @@ impl RustcTestStrategy {
 
 impl FrameworkStrategy for RustcTestStrategy {
     fn build_command(&self, context: &CommandContext) -> Result<CargoCommand, String> {
-        let file_path = context.file_path.as_ref()
+        let file_path = context
+            .file_path
+            .as_ref()
             .ok_or_else(|| "No file path provided for rustc-test".to_string())?;
-        
+
         // Extract the file stem for the output binary name
         let file_stem = Path::new(file_path)
             .file_stem()
             .and_then(|s| s.to_str())
             .ok_or_else(|| "Invalid file path".to_string())?;
-        
+
         // Create a temp directory for the test binary
         let temp_dir = std::env::temp_dir();
         let output_path = temp_dir.join(format!("{}_test", file_stem));
-        
+
         // Build rustc compile command with test flag
         let compile_args = vec![
             "--test".to_string(),
@@ -1441,39 +1259,36 @@ impl FrameworkStrategy for RustcTestStrategy {
             "-o".to_string(),
             output_path.to_string_lossy().to_string(),
         ];
-        
+
         // Create compile and run command
         let mut test_args = vec![];
-        
+
         // Add test filter if specific test is requested
         if let RunnableKind::Test { test_name, .. } = &context.runnable_kind {
-            if let Some(module_path) = &context.module_path {
-                test_args.push(format!("{}::{}", module_path, test_name));
-            } else {
-                test_args.push(test_name.clone());
-            }
+            let test_path = build_test_path(context.module_path.as_deref(), test_name);
+            test_args.push(test_path);
             test_args.push("--exact".to_string());
         }
-        
+
         let compile_cmd = if test_args.is_empty() {
-            format!("rustc {} && {}", 
+            format!(
+                "rustc {} && {}",
                 compile_args.join(" "),
                 output_path.to_string_lossy()
             )
         } else {
-            format!("rustc {} && {} {}", 
+            format!(
+                "rustc {} && {} {}",
                 compile_args.join(" "),
                 output_path.to_string_lossy(),
                 test_args.join(" ")
             )
         };
-        
+
         // Use shell command to compile and run tests
-        let mut command = CargoCommand::new_shell("sh".to_string(), vec![
-            "-c".to_string(),
-            compile_cmd,
-        ]);
-        
+        let mut command =
+            CargoCommand::new_shell("sh".to_string(), vec!["-c".to_string(), compile_cmd]);
+
         // Set command type to Shell
         command.command_type = crate::command::CommandType::Shell;
 
@@ -1570,7 +1385,9 @@ impl FrameworkStrategy for CargoScriptRunStrategy {
     }
 
     fn build_command(&self, context: &CommandContext) -> Result<CargoCommand, String> {
-        let file_path = context.file_path.as_ref()
+        let file_path = context
+            .file_path
+            .as_ref()
             .ok_or_else(|| "No file path provided".to_string())?;
 
         // Use cargo +nightly with -Z script flag
@@ -1579,7 +1396,7 @@ impl FrameworkStrategy for CargoScriptRunStrategy {
             "-Zscript".to_string(),
             file_path.to_string(),
         ]);
-        
+
         // Set working directory if provided
         if let Some(ref working_dir) = context.working_dir {
             cmd.working_dir = Some(working_dir.clone());
@@ -1612,37 +1429,33 @@ impl FrameworkStrategy for CargoScriptTestStrategy {
     }
 
     fn build_command(&self, context: &CommandContext) -> Result<CargoCommand, String> {
-        let file_path = context.file_path.as_ref()
+        let file_path = context
+            .file_path
+            .as_ref()
             .ok_or_else(|| "No file path provided".to_string())?;
 
-        // Build args for cargo script with test flag
-        let mut args = vec![
+        // Use cargo +nightly -Zscript test --manifest-path approach
+        let mut cmd = CargoCommand::new(vec![
             "+nightly".to_string(),
             "-Zscript".to_string(),
-            "--test".to_string(),
+            "test".to_string(),
+            "--manifest-path".to_string(),
             file_path.to_string(),
-            "--".to_string(),
-        ];
-        
+        ]);
+
+        // Add separator before test arguments
+        cmd.args.push("--".to_string());
+
         // Add test filter if specific test is requested
         if let RunnableKind::Test { test_name, .. } = &context.runnable_kind {
             // Add module path if present
-            if let Some(ref module_path) = context.module_path {
-                if !module_path.is_empty() {
-                    args.push(format!("{}::{}", module_path, test_name));
-                } else {
-                    args.push(test_name.clone());
-                }
-            } else {
-                args.push(test_name.clone());
-            }
-            args.push("--exact".to_string());
+            let test_path = build_test_path(context.module_path.as_deref(), test_name);
+            cmd.args.push(test_path);
+            cmd.args.push("--exact".to_string());
         } else if let RunnableKind::ModuleTests { module_name } = &context.runnable_kind {
-            args.push(module_name.clone());
+            cmd.args.push(module_name.clone());
         }
-        
-        let mut cmd = CargoCommand::new(args);
-        
+
         // Set working directory if provided
         if let Some(ref working_dir) = context.working_dir {
             cmd.working_dir = Some(working_dir.clone());

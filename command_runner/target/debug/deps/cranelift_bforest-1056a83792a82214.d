@@ -1,0 +1,10 @@
+/Users/uriah/Code/windrunner/command_runner/target/debug/deps/cranelift_bforest-1056a83792a82214.d: /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/lib.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/map.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/node.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/path.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/pool.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/set.rs
+
+/Users/uriah/Code/windrunner/command_runner/target/debug/deps/libcranelift_bforest-1056a83792a82214.rmeta: /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/lib.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/map.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/node.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/path.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/pool.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/set.rs
+
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/lib.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/map.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/node.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/path.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/pool.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cranelift-bforest-0.102.1/src/set.rs:

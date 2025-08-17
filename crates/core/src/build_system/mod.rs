@@ -2,12 +2,30 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub enum BuildSystem {
     Cargo,
     Bazel,
     Rustc,
-    CargoScript,
+}
+
+// Custom deserializer for case-insensitive parsing
+impl<'de> Deserialize<'de> for BuildSystem {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.to_lowercase().as_str() {
+            "cargo" => Ok(BuildSystem::Cargo),
+            "bazel" => Ok(BuildSystem::Bazel),
+            "rustc" => Ok(BuildSystem::Rustc),
+            _ => Err(serde::de::Error::custom(format!(
+                "unknown build system: {}",
+                s
+            ))),
+        }
+    }
 }
 
 pub trait BuildSystemDetector {

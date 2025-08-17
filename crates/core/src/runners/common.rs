@@ -2,7 +2,7 @@
 
 use crate::{
     error::Result,
-    parser::{module_resolver::ModuleResolver, rust_parser::RustParser},
+    parser::{module_resolver::BasicModuleResolver, rust_parser::RustParser},
     types::Runnable,
 };
 use std::path::Path;
@@ -10,8 +10,8 @@ use tracing::debug;
 
 /// Get package name from Cargo.toml if available
 pub fn get_cargo_package_name(file_path: &Path) -> Option<String> {
-    if let Some(cargo_toml) = ModuleResolver::find_cargo_toml(file_path) {
-        ModuleResolver::get_package_name_from_cargo_toml(&cargo_toml).ok()
+    if let Some(cargo_toml) = BasicModuleResolver::find_cargo_toml(file_path) {
+        BasicModuleResolver::get_package_name_from_cargo_toml(&cargo_toml).ok()
     } else {
         None
     }
@@ -21,14 +21,9 @@ pub fn get_cargo_package_name(file_path: &Path) -> Option<String> {
 pub fn resolve_module_paths(
     runnables: &mut [Runnable],
     file_path: &Path,
-    package_name: Option<&str>,
 ) -> Result<()> {
     // Create module resolver
-    let resolver = if let Some(pkg) = package_name {
-        ModuleResolver::with_package_name(pkg.to_string())
-    } else {
-        ModuleResolver::new()
-    };
+    let resolver = BasicModuleResolver::new();
 
     // Parse the file to get all scopes for module resolution
     let source = std::fs::read_to_string(file_path)?;
@@ -62,7 +57,6 @@ pub fn resolve_module_paths(
 pub fn resolve_module_path_single(
     runnable: &mut Runnable,
     file_path: &Path,
-    package_name: Option<&str>,
 ) -> Result<()> {
-    resolve_module_paths(std::slice::from_mut(runnable), file_path, package_name)
+    resolve_module_paths(std::slice::from_mut(runnable), file_path)
 }

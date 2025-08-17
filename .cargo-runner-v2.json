@@ -1,0 +1,27 @@
+{
+  "version": "2.0",
+  "workspace": {
+    "build_system": "Cargo",
+    "frameworks": {
+      "test": "cargo-test",
+      "binary": "cargo-run",
+      "benchmark": "cargo-bench",
+      "doctest": "cargo-test",
+      "build": "cargo-build"
+    }
+  },
+  "files": {
+    "test-single-file.rs": {
+      "frameworks": {
+        "test": "cargo-script-test",
+        "binary": "cargo-script-run"
+      }
+    },
+    "test-scripts/*.rs": {
+      "frameworks": {
+        "test": "cargo-script-test",
+        "binary": "cargo-script-run"
+      }
+    }
+  }
+}

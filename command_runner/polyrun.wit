@@ -1,0 +1,138 @@
+// WebAssembly Interface Types (WIT) definition for Polyrun
+// This defines the stable ABI between host and plugins
+
+package polyrun:runner@0.1.0;
+
+/// Shared types used by both host and plugins
+interface types {
+    /// Scope kinds in priority order (can be overridden)
+    enum scope-kind {
+        file,
+        module,
+        namespace,
+        struct,
+        enum,
+        union,
+        trait,
+        impl,
+        function,
+        method,
+        closure,
+        block,
+    }
+
+    /// Identity of a code element
+    record identity {
+        file-path: string,
+        module: option<string>,
+        name: option<string>,
+    }
+
+    /// A scope in the source code
+    record scope {
+        id: u64,
+        kind: scope-kind,
+        start-line: u32,
+        end-line: u32,
+        identity: identity,
+    }
+
+    /// Detector matches patterns to runnable types
+    record detector {
+        name: string,
+        files: list<string>,        // glob patterns
+        macros: list<string>,       // e.g. "#[test]", "@Test"
+        scope: scope-kind,
+        runnable: string,           // name of runnable template
+        enabled: bool,
+        priority: s32,
+    }
+
+    /// Key-value pair for args and env
+    record kv {
+        key: string,
+        value: string,
+    }
+
+    /// Runnable template definition
+    record runnable-template {
+        name: string,
+        command: string,                    // e.g. "cargo", "rustc", "python"
+        channel: option<string>,            // e.g. "+nightly", "3.11"
+        subcommand: option<string>,         // e.g. "test", "run", "bench"
+        args: list<string>,
+        extra-args: list<string>,
+        extra-test-binary-args: list<string>,
+        extra-env: list<kv>,
+        template: string,                   // e.g. "{env} {cmd} {channel} {subcmd} {args}"
+    }
+
+    /// Context provided when resolving auto-args
+    record invocation-context {
+        scope: scope,
+        file-text-slice: option<string>,   // relevant source snippet
+        detected-attributes: list<string>,  // e.g. ["#[test]", "#[bench]"]
+    }
+
+    /// Resolved dynamic values from plugin
+    record resolved {
+        auto-args: list<kv>,
+        extra-env: list<kv>,
+    }
+}
+
+/// Host capabilities exposed to plugins (read-only, safe)
+interface host {
+    use types.{identity, scope-kind};
+    
+    /// Match a path against glob patterns
+    match-glob: func(path: string, patterns: list<string>) -> bool;
+    
+    /// Get attributes/macros for a scope (e.g. "#[test]")
+    symbol-attributes: func(scope-id: u64) -> list<string>;
+    
+    /// Compute module path using host's default resolver
+    compute-module: func(identity: identity) -> string;
+    
+    /// Get parent scope of a scope (for nesting info)
+    parent-scope: func(scope-id: u64) -> option<u64>;
+    
+    /// Check if file exists (for build system detection)
+    file-exists: func(path: string) -> bool;
+    
+    /// Get file extension
+    file-extension: func(path: string) -> option<string>;
+}
+
+/// Plugin interface that extensions implement
+interface plugin {
+    use types.{detector, runnable-template, invocation-context, resolved};
+    
+    /// List all detectors this plugin provides
+    list-detectors: func() -> list<detector>;
+    
+    /// List all runnable templates this plugin provides
+    list-runnables: func() -> list<runnable-template>;
+    
+    /// Resolve dynamic arguments for a runnable
+    resolve-auto-args: func(runnable: string, ctx: invocation-context) -> resolved;
+    
+    /// Get default configuration (TOML format)
+    default-config: func() -> option<string>;
+    
+    /// Get plugin metadata
+    metadata: func() -> plugin-metadata;
+    
+    record plugin-metadata {
+        name: string,
+        version: string,
+        language: string,
+        description: string,
+    }
+}
+
+/// The world that defines imports and exports
+world extension {
+    import host;
+    export plugin;
+}

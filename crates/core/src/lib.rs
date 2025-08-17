@@ -9,9 +9,12 @@ pub mod build_system;
 pub mod command;
 pub mod config;
 pub mod error;
+pub mod interfaces;
 pub mod parser;
 pub mod patterns;
+pub mod services;
 pub mod types;
+pub mod utils;
 
 // Runner architecture
 pub mod runners;

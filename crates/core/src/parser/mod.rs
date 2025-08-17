@@ -6,5 +6,6 @@ pub mod scope_detector;
 pub mod utils;
 
 // Re-export commonly used items
+pub use module_resolver::BasicModuleResolver;
 pub use rust_parser::RustParser;
 pub use utils::node_to_position;

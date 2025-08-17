@@ -120,6 +120,7 @@ pub struct JsonArgs {
 impl JsonConfig {
     /// Convert to a v2 Config
     pub fn to_config(self) -> Config {
+        tracing::debug!("Converting JsonConfig to Config, linked_projects: {:?}", self.linked_projects);
         let mut builder = ConfigBuilder::new();
 
         // Check if we have any top-level configuration
@@ -220,6 +221,9 @@ impl JsonConfig {
         let mut config = builder.build();
         
         // Set linked_projects if present
+        if self.linked_projects.is_some() {
+            tracing::debug!("Setting linked_projects on config: {:?}", self.linked_projects);
+        }
         config.linked_projects = self.linked_projects;
         
         config

@@ -12,7 +12,7 @@ pub fn generate_fallback_command(
     file_path: &Path,
     package_name: Option<&str>,
     _project_root: Option<&Path>,
-    _config: Option<crate::config::V2Config>,
+    config: Option<crate::config::V2Config>,
 ) -> Result<Option<CargoCommand>> {
     debug!("generate_fallback_command: package_name={:?}", package_name);
     debug!("generate_fallback_command: file_path={:?}", file_path);
@@ -28,7 +28,7 @@ pub fn generate_fallback_command(
         );
 
         // Build command using v2 config
-        use crate::config::v2::{ConfigResolver, StrategyRegistry, ScopeContext};
+        use crate::config::v2::{ConfigResolver, ScopeContext};
         
         // Create scope context
         let context = ScopeContext {
@@ -45,11 +45,17 @@ pub fn generate_fallback_command(
             scope_kind: None,
         };
         
-        // Use default config and registry
-        let config = crate::config::v2::ConfigLoader::load()
-            .unwrap_or_else(|_| crate::config::v2::Config::default_with_build_system());
-        let registry = StrategyRegistry::default();
-        let resolver = ConfigResolver::new(config.layers(), &registry, &config.linked_projects);
+        // Use passed config or load default
+        let loaded_config;
+        let config_ref = if let Some(cfg) = config.as_ref() {
+            cfg
+        } else {
+            loaded_config = crate::config::v2::ConfigLoader::load()
+                .unwrap_or_else(|_| crate::config::v2::Config::default_with_build_system());
+            &loaded_config
+        };
+        
+        let resolver = ConfigResolver::new(config_ref.layers(), config_ref.registry(), &config_ref.linked_projects);
         
         let command = resolver.resolve_command(&context, runnable.kind.clone())
             .map_err(|e| crate::Error::ConfigError(e))?;
@@ -61,7 +67,7 @@ pub fn generate_fallback_command(
         // Check if this might be a standalone Rust file
         if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
             if is_standalone_rust_file(file_path) {
-                return generate_rustc_command(file_path);
+                return generate_rustc_command(file_path, config.as_ref());
             }
         }
 
@@ -447,7 +453,7 @@ fn is_standalone_rust_file(file_path: &Path) -> bool {
 }
 
 /// Generate a rustc command for standalone Rust files
-fn generate_rustc_command(file_path: &Path) -> Result<Option<CargoCommand>> {
+fn generate_rustc_command(file_path: &Path, config: Option<&crate::config::V2Config>) -> Result<Option<CargoCommand>> {
     // Read the file content to check for shebang and tests
     let content = std::fs::read_to_string(file_path).map_err(|e| crate::Error::IoError(e))?;
 
@@ -483,7 +489,7 @@ fn generate_rustc_command(file_path: &Path) -> Result<Option<CargoCommand>> {
             };
 
             // Build command using v2 config
-            use crate::config::v2::{ConfigResolver, StrategyRegistry, ScopeContext};
+            use crate::config::v2::{ConfigResolver, ScopeContext};
             
             // Create scope context
             let context = ScopeContext {
@@ -511,8 +517,7 @@ fn generate_rustc_command(file_path: &Path) -> Result<Option<CargoCommand>> {
                 })
                 .build();
             
-            let registry = StrategyRegistry::default();
-            let resolver = ConfigResolver::new(config.layers(), &registry, &config.linked_projects);
+            let resolver = ConfigResolver::new(config.layers(), config.registry(), &config.linked_projects);
             
             let command = resolver.resolve_command(&context, runnable.kind.clone())
             .map_err(|e| crate::Error::ConfigError(e))?;
@@ -548,7 +553,7 @@ fn generate_rustc_command(file_path: &Path) -> Result<Option<CargoCommand>> {
     };
 
     // Build command using v2 config
-    use crate::config::v2::{ConfigResolver, StrategyRegistry, ScopeContext};
+    use crate::config::v2::{ConfigResolver, ScopeContext};
     
     // Create scope context
     let context = ScopeContext {
@@ -561,11 +566,17 @@ fn generate_rustc_command(file_path: &Path) -> Result<Option<CargoCommand>> {
         scope_kind: None,
     };
     
-    // Use default config and registry
-    let config = crate::config::v2::ConfigLoader::load()
-        .unwrap_or_else(|_| crate::config::v2::Config::default_with_build_system());
-    let registry = StrategyRegistry::default();
-    let resolver = ConfigResolver::new(config.layers(), &registry, &config.linked_projects);
+    // Use passed config or load default
+    let loaded_config;
+    let config_ref = if let Some(cfg) = config {
+        cfg
+    } else {
+        loaded_config = crate::config::v2::ConfigLoader::load()
+            .unwrap_or_else(|_| crate::config::v2::Config::default_with_build_system());
+        &loaded_config
+    };
+    
+    let resolver = ConfigResolver::new(config_ref.layers(), config_ref.registry(), &config_ref.linked_projects);
     
     let command = resolver.resolve_command(&context, runnable.kind.clone())
         .map_err(|e| crate::Error::ConfigError(e))?;
@@ -589,7 +600,7 @@ mod tests {
         
         if let Some(runnable) = runnable {
             // Build command using v2 config
-            use crate::config::v2::{ConfigResolver, StrategyRegistry, ScopeContext};
+            use crate::config::v2::{ConfigResolver, ScopeContext};
             
             // Create scope context
             let context = ScopeContext {
@@ -621,8 +632,7 @@ mod tests {
                 })
                 .build();
             
-            let registry = StrategyRegistry::default();
-            let resolver = ConfigResolver::new(config.layers(), &registry, &config.linked_projects);
+            let resolver = ConfigResolver::new(config.layers(), config.registry(), &config.linked_projects);
             
             let command = resolver.resolve_command(&context, runnable.kind.clone())
             .map_err(|e| crate::Error::ConfigError(e))?;
@@ -760,7 +770,7 @@ mod tests {
         };
 
         // Build command using v2 config
-        use crate::config::v2::{ConfigResolver, StrategyRegistry, ScopeContext};
+        use crate::config::v2::{ConfigResolver, ScopeContext};
         
         // Create scope context
         let context = ScopeContext {
@@ -786,8 +796,7 @@ mod tests {
             })
             .build();
         
-        let registry = StrategyRegistry::default();
-        let resolver = ConfigResolver::new(config.layers(), &registry, &config.linked_projects);
+        let resolver = ConfigResolver::new(config.layers(), config.registry(), &config.linked_projects);
         
         let cmd = resolver.resolve_command(&context, runnable.kind.clone())
             .map_err(|e| crate::Error::ConfigError(e))?;

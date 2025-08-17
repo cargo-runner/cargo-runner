@@ -1,0 +1,28 @@
+{
+  "version": "2.0",
+  "workspace": {
+    "build_system": "Cargo",
+    "frameworks": {
+      "test": "cargo-test",
+      "binary": "cargo-run",
+      "benchmark": "cargo-bench",
+      "doctest": "cargo-test",
+      "build": "cargo-build"
+    }
+  },
+  "files": {
+    "scripts/*.rs": {
+      "frameworks": {
+        "test": "cargo-script-test",
+        "binary": "cargo-script-run"
+      }
+    },
+    "examples/standalone_script.rs": {
+      "frameworks": {
+        "test": "cargo-script-test",
+        "binary": "cargo-script-run"
+      }
+    }
+  },
+  "comment": "This example shows how to configure single-file Rust scripts that use cargo +nightly -Zscript"
+}

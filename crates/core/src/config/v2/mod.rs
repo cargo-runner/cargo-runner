@@ -14,12 +14,17 @@ pub mod resolver;
 pub mod json;
 pub mod loader;
 pub mod helpers;
+pub mod target_detection;
+pub mod target_selection_v2;
 
 #[cfg(test)]
 mod integration_tests;
 
 #[cfg(test)]
 mod v2_config_test;
+
+#[cfg(test)]
+mod case_insensitive_test;
 
 pub use scope::{Scope, ScopeKind, ScopeContext};
 pub use strategy::{FrameworkStrategy, FrameworkKind};
@@ -97,13 +102,6 @@ impl Config {
                         .framework_binary("rustc-run");
                 })
                 .build(),
-            BuildSystem::CargoScript => ConfigBuilder::new()
-                .workspace(|w| {
-                    w.build_system(BuildSystem::CargoScript)
-                        .framework_test("cargo-script-test")
-                        .framework_binary("cargo-script-run");
-                })
-                .build(),
         }
     }
 
@@ -136,12 +134,19 @@ impl Config {
     /// The other config's layers will be added after this config's layers,
     /// giving them higher priority
     pub fn merge(&mut self, other: Config) {
+        tracing::debug!("Merging configs: self has linked_projects: {:?}, other has: {:?}", 
+            self.linked_projects.is_some(), other.linked_projects.is_some());
+        
         // Add all layers from the other config
         self.layers.extend(other.layers);
         
-        // If the other config has linked_projects and we don't, use theirs
+        // Keep the first linked_projects we find (from the root-most config)
+        // Don't overwrite if we already have linked_projects
         if self.linked_projects.is_none() && other.linked_projects.is_some() {
+            tracing::debug!("Taking linked_projects from other config");
             self.linked_projects = other.linked_projects;
+        } else if self.linked_projects.is_some() && other.linked_projects.is_some() {
+            tracing::debug!("Keeping existing linked_projects, ignoring other config's linked_projects");
         }
     }
 }

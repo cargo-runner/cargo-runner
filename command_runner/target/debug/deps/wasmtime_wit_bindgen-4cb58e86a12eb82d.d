@@ -1,0 +1,10 @@
+/Users/uriah/Code/windrunner/command_runner/target/debug/deps/wasmtime_wit_bindgen-4cb58e86a12eb82d.d: /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/lib.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/rust.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/source.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/types.rs
+
+/Users/uriah/Code/windrunner/command_runner/target/debug/deps/libwasmtime_wit_bindgen-4cb58e86a12eb82d.rlib: /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/lib.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/rust.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/source.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/types.rs
+
+/Users/uriah/Code/windrunner/command_runner/target/debug/deps/libwasmtime_wit_bindgen-4cb58e86a12eb82d.rmeta: /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/lib.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/rust.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/source.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/types.rs
+
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/lib.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/rust.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/source.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmtime-wit-bindgen-15.0.1/src/types.rs:

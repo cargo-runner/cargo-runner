@@ -4,25 +4,19 @@ use crate::{
 };
 use std::path::{Path, PathBuf};
 
-pub struct ModuleResolver {
-    package_name: Option<String>,
-}
+/// Basic module resolver implementation for Rust code
+/// This is a concrete implementation, not to be confused with the ModuleResolver trait
+pub struct BasicModuleResolver {}
 
-impl Default for ModuleResolver {
+impl Default for BasicModuleResolver {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ModuleResolver {
+impl BasicModuleResolver {
     pub fn new() -> Self {
-        Self { package_name: None }
-    }
-
-    pub fn with_package_name(package_name: String) -> Self {
-        Self {
-            package_name: Some(package_name),
-        }
+        Self {}
     }
 
     pub fn resolve_module_path(
@@ -67,24 +61,8 @@ impl ModuleResolver {
         // Normal module path resolution for non-impl items
         let mut path_components = Vec::new();
 
-        // For test functions and modules, we want a simpler path without package name
-        let is_test_or_module = matches!(target_scope.kind, ScopeKind::Test | ScopeKind::Module);
-
-        // Check if this is inside a test module
-        let is_in_test_module = scopes
-            .iter()
-            .filter(|s| matches!(s.kind, ScopeKind::Module))
-            .filter(|s| s.contains_line(target_scope.start.line))
-            .any(|s| s.name.as_deref() == Some("tests"));
-
-        // Skip package name for test functions, modules, and items in test modules
-        let should_include_package = !is_test_or_module && !is_in_test_module;
-
-        if let Some(ref pkg) = self.package_name {
-            if should_include_package {
-                path_components.push(pkg.clone());
-            }
-        }
+        // Package name is not included in module paths - cargo test doesn't need it
+        // The test path like "parser::module_resolver::tests::test_name" works without package prefix
 
         // Determine module path from file location
         let file_module_path = self.get_file_module_path(file_path)?;
@@ -132,7 +110,7 @@ impl ModuleResolver {
             if path_without_ext == "main" || path_without_ext == "lib" {
                 return Ok(components);
             }
-            
+
             // Handle binary files in src/bin/
             if path_without_ext.starts_with("bin/") {
                 // For files in src/bin/, we don't include the bin prefix in the module path
@@ -291,7 +269,7 @@ mod tests {
 
     #[test]
     fn test_file_module_path() {
-        let resolver = ModuleResolver::new();
+        let resolver = BasicModuleResolver::new();
 
         let path = Path::new("/project/src/models/user.rs");
         let modules = resolver.get_file_module_path(path).unwrap();
@@ -308,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_inline_module_hierarchy() {
-        let resolver = ModuleResolver::new();
+        let resolver = BasicModuleResolver::new();
 
         let scopes = vec![
             Scope {
@@ -368,7 +346,7 @@ mod tests {
 
     #[test]
     fn test_full_module_path() {
-        let resolver = ModuleResolver::with_package_name("my_crate".to_string());
+        let resolver = BasicModuleResolver::new();
 
         let scopes = vec![
             Scope {
@@ -418,11 +396,11 @@ mod tests {
         // Function names are not included in module paths - they're added by the command builder
         assert_eq!(module_path, "models::user::tests");
     }
-    
+
     #[test]
     fn test_bin_file_module_path() {
-        let resolver = ModuleResolver::with_package_name("my_crate".to_string());
-        
+        let resolver = BasicModuleResolver::new();
+
         // Test that files in src/bin/ don't include 'bin' in the module path
         let scopes = vec![
             Scope {
@@ -462,22 +440,22 @@ mod tests {
                 name: Some("test_proxy_binary".to_string()),
             },
         ];
-        
+
         // Test src/bin/proxy.rs
         let file_path = Path::new("/project/src/bin/proxy.rs");
         let target = &scopes[2]; // test_proxy_binary
-        
+
         let module_path = resolver
             .resolve_module_path(file_path, &scopes, target)
             .unwrap();
         // The module path should NOT include 'bin::'
         assert_eq!(module_path, "tests");
     }
-    
+
     #[test]
     fn test_bin_subdir_module_path() {
-        let resolver = ModuleResolver::with_package_name("my_crate".to_string());
-        
+        let resolver = BasicModuleResolver::new();
+
         // Test files in subdirectories under src/bin/
         let scopes = vec![
             Scope {
@@ -529,11 +507,11 @@ mod tests {
                 name: Some("test_server".to_string()),
             },
         ];
-        
+
         // Test src/bin/myapp/server.rs
         let file_path = Path::new("/project/src/bin/myapp/server.rs");
         let target = &scopes[3]; // test_server function
-        
+
         let module_path = resolver
             .resolve_module_path(file_path, &scopes, target)
             .unwrap();

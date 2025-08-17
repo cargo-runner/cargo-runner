@@ -8,7 +8,8 @@ use super::{
     strategy::{CommandContext, FrameworkKind},
 };
 use crate::command::CargoCommand;
-use crate::types::RunnableKind;
+use crate::types::{RunnableKind, FileType};
+use crate::utils::detect_file_type;
 
 /// Resolves configuration for command building
 pub struct ConfigResolver<'a> {
@@ -20,6 +21,7 @@ pub struct ConfigResolver<'a> {
 impl<'a> ConfigResolver<'a> {
     /// Create a new configuration resolver
     pub fn new(layers: &'a [ConfigLayer], registry: &'a StrategyRegistry, linked_projects: &'a Option<Vec<String>>) -> Self {
+        tracing::debug!("Creating ConfigResolver with linked_projects: {:?}", linked_projects);
         Self { layers, registry, linked_projects }
     }
     
@@ -48,8 +50,33 @@ impl<'a> ConfigResolver<'a> {
         
         // Get framework strategy name
         let framework_kind = FrameworkKind::from_runnable_kind(&runnable_kind);
-        let strategy_name = self.get_strategy_name(&merged_config, framework_kind)
-            .ok_or_else(|| format!("No framework strategy for {:?}", framework_kind))?;
+        
+        // Check if this is a single-file script and override strategy if needed
+        let strategy_name = if let Some(ref file_path) = scope_context.file_path {
+            tracing::debug!("Checking file path: {:?}", file_path);
+            let file_type = detect_file_type(file_path);
+            tracing::debug!("File type detection for {:?}: {:?}", file_path, file_type);
+            
+            if file_type == FileType::SingleFileScript {
+                // Override with cargo-script strategies for single-file scripts
+                match framework_kind {
+                    FrameworkKind::Test => {
+                        tracing::debug!("Using cargo-script-test strategy for single-file script");
+                        Some("cargo-script-test".to_string())
+                    },
+                    FrameworkKind::Binary => {
+                        tracing::debug!("Using cargo-script-run strategy for single-file script");
+                        Some("cargo-script-run".to_string())
+                    },
+                    _ => self.get_strategy_name(&merged_config, framework_kind),
+                }
+            } else {
+                self.get_strategy_name(&merged_config, framework_kind)
+            }
+        } else {
+            self.get_strategy_name(&merged_config, framework_kind)
+        }
+        .ok_or_else(|| format!("No framework strategy for {:?}", framework_kind))?;
         
         // Get strategy from registry
         let strategy = self.registry.get(&strategy_name)
@@ -57,7 +84,9 @@ impl<'a> ConfigResolver<'a> {
         
         // Determine working directory from linked_projects
         let working_dir = if let Some(file_path) = &scope_context.file_path {
-            self.find_working_dir_from_linked_projects(file_path)
+            let wd = self.find_working_dir_from_linked_projects(file_path);
+            tracing::debug!("Working directory from linked_projects: {:?}", wd);
+            wd
         } else {
             None
         };
@@ -174,6 +203,7 @@ impl<'a> ConfigResolver<'a> {
     ) -> Option<String> {
         // Check if we have linked_projects from the root config
         let linked_projects = self.linked_projects.as_ref()?;
+        tracing::debug!("Checking linked_projects: {:?}", linked_projects);
         
         // Get absolute file path
         let abs_file_path = if file_path.is_absolute() {
@@ -186,11 +216,26 @@ impl<'a> ConfigResolver<'a> {
         for project_path in linked_projects {
             let cargo_toml_path = std::path::Path::new(project_path);
             
+            // Make the cargo toml path absolute if it's relative
+            let abs_cargo_toml_path = if cargo_toml_path.is_absolute() {
+                cargo_toml_path.to_path_buf()
+            } else {
+                // Relative paths are relative to the config file location
+                // We need to find where the config was loaded from
+                std::env::current_dir().ok()?.join(cargo_toml_path)
+            };
+            
+            tracing::debug!("Checking linked project: {} (absolute: {:?})", project_path, abs_cargo_toml_path);
+            
             // Get the project directory (parent of Cargo.toml)
-            if let Some(project_dir) = cargo_toml_path.parent() {
+            if let Some(project_dir) = abs_cargo_toml_path.parent() {
+                tracing::debug!("Project dir: {:?}, checking if {:?} starts with it", project_dir, abs_file_path);
                 // Check if our file is under this project directory
                 if abs_file_path.starts_with(project_dir) {
-                    return Some(project_dir.to_string_lossy().to_string());
+                    // Canonicalize the path to clean it up
+                    let clean_dir = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());
+                    tracing::debug!("Found matching project! Working dir: {:?}", clean_dir);
+                    return Some(clean_dir.to_string_lossy().to_string());
                 }
             }
         }

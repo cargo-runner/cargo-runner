@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use super::{
     framework::{Framework, FrameworkKind, FrameworkOptions},
     options::*,
-    validation::{bazel_validation_rules, cargo_script_validation_rules, cargo_validation_rules, rustc_validation_rules},
+    validation::{bazel_validation_rules, cargo_validation_rules, rustc_validation_rules},
 };
 use crate::build_system::BuildSystem;
 use crate::error::Result;
@@ -219,7 +219,6 @@ impl CommandBuilder<Unvalidated> {
             BuildSystem::Cargo => cargo_validation_rules(),
             BuildSystem::Bazel => bazel_validation_rules(),
             BuildSystem::Rustc => rustc_validation_rules(),
-            BuildSystem::CargoScript => cargo_script_validation_rules(),
         };
 
         rules.validate(&options)?;

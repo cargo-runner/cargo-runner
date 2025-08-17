@@ -31,7 +31,10 @@ impl UnifiedRunner {
     /// Create a unified runner with v2 config loaded from a specific path
     pub fn with_path(path: &Path) -> Result<Self> {
         let v2_config = ConfigLoader::load_from_path(path)
-            .unwrap_or_else(|_| V2Config::default_with_detected_build_system(path));
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to load v2 config: {}, using default", e);
+                V2Config::default_with_detected_build_system(path)
+            });
 
         Ok(Self {
             v2_config,
@@ -52,11 +55,9 @@ impl UnifiedRunner {
         let mut runnables = self.detector.detect_runnables(file_path, None)?;
 
         // Resolve module paths
-        let package_name = self.get_package_name(file_path).ok();
         crate::runners::common::resolve_module_paths(
             &mut runnables,
             file_path,
-            package_name.as_deref(),
         )?;
 
         Ok(runnables)
@@ -71,11 +72,9 @@ impl UnifiedRunner {
         let mut runnables = self.detector.detect_runnables(file_path, Some(line))?;
 
         // Resolve module paths
-        let package_name = self.get_package_name(file_path).ok();
         crate::runners::common::resolve_module_paths(
             &mut runnables,
             file_path,
-            package_name.as_deref(),
         )?;
 
         Ok(runnables)
@@ -107,6 +106,9 @@ impl UnifiedRunner {
             method_name: None,
             scope_kind: None,
         };
+        
+        tracing::debug!("Building command for runnable: {:?} with file path: {:?}", 
+                       runnable.kind, runnable.file_path);
 
         // Create resolver and resolve command
         let resolver = self.v2_config.resolver();

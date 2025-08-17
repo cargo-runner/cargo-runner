@@ -4,15 +4,23 @@ pub mod runnable;
 pub mod scope;
 pub mod scope_kind;
 
-use serde::{Deserialize, Serialize};
+use crate::impl_case_insensitive_deserialize;
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum FileType {
     CargoProject,
     Standalone,
     SingleFileScript,
 }
+
+// Implement case-insensitive deserialization
+impl_case_insensitive_deserialize!(
+    FileType,
+    CargoProject => "cargo_project",
+    Standalone => "standalone",
+    SingleFileScript => "single_file_script"
+);
 
 // Re-export commonly used types
 pub use function_identity::FunctionIdentity;

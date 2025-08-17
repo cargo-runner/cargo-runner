@@ -1,0 +1,12 @@
+/Users/uriah/Code/windrunner/command_runner/target/debug/deps/io_extras-bed545ceb3285204.d: /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/lib.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/borrowed.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/grip.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/os/mod.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/os/rustix.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/owned.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/raw.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/read_write.rs
+
+/Users/uriah/Code/windrunner/command_runner/target/debug/deps/libio_extras-bed545ceb3285204.rmeta: /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/lib.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/borrowed.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/grip.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/os/mod.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/os/rustix.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/owned.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/raw.rs /Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/read_write.rs
+
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/lib.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/borrowed.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/grip.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/os/mod.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/os/rustix.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/owned.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/raw.rs:
+/Users/uriah/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/io-extras-0.18.4/src/read_write.rs:

@@ -1,0 +1,30 @@
+{
+  "version": "2.0",
+  "workspace": {
+    "build_system": "Cargo",
+    "frameworks": {
+      "test": "cargo-test",
+      "binary": "cargo-run",
+      "benchmark": "cargo-bench",
+      "doctest": "cargo-test",
+      "build": "cargo-build"
+    }
+  },
+  "files": {
+    "scripts/*.rs": {
+      "frameworks": {
+        "test": "cargo-script-test",
+        "binary": "cargo-script-run"
+      },
+      "comment": "Single-file Rust scripts with shebang #!/usr/bin/env -S cargo +nightly -Zscript"
+    },
+    "*.script.rs": {
+      "frameworks": {
+        "test": "cargo-script-test",
+        "binary": "cargo-script-run"
+      },
+      "comment": "Files ending with .script.rs are treated as single-file scripts"
+    }
+  },
+  "comment": "Example configuration showing how to handle single-file Rust scripts alongside regular Cargo project files"
+}
