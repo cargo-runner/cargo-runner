@@ -33,7 +33,9 @@ impl CommandBuilderImpl for TestCommandBuilder {
         let builder = TestCommandBuilder;
         let mut args = vec![];
 
-        // Handle test framework configuration
+        // NUKE-CONFIG: This entire test_framework handling needs to be removed
+        // TODO: Just use hardcoded "cargo test" for now
+        // Previously checked: config.cargo.test_framework.channel, subcommand, features, extra_args
         if let Some(test_framework) = builder.get_test_framework(config, file_type) {
             // Add channel
             if let Some(channel) = &test_framework.channel {
@@ -81,7 +83,8 @@ impl CommandBuilderImpl for TestCommandBuilder {
         tracing::debug!("Calling add_target for file: {:?}", runnable.file_path);
         builder.add_target(&mut args, &runnable.file_path, package, test_framework)?;
 
-        // Apply configuration
+        // NUKE-CONFIG: Apply configuration from complex config structure
+        // TODO: Remove this once config is nuked
         builder.apply_args(&mut args, runnable, config, file_type);
 
         // Add test filter
