@@ -254,28 +254,19 @@ impl RustcCommandBuilder {
         Ok(command)
     }
 
-    fn get_test_framework(&self, config: &Config) -> RustcFramework {
-        config
-            .rustc
-            .as_ref()
-            .and_then(|r| r.test_framework.clone())
-            .unwrap_or_else(|| self.default_test_framework())
+    fn get_test_framework(&self, _config: &Config) -> RustcFramework {
+        // NUKE-CONFIG: Always use default test framework
+        self.default_test_framework()
     }
 
-    fn get_binary_framework(&self, config: &Config) -> RustcFramework {
-        config
-            .rustc
-            .as_ref()
-            .and_then(|r| r.binary_framework.clone())
-            .unwrap_or_else(|| self.default_binary_framework())
+    fn get_binary_framework(&self, _config: &Config) -> RustcFramework {
+        // NUKE-CONFIG: Always use default binary framework
+        self.default_binary_framework()
     }
 
-    fn get_benchmark_framework(&self, config: &Config) -> RustcFramework {
-        config
-            .rustc
-            .as_ref()
-            .and_then(|r| r.benchmark_framework.clone())
-            .unwrap_or_else(|| self.default_benchmark_framework())
+    fn get_benchmark_framework(&self, _config: &Config) -> RustcFramework {
+        // NUKE-CONFIG: Always use default benchmark framework
+        self.default_benchmark_framework()
     }
 
     fn default_test_framework(&self) -> RustcFramework {
@@ -571,30 +562,8 @@ impl RustcCommandBuilder {
                 "Found override for runnable: {:?}",
                 runnable.get_function_name()
             );
-            // First check if there's a framework-specific override
-            if let Some(override_rustc) = &override_config.rustc {
-                // Get the appropriate framework based on runnable type
-                let override_framework = match &runnable.kind {
-                    RunnableKind::Test { .. } | RunnableKind::ModuleTests { .. } => {
-                        override_rustc.test_framework.as_ref()
-                    }
-                    RunnableKind::Benchmark { .. } => override_rustc.benchmark_framework.as_ref(),
-                    _ => override_rustc.binary_framework.as_ref(),
-                };
-
-                // Apply framework-specific exec args
-                if let Some(framework) = override_framework {
-                    if let Some(exec) = &framework.exec {
-                        if let Some(extra_test_binary_args) = &exec.extra_test_binary_args {
-                            tracing::debug!(
-                                "Adding override exec args: {:?}",
-                                extra_test_binary_args
-                            );
-                            exec_args.extend(extra_test_binary_args.clone());
-                        }
-                    }
-                }
-            }
+            // NUKE-CONFIG: Removed framework-specific overrides
+            // TODO: Add simple override support when new config is ready
 
             // Also check cargo config for backwards compatibility
             if let Some(override_cargo) = &override_config.cargo {

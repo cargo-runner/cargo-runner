@@ -86,7 +86,7 @@ impl TestCommandBuilder {
         args: &mut Vec<String>,
         file_path: &Path,
         package: Option<&str>,
-        test_framework: Option<&crate::config::TestFramework>,
+        test_framework: Option<&()>, // NUKE-CONFIG: TestFramework replaced with ()
     ) -> Result<()> {
         let path_str = file_path.to_str().unwrap_or("");
         tracing::debug!(
@@ -95,16 +95,9 @@ impl TestCommandBuilder {
             args
         );
 
-        // Check if we're using default cargo test command
-        let is_default_test = args.contains(&"test".to_string()) && {
-            if let Some(tf) = &test_framework {
-                // If we have a test framework, check if it's using default cargo test
-                tf.command.as_ref().map(|c| c == "cargo").unwrap_or(true) && tf.subcommand.is_none()
-            } else {
-                // No test framework means we're using default cargo
-                true
-            }
-        };
+        // NUKE-CONFIG: Simplified - always using default cargo test now
+        let is_default_test = args.contains(&"test".to_string());
+        let _ = test_framework; // Suppress warning
 
         // For integration tests in tests/ directory, add --test flag
         if let Some(parent) = file_path.parent() {

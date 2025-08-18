@@ -31,7 +31,7 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         );
         let builder = BinaryCommandBuilder;
         let mut args = vec![];
-        let mut command_type = CommandType::Cargo;
+        let command_type = CommandType::Cargo;
 
         // NUKE-CONFIG: Removed all binary framework and override command logic
         // TODO: Add back support for dioxus/leptos/tauri with simple tool selection

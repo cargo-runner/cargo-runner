@@ -254,15 +254,8 @@ impl ConfigMerger {
             }
         }
 
-        // Merge test_framework
-        if override_config.test_framework.is_some() {
-            base.test_framework = override_config.test_framework;
-        }
-
-        // Merge binary_framework
-        if override_config.binary_framework.is_some() {
-            base.binary_framework = override_config.binary_framework;
-        }
+        // NUKE-CONFIG: Removed test_framework and binary_framework merging
+        // TODO: Add simple tool selection merging when new config is ready
 
         // Merge linked_projects
         // Special handling: if PROJECT_ROOT is set and base already has linked_projects,
@@ -283,32 +276,8 @@ impl ConfigMerger {
         override_config: super::RustcConfig,
         force_replace: bool,
     ) {
-        // Merge test_framework
-        if let Some(test_framework) = override_config.test_framework {
-            if force_replace || base.test_framework.is_none() {
-                base.test_framework = Some(test_framework);
-            } else if let Some(ref mut base_framework) = base.test_framework {
-                self.merge_rustc_framework(base_framework, test_framework);
-            }
-        }
-
-        // Merge binary_framework
-        if let Some(binary_framework) = override_config.binary_framework {
-            if force_replace || base.binary_framework.is_none() {
-                base.binary_framework = Some(binary_framework);
-            } else if let Some(ref mut base_framework) = base.binary_framework {
-                self.merge_rustc_framework(base_framework, binary_framework);
-            }
-        }
-
-        // Merge benchmark_framework
-        if let Some(benchmark_framework) = override_config.benchmark_framework {
-            if force_replace || base.benchmark_framework.is_none() {
-                base.benchmark_framework = Some(benchmark_framework);
-            } else if let Some(ref mut base_framework) = base.benchmark_framework {
-                self.merge_rustc_framework(base_framework, benchmark_framework);
-            }
-        }
+        // NUKE-CONFIG: Removed all framework merging for rustc
+        // TODO: Add simple tool selection merging when new config is ready
     }
 
     fn merge_rustc_framework(

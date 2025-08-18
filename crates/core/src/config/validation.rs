@@ -163,21 +163,8 @@ impl ConfigValidator for MainConfigValidator {
                 self.cargo_rules.validate(&options)?;
             }
 
-            // Validate binary_framework args
-            if let Some(framework) = &cargo_config.binary_framework {
-                if let Some(extra_args) = &framework.extra_args {
-                    let options = self.parse_args_to_options(extra_args)?;
-                    self.cargo_rules.validate(&options)?;
-                }
-            }
-
-            // Validate test_framework args
-            if let Some(framework) = &cargo_config.test_framework {
-                if let Some(extra_args) = &framework.extra_args {
-                    let options = self.parse_args_to_options(extra_args)?;
-                    self.cargo_rules.validate(&options)?;
-                }
-            }
+            // NUKE-CONFIG: Removed binary_framework and test_framework validation
+            // TODO: Add validation for simple tool selection when new config is ready
         }
 
         // Validate bazel config if present
