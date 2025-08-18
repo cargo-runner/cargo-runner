@@ -32,38 +32,10 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
         let builder = ModuleTestCommandBuilder;
         let mut args = vec![];
 
-        // Handle test framework configuration (same as TestCommandBuilder)
-        if let Some(test_framework) = builder.get_test_framework(config, file_type) {
-            // Add channel
-            if let Some(channel) = &test_framework.channel {
-                args.push(format!("+{}", channel));
-            } else if let Some(channel) = builder.get_channel(config, file_type) {
-                args.push(format!("+{}", channel));
-            }
-
-            // Add subcommand
-            if let Some(subcommand) = &test_framework.subcommand {
-                args.extend(subcommand.split_whitespace().map(String::from));
-            } else {
-                args.push("test".to_string());
-            }
-
-            // Add framework features
-            if let Some(features) = &test_framework.features {
-                args.extend(features.to_args());
-            }
-
-            // Add framework args
-            if let Some(framework_args) = &test_framework.extra_args {
-                args.extend(framework_args.clone());
-            }
-        } else {
-            // Standard test command
-            if let Some(channel) = builder.get_channel(config, file_type) {
-                args.push(format!("+{}", channel));
-            }
-            args.push("test".to_string());
-        }
+        // NUKE-CONFIG: Removed test framework configuration
+        // TODO: Add simple tool selection (nextest, miri) when new config is ready
+        args.push("test".to_string());
+        let _ = (config, file_type); // Suppress warnings
 
         // Add package
         if let Some(pkg) = package {
@@ -73,8 +45,8 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
             }
         }
 
-        // Get test framework for checking if we're using default cargo test
-        let test_framework = builder.get_test_framework(config, file_type);
+        // NUKE-CONFIG: No test framework to get
+        let test_framework = None;
 
         // Add --bin for tests in binary files (like src/main.rs)
         builder.add_bin_target(&mut args, &runnable.file_path, package, test_framework)?;
@@ -92,14 +64,8 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
             command = command.with_working_dir(cargo_root.to_string_lossy().to_string());
         }
 
-        // Apply test framework env
-        if let Some(test_framework) = builder.get_test_framework(config, file_type) {
-            if let Some(extra_env) = &test_framework.extra_env {
-                for (key, value) in extra_env {
-                    command.env.push((key.clone(), value.clone()));
-                }
-            }
-        }
+        // NUKE-CONFIG: Removed test framework env
+        // TODO: Add simple env configuration when new config is ready
 
         builder.apply_common_config(
             &mut command,
@@ -119,20 +85,13 @@ impl ModuleTestCommandBuilder {
         args: &mut Vec<String>,
         file_path: &std::path::Path,
         package: Option<&str>,
-        test_framework: Option<&crate::config::TestFramework>,
+        test_framework: Option<&()>, // NUKE-CONFIG: TestFramework replaced with ()
     ) -> Result<()> {
         let path_str = file_path.to_str().unwrap_or("");
 
-        // Check if we're using default cargo test command
-        let is_default_test = args.contains(&"test".to_string()) && {
-            if let Some(tf) = &test_framework {
-                // If we have a test framework, check if it's using default cargo test
-                tf.command.as_ref().map(|c| c == "cargo").unwrap_or(true) && tf.subcommand.is_none()
-            } else {
-                // No test framework means we're using default cargo
-                true
-            }
-        };
+        // NUKE-CONFIG: Simplified - always using default cargo test now
+        let is_default_test = args.contains(&"test".to_string());
+        let _ = test_framework; // Suppress warning
 
         // For tests in library source files (src/**/*.rs, excluding main.rs and bin/), add --lib flag
         // Only if using default cargo test command

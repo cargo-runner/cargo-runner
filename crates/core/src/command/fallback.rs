@@ -37,13 +37,8 @@ pub fn generate_fallback_command(
             merger.get_merged_config()
         };
 
-        debug!(
-            "Fallback command config: cargo.binary_framework={:?}",
-            config
-                .cargo
-                .as_ref()
-                .and_then(|c| c.binary_framework.as_ref())
-        );
+        // NUKE-CONFIG: Removed binary_framework debug logging
+        debug!("Fallback command using default cargo run");
 
         // Use the CommandBuilder to build the command with config support
         debug!(

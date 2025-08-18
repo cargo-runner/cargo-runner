@@ -1,9 +1,7 @@
-use super::{Features, TestFramework};
+// NUKE-CONFIG: Removed TestFramework and BinaryFramework imports
+use super::Features;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-// Type alias for clarity - TestFramework is actually a generic framework config
-pub type BinaryFramework = TestFramework;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -22,10 +20,8 @@ pub struct CargoConfig {
     pub extra_env: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_test_binary_args: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub test_framework: Option<TestFramework>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub binary_framework: Option<BinaryFramework>,
+    // NUKE-CONFIG: Removed test_framework and binary_framework fields
+    // TODO: Replace with simple tool selection (e.g., tool: "nextest" | "miri" | "dioxus")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linked_projects: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]

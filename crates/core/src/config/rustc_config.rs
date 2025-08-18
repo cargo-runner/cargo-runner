@@ -1,15 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// NUKE-CONFIG: Removed framework fields from RustcConfig
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RustcConfig {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub test_framework: Option<RustcFramework>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub binary_framework: Option<RustcFramework>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub benchmark_framework: Option<RustcFramework>,
+    // TODO: Replace with simple tool selection when needed
+    // For now, rustc builder uses hardcoded defaults
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
