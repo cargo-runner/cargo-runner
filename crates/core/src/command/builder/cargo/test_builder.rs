@@ -273,22 +273,6 @@ impl TestCommandBuilder {
         }
     }
 
-    fn apply_env(
-        &self,
-        command: &mut CargoCommand,
-        runnable: &Runnable,
-        config: &Config,
-        file_type: FileType,
-    ) {
-        // Apply override env vars
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_env) = &override_cargo.extra_env {
-                    for (key, value) in extra_env {
-                        command.env.push((key.clone(), value.clone()));
-                    }
-                }
-            }
-        }
-    }
+    // NUKE-CONFIG: Removed apply_env method
+    // TODO: Add simple env configuration when new config is ready
 }

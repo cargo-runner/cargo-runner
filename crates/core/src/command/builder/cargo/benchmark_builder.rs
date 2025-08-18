@@ -63,53 +63,6 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
 }
 
 impl BenchmarkCommandBuilder {
-    fn apply_args(
-        &self,
-        args: &mut Vec<String>,
-        runnable: &Runnable,
-        config: &Config,
-        file_type: FileType,
-    ) {
-        // Apply features first
-        self.apply_features(
-            args,
-            runnable,
-            config,
-            file_type,
-            self.get_features(config, file_type),
-        );
-
-        // Apply override args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_args) = &override_cargo.extra_args {
-                    args.extend(extra_args.clone());
-                }
-            }
-        }
-
-        // Apply global args
-        if let Some(extra_args) = self.get_extra_args(config, file_type) {
-            args.extend(extra_args.clone());
-        }
-    }
-
-    fn apply_env(
-        &self,
-        command: &mut CargoCommand,
-        runnable: &Runnable,
-        config: &Config,
-        file_type: FileType,
-    ) {
-        // Apply override env vars
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_env) = &override_cargo.extra_env {
-                    for (key, value) in extra_env {
-                        command.env.push((key.clone(), value.clone()));
-                    }
-                }
-            }
-        }
-    }
+    // NUKE-CONFIG: Removed apply_args and apply_env methods
+    // TODO: Add simple configuration support when new config is ready
 }

@@ -280,6 +280,10 @@ impl ConfigMerger {
         // TODO: Add simple tool selection merging when new config is ready
     }
 
+    // NUKE-CONFIG: Removed merge_rustc_framework and merge_rustc_phase_config methods
+    // These are no longer needed since we removed framework fields from RustcConfig
+    
+    #[allow(dead_code)]
     fn merge_rustc_framework(
         &self,
         base: &mut super::RustcFramework,
@@ -304,6 +308,7 @@ impl ConfigMerger {
         }
     }
 
+    #[allow(dead_code)]
     fn merge_rustc_phase_config(
         &self,
         base: &mut super::RustcPhaseConfig,

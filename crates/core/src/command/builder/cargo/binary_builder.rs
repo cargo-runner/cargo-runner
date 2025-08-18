@@ -170,26 +170,6 @@ impl BinaryCommandBuilder {
         Ok(())
     }
 
-    fn apply_args(
-        &self,
-        args: &mut Vec<String>,
-        runnable: &Runnable,
-        config: &Config,
-        file_type: FileType,
-    ) {
-        // NUKE-CONFIG: Removed all config application
-        let _ = (runnable, config, file_type); // Suppress warnings
-        // TODO: Add simple extra_args support later
-    }
-
-    fn apply_env(
-        &self,
-        command: &mut CargoCommand,
-        runnable: &Runnable,
-        config: &Config,
-        file_type: FileType,
-    ) {
-        // NUKE-CONFIG: Removed all env configuration
-        let _ = (command, runnable, config, file_type); // Suppress warnings
-    }
+    // NUKE-CONFIG: Removed apply_args and apply_env methods
+    // TODO: Add simple configuration support when new config is ready
 }
