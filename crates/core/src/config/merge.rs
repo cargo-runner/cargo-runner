@@ -1,7 +1,13 @@
 //! Configuration merging logic for cargo-runner
 //!
-//! Implements the merging hierarchy: root -> package (or workspace -> package)
-//! The default mode is merge, but overrides can use force_replace to replace instead of merge
+//! Implements smart merging with the hierarchy: 
+//!   root → workspace (optional, for Rust workspaces) → package
+//!
+//! Smart merging means:
+//! - Simple fields: last wins (package overrides root)
+//! - Arrays: concatenate with deduplication (accumulate from all layers)
+//! - HashMaps: merge with override (package values override root for same keys)
+//! - Overrides array: concatenate all (all layers' overrides apply)
 
 use super::{Config, Override};
 use crate::error::Result;
@@ -17,7 +23,7 @@ pub struct ConfigInfo {
 
 pub struct ConfigMerger {
     root_config: Option<Config>,
-    workspace_config: Option<Config>,
+    workspace_config: Option<Config>,  // Optional - only for Rust workspaces
     package_config: Option<Config>,
     config_info: ConfigInfo,
 }
