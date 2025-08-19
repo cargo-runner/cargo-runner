@@ -1,6 +1,4 @@
 {
-    "rust-analyzer.linkedProjects": [
-        "/Users/uriah/Code/windrunner/Cargo.toml"
-    ],
+    "rust-analyzer.linkedProjects": [],
     "rust-analyzer.server.extraEnv": {}
 }
