@@ -13,11 +13,13 @@ pub mod validation;
 
 // Re-export main types
 pub use bazel_config::{BazelConfig, BazelFramework};
-pub use cargo_config::{BinaryFramework, CargoConfig, SingleFileScriptConfig};
+// NUKE-CONFIG: Removed BinaryFramework export
+pub use cargo_config::{CargoConfig, SingleFileScriptConfig};
 pub use features::Features;
 pub use merge::{ConfigInfo, ConfigMerger};
 pub use override_config::Override;
 pub use rustc_config::{RustcConfig, RustcFramework, RustcPhaseConfig};
 pub use settings::Config;
-pub use test_framework::TestFramework;
+// NUKE-CONFIG: Removed TestFramework export
+// TODO: Delete test_framework.rs file after removing all references
 pub use utils::is_valid_channel;

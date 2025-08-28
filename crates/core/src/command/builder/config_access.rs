@@ -1,7 +1,8 @@
 //! Configuration access trait for builders
 
+// NUKE-CONFIG: Removed TestFramework import
 use crate::{
-    config::{Config, Features, TestFramework},
+    config::{Config, Features},
     types::FileType,
 };
 use std::collections::HashMap;
@@ -68,27 +69,8 @@ pub trait ConfigAccess {
         }
     }
 
-    fn get_test_framework<'a>(
-        &self,
-        config: &'a Config,
-        file_type: FileType,
-    ) -> Option<&'a TestFramework> {
-        match file_type {
-            FileType::CargoProject => config.cargo.as_ref()?.test_framework.as_ref(),
-            _ => None, // rustc and single_file_script don't have test framework
-        }
-    }
-
-    fn get_binary_framework<'a>(
-        &self,
-        config: &'a Config,
-        file_type: FileType,
-    ) -> Option<&'a TestFramework> {
-        match file_type {
-            FileType::CargoProject => config.cargo.as_ref()?.binary_framework.as_ref(),
-            _ => None, // rustc and single_file_script don't have binary framework
-        }
-    }
+    // NUKE-CONFIG: Removed get_test_framework and get_binary_framework methods
+    // TODO: Add simple tool selection methods when implementing new config
 
     fn get_command<'a>(&self, config: &'a Config, file_type: FileType) -> Option<&'a str> {
         match file_type {

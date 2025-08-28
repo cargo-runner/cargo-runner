@@ -253,17 +253,9 @@ pub fn print_formatted_analysis(
                     }
 
                     // Show rustc config if present
-                    if let Some(rustc) = &override_config.rustc {
-                        println!("      • rustc config:");
-                        if rustc.test_framework.is_some() {
-                            println!("        - test_framework: present");
-                        }
-                        if rustc.binary_framework.is_some() {
-                            println!("        - binary_framework: present");
-                        }
-                        if rustc.benchmark_framework.is_some() {
-                            println!("        - benchmark_framework: present");
-                        }
+                    if let Some(_rustc) = &override_config.rustc {
+                        println!("      • rustc config: present");
+                        // NUKE-CONFIG: Removed framework fields display
                     }
 
                     // Show single_file_script config if present
@@ -388,17 +380,9 @@ fn print_config_details(_runner: &cargo_runner_core::UnifiedRunner, filepath: &s
     }
 
     // Show rustc configuration if present
-    if let Some(rustc_config) = &merged_config.rustc {
-        println!("      • rustc config:");
-        if rustc_config.test_framework.is_some() {
-            println!("         - test_framework: configured");
-        }
-        if rustc_config.binary_framework.is_some() {
-            println!("         - binary_framework: configured");
-        }
-        if rustc_config.benchmark_framework.is_some() {
-            println!("         - benchmark_framework: configured");
-        }
+    if let Some(_rustc_config) = &merged_config.rustc {
+        println!("      • rustc config: present");
+        // NUKE-CONFIG: Removed framework fields display
     }
 
     // Show single file script configuration if present
