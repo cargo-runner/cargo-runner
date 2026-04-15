@@ -1,11 +1,11 @@
-# windrunner
+# Cargo Runner
 
 The core build engine for the `raz` monorepo. Handles command generation, build-system detection, framework dispatch, and per-function override resolution for Cargo, Bazel, Rustc, and single-file-script targets.
 
 ## Architecture
 
 ```
-windrunner/
+cargo-runner/
 └── crates/
     ├── core/          ← cargo-runner-core  (command engine, config, runners)
     └── cli/           ← cargo-runner-cli   (CLI front-end, fully modularized)
@@ -26,7 +26,7 @@ windrunner/
 | **CLI Modules** | `crates/cli/src/{commands,config,display,utils}/` | Fully decoupled CLI routing. Each subcommand lives in its own module. |
 
 ### Stability & Idiomatic Rust
-The windrunner codebase is designed with strict resilience:
+The Cargo Runner codebase is designed with strict resilience:
 - **Zero Runtime Panics**: Extensive audits removed `.unwrap()` and `.expect()` calls in favor of propagating explicit results via `anyhow::Context` and the strongly-typed `crate::error::Error` variants.
 - **Optimized Lifetimes**: Minimized heap allocations by pruning unnecessary `.clone()` occurrences across AST parsing and command generation.
 - **Clippy Enforced**: Maintained under strict `cargo clippy --workspace` zero-warning standards for both libraries and test modules.
