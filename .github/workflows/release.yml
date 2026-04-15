@@ -50,6 +50,7 @@ jobs:
       uses: taiki-e/install-action@cross
 
     - name: Build Binary
+      shell: bash
       run: |
         if [ "${{ matrix.use-cross }}" == "true" ]; then
           cross build --release --target ${{ matrix.target }} -p cargo-runner-cli
@@ -58,29 +59,20 @@ jobs:
         fi
       working-directory: .
 
-    - name: Package Release (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Package Release
+      shell: bash
       run: |
         VERSION=${GITHUB_REF_NAME#cargo-runner-cli-v}
         ARCHIVE_NAME="${CRATE_NAME}-${{ matrix.target }}-v${VERSION}"
         mkdir -p "${ARCHIVE_NAME}"
-        cp target/${{ matrix.target }}/release/cargo-runner "${ARCHIVE_NAME}/"
+        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+          cp target/${{ matrix.target }}/release/cargo-runner.exe "${ARCHIVE_NAME}/"
+        else
+          cp target/${{ matrix.target }}/release/cargo-runner "${ARCHIVE_NAME}/"
+        fi
         cp README.md LICENSE "${ARCHIVE_NAME}/"
         tar -czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
         echo "ASSET_NAME=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
-
-    - name: Package Release (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: pwsh
-      run: |
-        $VERSION = $env:GITHUB_REF_NAME.Replace("cargo-runner-cli-v", "")
-        $ARCHIVE_NAME = "${env:CRATE_NAME}-${{ matrix.target }}-v${VERSION}"
-        New-Item -ItemType Directory -Force -Path $ARCHIVE_NAME
-        Copy-Item -Path target\${{ matrix.target }}\release\cargo-runner.exe -Destination $ARCHIVE_NAME\
-        Copy-Item -Path README.md -Destination $ARCHIVE_NAME\
-        Copy-Item -Path LICENSE -Destination $ARCHIVE_NAME\
-        Compress-Archive -Path $ARCHIVE_NAME -DestinationPath "${ARCHIVE_NAME}.zip"
-        echo "ASSET_NAME=${ARCHIVE_NAME}.zip" >> $env:GITHUB_ENV
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
