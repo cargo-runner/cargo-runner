@@ -1,11 +1,10 @@
 /target/
 .archived
 .cargo-runner.json
-MODULE.bazel.lock
 bazel-bin
 bazel-out
 bazel-testlogs
-bazel-windrunner
+bazel-cargo-runner
 *.md
 !README.md
 *.py
