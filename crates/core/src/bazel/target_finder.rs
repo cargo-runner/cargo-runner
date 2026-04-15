@@ -85,9 +85,10 @@ impl BazelTargetFinder {
             );
             crate::error::Error::NotInBuildDirectory
         })?;
-        let relative_str = relative_path
-            .to_str()
-            .ok_or(crate::error::Error::InvalidPath("Invalid file path"))?;
+        // Normalize to forward slashes so that glob and direct comparisons
+        // work identically on Windows (where strip_prefix yields '\')
+        let relative_str_owned = relative_path.to_string_lossy().replace('\\', "/");
+        let relative_str = relative_str_owned.as_str();
         tracing::debug!("Relative path from BUILD: {}", relative_str);
 
         // Filter targets that include this source file
@@ -327,7 +328,9 @@ impl BazelTargetFinder {
             if rel_path.as_os_str().is_empty() {
                 return "//".to_string();
             } else {
-                return format!("//{}", rel_path.display());
+                // Use forward slashes so Bazel labels are correct on Windows too
+                let normalized = rel_path.to_string_lossy().replace('\\', "/");
+                return format!("//{normalized}");
             }
         }
 
