@@ -1,0 +1,13 @@
+/target/
+.archived
+.cargo-runner.json
+MODULE.bazel.lock
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-windrunner
+*.md
+!README.md
+*.py
+!test_builder.rs
+!test_*.rs

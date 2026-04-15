@@ -1,0 +1,28 @@
+[workspace]
+members = ["crates/core", "crates/cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+authors = ["Uriah Galang <codeitlikemiley@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/codeitlikemiley/raz"
+homepage = "https://github.com/codeitlikemiley/raz/tree/main/windrunner"
+description = "Core build engine for the raz monorepo handling command generation and framework dispatch"
+keywords = ["cargo", "bazel", "runner", "build", "cli"]
+categories = ["command-line-utilities", "development-tools::build-utils"]
+
+[workspace.dependencies]
+tree-sitter = "0.25.8"
+tree-sitter-rust = "0.24"
+tree-sitter-starlark = "1.3"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+thiserror = "2.0.12"
+md5 = "0.8.0"
+cargo_toml = "0.22.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
