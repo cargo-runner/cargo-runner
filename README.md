@@ -543,25 +543,7 @@ cargo test -p cargo-runner-core bazel_builder
 
 ---
 
-### VSCode Extension integration
 
-Commands are accessible from the IDE:
-
-| Command palette entry | VS Code command ID |
-|-----------------------|--------------------|
-| RAZ: Init Bazel Config | `raz.initBazel` |
-| RAZ: Sync Bazel Crate-Universe | `raz.bazelSync` |
-| RAZ: Add Crate (Bazel) | `raz.bazelAdd` |
-| RAZ: Scaffold / Update BUILD.bazel Targets | `raz.buildSync` |
-
-Clicking the **`$(flame) Bazel`** status-bar badge on any `.rs` file in a Bazel
-workspace opens an action quick-pick that exposes all commands directly.
-
-A **Cargo.toml watcher** (`raz.bazelAutoSync` setting, default `true`) detects
-saves in Bazel-managed crates and prompts you to run `cargo runner sync`
-automatically.
-
----
 
 ## License
 
