@@ -38,20 +38,20 @@ jobs:
 
     - name: Build all targets
       run: |
+        EXTRA_FLAGS=""
         if [ -n "$BUILDBUDDY_API_KEY" ]; then
-          bazel build --config=ci //...
-        else
-          bazel build //...
+          EXTRA_FLAGS="--config=ci --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
         fi
+        bazel build $EXTRA_FLAGS //...
       shell: bash
 
     - name: Run all tests
       run: |
+        EXTRA_FLAGS=""
         if [ -n "$BUILDBUDDY_API_KEY" ]; then
-          bazel test --config=ci //...
-        else
-          bazel test //...
+          EXTRA_FLAGS="--config=ci --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
         fi
+        bazel test $EXTRA_FLAGS //...
       shell: bash
 
   # ── Cargo fmt check (fast, Linux only) ────────────────────────────────────

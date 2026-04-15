@@ -23,10 +23,9 @@ build --@rules_rust//:extra_rustc_flags=-Dwarnings
 # build --cpu=darwin_arm64
 
 # ── Buildbuddy Remote Cache (CI) ──────────────────────────────────────────────
-# Set BUILDBUDDY_API_KEY in your repo secrets to enable remote caching on CI.
-# Leave unset for local builds — Bazel falls back to disk cache automatically.
+# The API key is injected by ci-bazel.yml via --remote_header on the CLI.
+# Local builds fall back to disk cache automatically.
 build:remote --remote_cache=grpcs://remote.buildbuddy.io
-build:remote --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}
 build:remote --remote_upload_local_results=true
-# Enable remote config when the env var is present (set by ci.yml)
+# Enable remote config in CI (set by ci-bazel.yml)
 build:ci --config=remote
