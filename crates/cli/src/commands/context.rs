@@ -523,9 +523,13 @@ fn detect_runnable_kind(
                         if let Some(fp) = file_path {
                             let norm = fp.to_string_lossy().replace('\\', "/");
                             let in_src = norm.contains("/src/") || norm.starts_with("src/");
-                            let is_integration = norm.contains("/tests/") || norm.starts_with("tests/");
-                            let is_bin = norm.contains("/src/bin/") || norm.ends_with("/src/main.rs") || norm.ends_with("src/main.rs");
-                            let is_example = norm.contains("/examples/") || norm.starts_with("examples/");
+                            let is_integration =
+                                norm.contains("/tests/") || norm.starts_with("tests/");
+                            let is_bin = norm.contains("/src/bin/")
+                                || norm.ends_with("/src/main.rs")
+                                || norm.ends_with("src/main.rs");
+                            let is_example =
+                                norm.contains("/examples/") || norm.starts_with("examples/");
                             if in_src && !is_integration && !is_bin && !is_example {
                                 return Some("module_tests".to_string());
                             }
