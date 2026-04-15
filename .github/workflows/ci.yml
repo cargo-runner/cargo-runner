@@ -1,4 +1,4 @@
-name: CI
+name: CI (Cargo)
 
 on:
   push:
@@ -8,37 +8,39 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CACHE_ON_FAILURE: false
 
 jobs:
-  test:
-    name: Test on ${{ matrix.os }}
+  # Clippy runs on all platforms (Bazel doesn't run clippy)
+  clippy:
+    name: Clippy on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Rust
-      uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@stable
       with:
         components: clippy
-        
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "."
-        
-    - name: Check format
-      if: matrix.os == 'ubuntu-latest'
-      run: cargo fmt --all -- --check
-      working-directory: .
-      
     - name: Run Clippy
       run: cargo clippy --all-targets -- -D warnings
-      working-directory: .
-      
+      shell: bash
+
+  # Full test suite on Windows (Bazel CI only covers Linux/macOS)
+  windows-tests:
+    name: Tests on Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "."
     - name: Run tests
       run: cargo test --all-targets
-      working-directory: .
+      shell: bash

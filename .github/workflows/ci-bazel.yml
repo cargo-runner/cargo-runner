@@ -1,0 +1,88 @@
+name: CI (Bazel)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Set this secret in your repo: Settings → Secrets → BUILDBUDDY_API_KEY
+  BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+
+jobs:
+  # ── Bazel build + test on Linux & macOS ───────────────────────────────────
+  bazel:
+    name: Bazel on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # Pin exact Bazel version from .bazelversion
+    - name: Set up Bazel
+      uses: bazel-contrib/setup-bazel@0.9.1
+      with:
+        bazelisk-cache: true
+        disk-cache: ${{ github.workflow }}
+        repository-cache: true
+
+    # Warm the crate_universe index (the slow first-run step)
+    - name: Sync crate universe
+      run: bazel fetch //...
+
+    - name: Build all targets
+      run: |
+        if [ -n "$BUILDBUDDY_API_KEY" ]; then
+          bazel build --config=ci //...
+        else
+          bazel build //...
+        fi
+      shell: bash
+
+    - name: Run all tests
+      run: |
+        if [ -n "$BUILDBUDDY_API_KEY" ]; then
+          bazel test --config=ci //...
+        else
+          bazel test //...
+        fi
+      shell: bash
+
+  # ── Cargo fmt check (fast, Linux only) ────────────────────────────────────
+  fmt:
+    name: Format check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+    - run: cargo fmt --all -- --check
+
+  # ── Windows still uses Cargo (Bazel + Windows CI is brittle) ──────────────
+  windows-cargo:
+    name: Cargo tests on Windows
+    runs-on: windows-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      CACHE_ON_FAILURE: false
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "."
+    - name: Clippy
+      run: cargo clippy --all-targets -- -D warnings
+      shell: bash
+    - name: Tests
+      run: cargo test --all-targets
+      shell: bash

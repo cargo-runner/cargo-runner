@@ -1,4 +1,4 @@
-load("@windrunner_crates//:defs.bzl", "all_crate_deps")
+load("@cargo_runner_crates//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
 # BEGIN raz-managed
