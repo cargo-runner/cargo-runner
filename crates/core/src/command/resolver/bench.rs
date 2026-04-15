@@ -10,7 +10,7 @@ pub struct BenchResolver;
 
 impl CargoTargetResolver for BenchResolver {
     fn resolve(&self, file_path: &Path, _package: Option<&str>) -> Option<Vec<String>> {
-        let path_str = file_path.to_string_lossy();
+        let path_str = file_path.to_string_lossy().replace('\\', "/");
 
         if path_str.contains("/benches/") || path_str.starts_with("benches/") {
             let stem = file_path.file_stem()?.to_string_lossy().to_string();

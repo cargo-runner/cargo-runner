@@ -20,7 +20,7 @@ impl BinResolver {
 
 impl CargoTargetResolver for BinResolver {
     fn resolve(&self, file_path: &Path, package: Option<&str>) -> Option<Vec<String>> {
-        let path_str = file_path.to_string_lossy();
+        let path_str = file_path.to_string_lossy().replace('\\', "/");
 
         // src/main.rs or just main.rs / src/main.rs at root level
         let is_main_rs = path_str.ends_with("/src/main.rs")

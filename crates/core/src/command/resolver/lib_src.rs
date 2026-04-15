@@ -11,7 +11,7 @@ pub struct LibResolver;
 
 impl CargoTargetResolver for LibResolver {
     fn resolve(&self, file_path: &Path, _package: Option<&str>) -> Option<Vec<String>> {
-        let path_str = file_path.to_string_lossy();
+        let path_str = file_path.to_string_lossy().replace('\\', "/");
 
         let in_src = path_str.contains("/src/") || path_str.starts_with("src/");
         let is_main =

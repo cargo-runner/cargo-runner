@@ -721,7 +721,7 @@ fn context_json_for_module_path() {
         .assert()
         .success()
         .stdout(predicate::str::contains(r#""file_path": "#))
-        .stdout(predicate::str::contains("src/runners/unified_runner.rs"))
+        .stdout(predicate::str::contains("unified_runner.rs"))
         .stdout(predicate::str::contains(
             r#""runnable_kind": "module_tests""#,
         ))
