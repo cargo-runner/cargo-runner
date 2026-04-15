@@ -1,6 +1,7 @@
 //! Cargo command generation and execution
 
 pub mod builder;
+#[allow(clippy::module_inception)]
 pub mod command;
 pub mod fallback;
 pub mod resolver;
