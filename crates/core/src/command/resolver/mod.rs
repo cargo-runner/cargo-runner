@@ -47,7 +47,7 @@ impl ResolverChain {
         let prio = resolver.priority();
         self.resolvers.push((prio, Box::new(resolver)));
         // Re-sort: highest priority first
-        self.resolvers.sort_by(|a, b| b.0.cmp(&a.0));
+        self.resolvers.sort_by_key(|b| std::cmp::Reverse(b.0));
         self
     }
 
