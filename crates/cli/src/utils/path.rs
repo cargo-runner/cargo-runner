@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
+use crate::commands::workspace::workspace_scan_roots;
 use crate::config::bazel_workspace::find_cargo_workspace_root;
 use crate::config::workspace::{find_cargo_package_root, resolve_default_run_for_package};
-use crate::commands::workspace::workspace_scan_roots;
 
 /// Resolve an optional filepath argument to a concrete path string.
 ///
