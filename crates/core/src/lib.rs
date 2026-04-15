@@ -1,6 +1,12 @@
+// `let_chains` is stable in Rust 1.88+ but requires a feature gate on nightly
+// toolchains where features track independently of stable releases.
+#![allow(stable_features)]
+#![feature(let_chains)]
+
 //! cargo-runner - A tool for detecting and running Rust code at specific locations
 //!
 //! This crate provides functionality to:
+
 //! - Parse Rust source files and detect runnable items (tests, benchmarks, binaries)
 //! - Generate appropriate cargo commands for running specific items
 //! - Support various project structures and configurations

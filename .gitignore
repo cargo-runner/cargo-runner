@@ -10,3 +10,5 @@ bazel-cargo-runner
 *.py
 !test_builder.rs
 !test_*.rs
+# Local Bazelrc with API keys — never commit
+user.bazelrc
