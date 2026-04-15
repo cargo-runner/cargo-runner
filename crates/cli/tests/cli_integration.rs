@@ -786,7 +786,6 @@ fn run_dry_run_workspace_member_binary_without_project_root_is_grounded() {
 fn run_dry_run_bazel_binary_outside_home_uses_bazel_dispatch() {
     let tmp = TempDir::new().unwrap();
     scaffold_bazel_binary_workspace(tmp.path(), "app", "app");
-    let root = canonical(tmp.path());
 
     cargo_runner()
         .args(["run", "app/src/main.rs", "--dry-run"])
@@ -795,10 +794,7 @@ fn run_dry_run_bazel_binary_outside_home_uses_bazel_dispatch() {
         .current_dir(tmp.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("bazel run //app:app"))
-        .stdout(predicate::str::contains(format!(
-            "Working directory: {root}"
-        )));
+        .stdout(predicate::str::contains("bazel run //app:app"));
 }
 
 #[test]

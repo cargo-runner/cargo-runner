@@ -113,7 +113,8 @@ impl ModuleResolver {
         // Get the path relative to src/
         let path_str = file_path
             .to_str()
-            .ok_or(Error::InvalidPath("Invalid file path"))?;
+            .ok_or(Error::InvalidPath("Invalid file path"))?
+            .replace('\\', "/");
 
         // Check for /src/ or if path starts with src/
         let (src_index, offset) = if let Some(idx) = path_str.find("/src/") {
