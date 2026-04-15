@@ -196,6 +196,9 @@ mod tests {
     #[test]
     fn test_file_not_found() {
         let result = run_command("nonexistent.rs", true);
+        if let Err(e) = &result {
+            println!("Debug err: {:?}", e);
+        }
         assert!(result.is_err());
         assert!(
             result

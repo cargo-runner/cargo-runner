@@ -8,7 +8,7 @@ use crate::config::bazel_workspace::find_cargo_workspace_root;
 
 pub fn workspace_scan_roots(workspace_root: &Path) -> Result<Vec<PathBuf>> {
     let cargo_toml = workspace_root.join("Cargo.toml");
-    let contents = fs::read_to_string(&cargo_toml)?;
+    let contents = fs::read_to_string(&cargo_toml).unwrap_or_default();
     let value: toml::Value = contents
         .parse()
         .unwrap_or_else(|_| toml::Value::Table(Default::default()));

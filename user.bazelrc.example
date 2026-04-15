@@ -1,9 +1,0 @@
-# user.bazelrc — local overrides (DO NOT COMMIT — copy this file to user.bazelrc)
-#
-# 1. cp user.bazelrc.example user.bazelrc
-# 2. Fill in your Buildbuddy API key from:
-#    https://codeitlikemiley.buildbuddy.io/settings/
-#
-# This file is imported by .bazelrc via `try-import %workspace%/user.bazelrc`.
-
-common --remote_header=x-buildbuddy-api-key=YOUR_API_KEY_HERE

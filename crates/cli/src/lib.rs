@@ -1,6 +1,3 @@
-// Feature gate needed for Bazel nightly toolchain; no-op on stable 1.88+
-#![allow(stable_features)]
-#![feature(let_chains)]
 pub mod cli;
 pub mod commands;
 pub mod config;

@@ -17,26 +17,16 @@ test --keep_going
 
 # ── Rust / rules_rust ─────────────────────────────────────────────────────────
 build --@rules_rust//:extra_rustc_flags=-Dwarnings
-# Nightly toolchain channel — required to unlock nightly/2025-07-01 toolchain.
-# lib.rs and main.rs have #![feature(let_chains)] to enable the feature gate.
-build --@rules_rust//rust/toolchain/channel=nightly
 
 # ── macOS / Apple Silicon ─────────────────────────────────────────────────────
 # Uncomment if building on Apple Silicon and Bazel picks the wrong CPU:
 # build --cpu=darwin_arm64
 
 # ── Buildbuddy Remote Cache + BES (CI) ────────────────────────────────────────
-# Self-hosted Buildbuddy instance. API key is NOT stored here (public repo).
-# In CI: injected via --remote_header in ci-bazel.yml using the GitHub secret.
-# Locally:  copy user.bazelrc.example → user.bazelrc and fill in your key.
-build:remote --remote_cache=grpcs://codeitlikemiley.buildbuddy.io
-build:remote --bes_backend=grpcs://codeitlikemiley.buildbuddy.io
-build:remote --bes_results_url=https://codeitlikemiley.buildbuddy.io/invocation/
 build:remote --remote_upload_local_results=true
 # Enable remote config in CI (set by ci-bazel.yml)
 build:ci --config=remote
 
-# ── Personal overrides (gitignored) ───────────────────────────────────────────
-# Create user.bazelrc locally to set your API key without committing it:
-#   echo 'common --remote_header=x-buildbuddy-api-key=YOUR_KEY' > user.bazelrc
-try-import %workspace%/user.bazelrc
+build --bes_results_url=https://codeitlikemiley.buildbuddy.io/invocation/
+build --bes_backend=grpcs://codeitlikemiley.buildbuddy.io
+common --remote_header=x-buildbuddy-api-key=DeAHtNLfxLAHB1vuenmU

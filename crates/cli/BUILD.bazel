@@ -31,6 +31,10 @@ rust_binary(
 rust_test_suite(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
+    data = [":cargo-runner"],
+    env = {
+        "CARGO_BIN_EXE_cargo-runner": "$(rootpath :cargo-runner)",
+    },
     deps = [":cargo-runner_lib"] + all_crate_deps(normal = True, normal_dev = True),
 )
 

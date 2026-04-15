@@ -4,14 +4,12 @@ module(name = "cargo-runner")
 bazel_dep(name = "rules_rust", version = "0.69.0")
 
 # ── Rust toolchain ────────────────────────────────────────────────────────────
-# rules_rust 0.69.0 maps all explicit stable versions to the same __stable
-# channel download (Rust 1.86.0). Nightly is the only way to get a newer
-# compiler. We pin nightly/2025-07-01 (Rust 1.90-nightly, post let_chains)
-# and enable the feature gate in lib.rs / main.rs.
+# Pin to 1.88.0 — the version that stabilized let_chains (June 2025).
+# rules_rust downloads this directly from static.rust-lang.org.
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
-    edition = "2021",
-    versions = ["nightly/2025-07-01"],
+    edition = "2024",
+    versions = ["1.88.0"],
 )
 use_repo(rust, "rust_toolchains")
 register_toolchains("@rust_toolchains//:all")

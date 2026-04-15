@@ -1,6 +1,3 @@
-// `let_chains` stable in 1.88+ cargo; feature gate needed for Bazel nightly toolchain
-#![allow(stable_features)]
-#![feature(let_chains)]
 use anyhow::Result;
 use clap::Parser;
 use std::env;

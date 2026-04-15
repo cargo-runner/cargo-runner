@@ -1609,7 +1609,7 @@
           "@@//Cargo.toml": "0b5d8c095320c72180784acd1e00eac0bc24ddaa51440b7d0e06f06043c7b585",
           "@@//crates/core/Cargo.toml": "65ae98943fa35c279803b76db34cf240fee6c8dc63399dfe2e0eb2b26c1b0d91",
           "@@//Cargo.lock": "1e5abc885519fee6c95c04b9c1fa3c18d07978164631b4ad9fad839b85bef7ec",
-          "@@//MODULE.bazel": "ba4d53a345a2a72ba8a1941c2abd548bfaf3b9b86e2b9f50adb6bd4a2eb14d22",
+          "@@//MODULE.bazel": "4aee8d8cbd9bb6b8a160b31041faf478ce885bb25c96d47b76f7de8cffde12af",
           "@@rules_rust~~rust_host_tools~rust_host_tools//rust_host_tools": "ENOENT"
         },
         "recordedDirentsInputs": {},
