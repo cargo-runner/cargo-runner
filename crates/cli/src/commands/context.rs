@@ -517,6 +517,19 @@ fn detect_runnable_kind(
                     if command.args.iter().any(|arg| arg == "--lib") {
                         Some("module_tests".to_string())
                     } else {
+                        // --lib may be absent on Windows due to path normalization differences.
+                        // Fall back to file-path analysis: if the file lives under src/ but is
+                        // not an integration test (tests/), bin, or example, it's a module test.
+                        if let Some(fp) = file_path {
+                            let norm = fp.to_string_lossy().replace('\\', "/");
+                            let in_src = norm.contains("/src/") || norm.starts_with("src/");
+                            let is_integration = norm.contains("/tests/") || norm.starts_with("tests/");
+                            let is_bin = norm.contains("/src/bin/") || norm.ends_with("/src/main.rs") || norm.ends_with("src/main.rs");
+                            let is_example = norm.contains("/examples/") || norm.starts_with("examples/");
+                            if in_src && !is_integration && !is_bin && !is_example {
+                                return Some("module_tests".to_string());
+                            }
+                        }
                         Some("test".to_string())
                     }
                 }
