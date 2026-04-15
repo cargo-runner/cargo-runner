@@ -42,7 +42,7 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: "windrunner"
+        workspaces: "."
 
     # Install cross if building for a different architecture on linux
     - name: Install cross
@@ -56,7 +56,7 @@ jobs:
         else
           cargo build --release --target ${{ matrix.target }} -p cargo-runner-cli
         fi
-      working-directory: windrunner
+      working-directory: .
 
     - name: Package Release (Unix)
       if: matrix.os != 'windows-latest'
@@ -64,8 +64,8 @@ jobs:
         VERSION=${GITHUB_REF_NAME#cargo-runner-cli-v}
         ARCHIVE_NAME="${CRATE_NAME}-${{ matrix.target }}-v${VERSION}"
         mkdir -p "${ARCHIVE_NAME}"
-        cp windrunner/target/${{ matrix.target }}/release/cargo-runner "${ARCHIVE_NAME}/"
-        cp windrunner/README.md windrunner/LICENSE "${ARCHIVE_NAME}/"
+        cp target/${{ matrix.target }}/release/cargo-runner "${ARCHIVE_NAME}/"
+        cp README.md LICENSE "${ARCHIVE_NAME}/"
         tar -czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
         echo "ASSET_NAME=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
 
@@ -76,9 +76,9 @@ jobs:
         $VERSION = $env:GITHUB_REF_NAME.Replace("cargo-runner-cli-v", "")
         $ARCHIVE_NAME = "${env:CRATE_NAME}-${{ matrix.target }}-v${VERSION}"
         New-Item -ItemType Directory -Force -Path $ARCHIVE_NAME
-        Copy-Item -Path windrunner\target\${{ matrix.target }}\release\cargo-runner.exe -Destination $ARCHIVE_NAME\
-        Copy-Item -Path windrunner\README.md -Destination $ARCHIVE_NAME\
-        Copy-Item -Path windrunner\LICENSE -Destination $ARCHIVE_NAME\
+        Copy-Item -Path target\${{ matrix.target }}\release\cargo-runner.exe -Destination $ARCHIVE_NAME\
+        Copy-Item -Path README.md -Destination $ARCHIVE_NAME\
+        Copy-Item -Path LICENSE -Destination $ARCHIVE_NAME\
         Compress-Archive -Path $ARCHIVE_NAME -DestinationPath "${ARCHIVE_NAME}.zip"
         echo "ASSET_NAME=${ARCHIVE_NAME}.zip" >> $env:GITHUB_ENV
 
