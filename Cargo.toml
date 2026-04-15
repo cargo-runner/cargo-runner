@@ -7,9 +7,9 @@ version = "0.2.0"
 edition = "2024"
 authors = ["Uriah Galang <codeitlikemiley@gmail.com>"]
 license = "MIT"
-repository = "https://github.com/codeitlikemiley/raz"
-homepage = "https://github.com/codeitlikemiley/raz/tree/main/windrunner"
-description = "Core build engine for the raz monorepo handling command generation and framework dispatch"
+repository = "https://github.com/cargo-runner/cargo-runner"
+homepage = "https://github.com/cargo-runner/cargo-runner"
+description = "Instantly run Rust projects with no hassle"
 keywords = ["cargo", "bazel", "runner", "build", "cli"]
 categories = ["command-line-utilities", "development-tools::build-utils"]
 
