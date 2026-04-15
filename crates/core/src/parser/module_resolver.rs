@@ -80,10 +80,10 @@ impl ModuleResolver {
         // Skip package name for test functions, modules, and items in test modules
         let should_include_package = !is_test_or_module && !is_in_test_module;
 
-        if let Some(ref pkg) = self.package_name {
-            if should_include_package {
-                path_components.push(pkg.clone());
-            }
+        if let Some(ref pkg) = self.package_name
+            && should_include_package
+        {
+            path_components.push(pkg.clone());
         }
 
         // Determine module path from file location
@@ -98,10 +98,10 @@ impl ModuleResolver {
 
         // Don't add the function/test name to the module path - it will be added by the command builder
         // Only add names for non-executable items (like structs)
-        if matches!(target_scope.kind, ScopeKind::Struct | ScopeKind::Impl) {
-            if let Some(ref name) = target_scope.name {
-                path_components.push(name.clone());
-            }
+        if matches!(target_scope.kind, ScopeKind::Struct | ScopeKind::Impl)
+            && let Some(ref name) = target_scope.name
+        {
+            path_components.push(name.clone());
         }
 
         Ok(path_components.join("::"))

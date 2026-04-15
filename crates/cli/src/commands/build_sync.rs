@@ -694,10 +694,10 @@ fn parse_cargo_targets(content: &str, kind: &str) -> Vec<CargoTarget> {
             if let Some(val) = extract_string_value(trimmed) {
                 current_name = Some(val);
             }
-        } else if trimmed.starts_with("path") {
-            if let Some(val) = extract_string_value(trimmed) {
-                current_path = Some(val);
-            }
+        } else if trimmed.starts_with("path")
+            && let Some(val) = extract_string_value(trimmed)
+        {
+            current_path = Some(val);
         }
     }
 

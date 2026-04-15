@@ -172,71 +172,70 @@ impl ScopeDetector {
 
         // Check [[bin]] entries
         for bin in &manifest.bin {
-            if let Some(path) = &bin.path {
-                if path == relative_str {
-                    let name = bin.name.clone().or_else(|| {
-                        file_path
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                    });
-                    return Ok(Some(FileScope::Bin { name }));
-                }
+            if let Some(path) = &bin.path
+                && path == relative_str
+            {
+                let name = bin.name.clone().or_else(|| {
+                    file_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_string())
+                });
+                return Ok(Some(FileScope::Bin { name }));
             }
         }
 
         // Check [[test]] entries
         for test in &manifest.test {
-            if let Some(path) = &test.path {
-                if path == relative_str {
-                    let name = test.name.clone().or_else(|| {
-                        file_path
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                    });
-                    return Ok(Some(FileScope::Test { name }));
-                }
+            if let Some(path) = &test.path
+                && path == relative_str
+            {
+                let name = test.name.clone().or_else(|| {
+                    file_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_string())
+                });
+                return Ok(Some(FileScope::Test { name }));
             }
         }
 
         // Check [[bench]] entries
         for bench in &manifest.bench {
-            if let Some(path) = &bench.path {
-                if path == relative_str {
-                    let name = bench.name.clone().or_else(|| {
-                        file_path
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                    });
-                    return Ok(Some(FileScope::Bench { name }));
-                }
+            if let Some(path) = &bench.path
+                && path == relative_str
+            {
+                let name = bench.name.clone().or_else(|| {
+                    file_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_string())
+                });
+                return Ok(Some(FileScope::Bench { name }));
             }
         }
 
         // Check [[example]] entries
         for example in &manifest.example {
-            if let Some(path) = &example.path {
-                if path == relative_str {
-                    let name = example.name.clone().or_else(|| {
-                        file_path
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                    });
-                    return Ok(Some(FileScope::Example { name }));
-                }
+            if let Some(path) = &example.path
+                && path == relative_str
+            {
+                let name = example.name.clone().or_else(|| {
+                    file_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_string())
+                });
+                return Ok(Some(FileScope::Example { name }));
             }
         }
 
         // Check [lib] entry
-        if let Some(lib) = &manifest.lib {
-            if let Some(path) = &lib.path {
-                if path == relative_str {
-                    return Ok(Some(FileScope::Lib));
-                }
-            }
+        if let Some(lib) = &manifest.lib
+            && let Some(path) = &lib.path
+            && path == relative_str
+        {
+            return Ok(Some(FileScope::Lib));
         }
 
         Ok(None)
@@ -501,20 +500,20 @@ impl ScopeDetector {
     ) -> Result<()> {
         let mut name = String::from("impl");
 
-        if let Some(type_node) = node.child_by_field_name("type") {
-            if let Ok(type_name) = type_node.utf8_text(source.as_bytes()) {
-                name = format!("impl {type_name}");
-            }
+        if let Some(type_node) = node.child_by_field_name("type")
+            && let Ok(type_name) = type_node.utf8_text(source.as_bytes())
+        {
+            name = format!("impl {type_name}");
         }
 
-        if let Some(trait_node) = node.child_by_field_name("trait") {
-            if let Ok(trait_name) = trait_node.utf8_text(source.as_bytes()) {
-                name = format!("{trait_name} for");
-                if let Some(type_node) = node.child_by_field_name("type") {
-                    if let Ok(type_name) = type_node.utf8_text(source.as_bytes()) {
-                        name = format!("{trait_name} for {type_name}");
-                    }
-                }
+        if let Some(trait_node) = node.child_by_field_name("trait")
+            && let Ok(trait_name) = trait_node.utf8_text(source.as_bytes())
+        {
+            name = format!("{trait_name} for");
+            if let Some(type_node) = node.child_by_field_name("type")
+                && let Ok(type_name) = type_node.utf8_text(source.as_bytes())
+            {
+                name = format!("{trait_name} for {type_name}");
             }
         }
 
@@ -548,10 +547,10 @@ impl ScopeDetector {
 
         while let Some(s) = sibling {
             if s.kind() == "attribute_item" {
-                if let Ok(text) = s.utf8_text(source.as_bytes()) {
-                    if text.contains("#[test]") || text.contains("#[tokio::test]") {
-                        return true;
-                    }
+                if let Ok(text) = s.utf8_text(source.as_bytes())
+                    && (text.contains("#[test]") || text.contains("#[tokio::test]"))
+                {
+                    return true;
                 }
             } else if s.kind() != "line_comment" && s.kind() != "block_comment" {
                 // Stop if we hit something that's not an attribute or comment
@@ -569,10 +568,10 @@ impl ScopeDetector {
 
         while let Some(s) = sibling {
             if s.kind() == "attribute_item" {
-                if let Ok(text) = s.utf8_text(source.as_bytes()) {
-                    if text.contains("#[bench]") {
-                        return true;
-                    }
+                if let Ok(text) = s.utf8_text(source.as_bytes())
+                    && text.contains("#[bench]")
+                {
+                    return true;
                 }
             } else if s.kind() != "line_comment" && s.kind() != "block_comment" {
                 // Stop if we hit something that's not an attribute or comment
@@ -598,16 +597,16 @@ impl ScopeDetector {
         while let Some(sibling) = current_sibling {
             match sibling.kind() {
                 "line_comment" => {
-                    if let Ok(text) = sibling.utf8_text(source.as_bytes()) {
-                        if text.starts_with("///") {
-                            siblings_to_process.push((sibling, "doc_comment"));
-                            if text.contains("```") {
-                                has_doc_tests = true;
-                            }
+                    if let Ok(text) = sibling.utf8_text(source.as_bytes())
+                        && text.starts_with("///")
+                    {
+                        siblings_to_process.push((sibling, "doc_comment"));
+                        if text.contains("```") {
+                            has_doc_tests = true;
                         }
-                        // Don't break on regular comments - just skip them
-                        // This allows us to find doc comments that come before regular comments
                     }
+                    // Don't break on regular comments - just skip them
+                    // This allows us to find doc comments that come before regular comments
                 }
                 "attribute_item" => {
                     siblings_to_process.push((sibling, "attribute"));
@@ -659,33 +658,33 @@ impl ScopeDetector {
 fn find_doc_tests_recursive(node: &Node, source: &str) -> Vec<(Position, Position, String)> {
     let mut doc_tests = Vec::new();
 
-    if node.kind() == "line_comment" {
-        if let Ok(comment_text) = node.utf8_text(source.as_bytes()) {
-            if comment_text.starts_with("///") && comment_text.contains("```") {
-                let start = node_to_position(node, true);
+    if node.kind() == "line_comment"
+        && let Ok(comment_text) = node.utf8_text(source.as_bytes())
+        && comment_text.starts_with("///")
+        && comment_text.contains("```")
+    {
+        let start = node_to_position(node, true);
 
-                let mut current = Some(*node);
-                let mut _end = node_to_position(node, false);
-                let mut full_text = String::new();
+        let mut current = Some(*node);
+        let mut _end = node_to_position(node, false);
+        let mut full_text = String::new();
 
-                while let Some(n) = current {
-                    if let Ok(text) = n.utf8_text(source.as_bytes()) {
-                        if let Some(stripped) = text.strip_prefix("///") {
-                            full_text.push_str(stripped.trim_start());
-                            full_text.push('\n');
-                            _end = node_to_position(&n, false);
+        while let Some(n) = current {
+            if let Ok(text) = n.utf8_text(source.as_bytes()) {
+                if let Some(stripped) = text.strip_prefix("///") {
+                    full_text.push_str(stripped.trim_start());
+                    full_text.push('\n');
+                    _end = node_to_position(&n, false);
 
-                            if text.contains("```") && full_text.matches("```").count() >= 2 {
-                                doc_tests.push((start, _end, full_text.clone()));
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
+                    if text.contains("```") && full_text.matches("```").count() >= 2 {
+                        doc_tests.push((start, _end, full_text.clone()));
+                        break;
                     }
-                    current = n.next_sibling();
+                } else {
+                    break;
                 }
             }
+            current = n.next_sibling();
         }
     }
 

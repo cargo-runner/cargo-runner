@@ -44,14 +44,13 @@ impl BazelCommandBuilder {
             if framework.args.is_none() {
                 framework.args = Some(vec![]);
             }
-            if let Some(ref mut args) = framework.args {
-                if !args.contains(&"-c".to_string())
-                    && !args.contains(&"--compilation_mode".to_string())
-                {
-                    args.insert(0, "-c".to_string());
-                    args.insert(1, "opt".to_string());
-                    tracing::debug!("Added optimization flag for benchmark binary");
-                }
+            if let Some(ref mut args) = framework.args
+                && !args.contains(&"-c".to_string())
+                && !args.contains(&"--compilation_mode".to_string())
+            {
+                args.insert(0, "-c".to_string());
+                args.insert(1, "opt".to_string());
+                tracing::debug!("Added optimization flag for benchmark binary");
             }
         }
 

@@ -61,11 +61,11 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
         args.push("--doc".to_string());
 
         // Add package
-        if let Some(pkg) = package {
-            if !pkg.is_empty() {
-                args.push("--package".to_string());
-                args.push(pkg.to_string());
-            }
+        if let Some(pkg) = package
+            && !pkg.is_empty()
+        {
+            args.push("--package".to_string());
+            args.push(pkg.to_string());
         }
 
         // Apply configuration
@@ -115,12 +115,11 @@ impl DocTestCommandBuilder {
         );
 
         // Apply override args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_args) = &override_cargo.extra_args {
-                    args.extend(extra_args.clone());
-                }
-            }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_cargo) = &override_config.cargo
+            && let Some(extra_args) = &override_cargo.extra_args
+        {
+            args.extend(extra_args.clone());
         }
 
         // Apply global args
@@ -137,12 +136,11 @@ impl DocTestCommandBuilder {
         file_type: FileType,
     ) {
         // Apply override test binary args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_args) = &override_cargo.extra_test_binary_args {
-                    args.extend(extra_args.clone());
-                }
-            }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_cargo) = &override_config.cargo
+            && let Some(extra_args) = &override_cargo.extra_test_binary_args
+        {
+            args.extend(extra_args.clone());
         }
 
         // Apply global test binary args
@@ -159,13 +157,12 @@ impl DocTestCommandBuilder {
         file_type: FileType,
     ) {
         // Apply override env vars
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_env) = &override_cargo.extra_env {
-                    for (key, value) in extra_env {
-                        command.env.insert(key.clone(), value.clone());
-                    }
-                }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_cargo) = &override_config.cargo
+            && let Some(extra_env) = &override_cargo.extra_env
+        {
+            for (key, value) in extra_env {
+                command.env.insert(key.clone(), value.clone());
             }
         }
     }

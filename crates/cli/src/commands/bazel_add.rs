@@ -161,12 +161,13 @@ fn extract_crate_name(toml_content: &str) -> Option<String> {
         if t.starts_with('[') {
             in_package = false;
         }
-        if in_package && t.starts_with("name") {
-            if let Some(val) = t.split_once('=').map(|x| x.1) {
-                let name = val.trim().trim_matches('"').trim_matches('\'').to_string();
-                if !name.is_empty() {
-                    return Some(name);
-                }
+        if in_package
+            && t.starts_with("name")
+            && let Some(val) = t.split_once('=').map(|x| x.1)
+        {
+            let name = val.trim().trim_matches('"').trim_matches('\'').to_string();
+            if !name.is_empty() {
+                return Some(name);
             }
         }
     }

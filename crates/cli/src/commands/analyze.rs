@@ -452,74 +452,73 @@ pub fn print_formatted_analysis(
             }
 
             // Show matching override if config details requested
-            if show_config {
-                if let Some(override_config) = runner.get_override_for_runnable(runnable) {
-                    println!("   🔀 Matched override:");
-                    println!("      • match: {:?}", override_config.identity);
+            if show_config && let Some(override_config) = runner.get_override_for_runnable(runnable)
+            {
+                println!("   🔀 Matched override:");
+                println!("      • match: {:?}", override_config.identity);
 
-                    // Show cargo config if present
-                    if let Some(cargo) = &override_config.cargo {
-                        println!("      • cargo config:");
-                        if cargo.command.is_some() {
-                            println!("        - command: {:?}", cargo.command);
-                        }
-                        if cargo.subcommand.is_some() {
-                            println!("        - subcommand: {:?}", cargo.subcommand);
-                        }
-                        if let Some(features) = &cargo.features {
-                            match features {
-                                cargo_runner_core::config::Features::All(s) if s == "all" => {
-                                    println!("        - features: all");
-                                }
-                                cargo_runner_core::config::Features::Selected(selected) => {
-                                    println!("        - features: {selected:?}");
-                                }
-                                _ => {}
+                // Show cargo config if present
+                if let Some(cargo) = &override_config.cargo {
+                    println!("      • cargo config:");
+                    if cargo.command.is_some() {
+                        println!("        - command: {:?}", cargo.command);
+                    }
+                    if cargo.subcommand.is_some() {
+                        println!("        - subcommand: {:?}", cargo.subcommand);
+                    }
+                    if let Some(features) = &cargo.features {
+                        match features {
+                            cargo_runner_core::config::Features::All(s) if s == "all" => {
+                                println!("        - features: all");
                             }
-                        }
-                        if cargo.extra_args.is_some() {
-                            println!("        - extra_args: {:?}", cargo.extra_args);
-                        }
-                        if cargo.extra_test_binary_args.is_some() {
-                            println!(
-                                "        - extra_test_binary_args: {:?}",
-                                cargo.extra_test_binary_args
-                            );
-                        }
-                        if cargo.extra_env.is_some() {
-                            println!("        - extra_env: {:?}", cargo.extra_env);
+                            cargo_runner_core::config::Features::Selected(selected) => {
+                                println!("        - features: {selected:?}");
+                            }
+                            _ => {}
                         }
                     }
-
-                    // Show rustc config if present
-                    if let Some(rustc) = &override_config.rustc {
-                        println!("      • rustc config:");
-                        if rustc.test_framework.is_some() {
-                            println!("        - test_framework: present");
-                        }
-                        if rustc.binary_framework.is_some() {
-                            println!("        - binary_framework: present");
-                        }
-                        if rustc.benchmark_framework.is_some() {
-                            println!("        - benchmark_framework: present");
-                        }
+                    if cargo.extra_args.is_some() {
+                        println!("        - extra_args: {:?}", cargo.extra_args);
                     }
+                    if cargo.extra_test_binary_args.is_some() {
+                        println!(
+                            "        - extra_test_binary_args: {:?}",
+                            cargo.extra_test_binary_args
+                        );
+                    }
+                    if cargo.extra_env.is_some() {
+                        println!("        - extra_env: {:?}", cargo.extra_env);
+                    }
+                }
 
-                    // Show single_file_script config if present
-                    if let Some(sfs) = &override_config.single_file_script {
-                        println!("      • single_file_script config:");
-                        if sfs.extra_args.is_some() {
-                            println!("        - extra_args: {:?}", sfs.extra_args);
-                        }
-                        if sfs.extra_test_binary_args.is_some() {
-                            println!(
-                                "        - extra_test_binary_args: {:?}",
-                                sfs.extra_test_binary_args
-                            );
-                        }
-                        if sfs.extra_env.is_some() {
-                            println!("        - extra_env: {:?}", sfs.extra_env);
-                        }
+                // Show rustc config if present
+                if let Some(rustc) = &override_config.rustc {
+                    println!("      • rustc config:");
+                    if rustc.test_framework.is_some() {
+                        println!("        - test_framework: present");
+                    }
+                    if rustc.binary_framework.is_some() {
+                        println!("        - binary_framework: present");
+                    }
+                    if rustc.benchmark_framework.is_some() {
+                        println!("        - benchmark_framework: present");
+                    }
+                }
+
+                // Show single_file_script config if present
+                if let Some(sfs) = &override_config.single_file_script {
+                    println!("      • single_file_script config:");
+                    if sfs.extra_args.is_some() {
+                        println!("        - extra_args: {:?}", sfs.extra_args);
+                    }
+                    if sfs.extra_test_binary_args.is_some() {
+                        println!(
+                            "        - extra_test_binary_args: {:?}",
+                            sfs.extra_test_binary_args
+                        );
+                    }
+                    if sfs.extra_env.is_some() {
+                        println!("        - extra_env: {:?}", sfs.extra_env);
                     }
                 }
             }
@@ -608,15 +607,15 @@ fn print_config_details(_runner: &cargo_runner_core::UnifiedRunner, filepath: &s
                 _ => {}
             }
         }
-        if let Some(extra_args) = &cargo_config.extra_args {
-            if !extra_args.is_empty() {
-                println!("      • extra_args: {extra_args:?}");
-            }
+        if let Some(extra_args) = &cargo_config.extra_args
+            && !extra_args.is_empty()
+        {
+            println!("      • extra_args: {extra_args:?}");
         }
-        if let Some(extra_env) = &cargo_config.extra_env {
-            if !extra_env.is_empty() {
-                println!("      • extra_env: {} variables", extra_env.len());
-            }
+        if let Some(extra_env) = &cargo_config.extra_env
+            && !extra_env.is_empty()
+        {
+            println!("      • extra_env: {} variables", extra_env.len());
         }
         if let Some(linked_projects) = &cargo_config.linked_projects {
             println!(
@@ -643,15 +642,15 @@ fn print_config_details(_runner: &cargo_runner_core::UnifiedRunner, filepath: &s
     // Show single file script configuration if present
     if let Some(sfs_config) = &merged_config.single_file_script {
         println!("      • single_file_script config:");
-        if let Some(extra_args) = &sfs_config.extra_args {
-            if !extra_args.is_empty() {
-                println!("         - extra_args: {extra_args:?}");
-            }
+        if let Some(extra_args) = &sfs_config.extra_args
+            && !extra_args.is_empty()
+        {
+            println!("         - extra_args: {extra_args:?}");
         }
-        if let Some(extra_env) = &sfs_config.extra_env {
-            if !extra_env.is_empty() {
-                println!("         - extra_env: {} variables", extra_env.len());
-            }
+        if let Some(extra_env) = &sfs_config.extra_env
+            && !extra_env.is_empty()
+        {
+            println!("         - extra_env: {} variables", extra_env.len());
         }
     }
     if !merged_config.overrides.is_empty() {

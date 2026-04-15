@@ -50,10 +50,10 @@ pub fn workspace_rs_files(roots: &[PathBuf]) -> Vec<PathBuf> {
             .follow_links(true)
             .into_iter()
             .filter_entry(|e| {
-                if let Some(name) = e.file_name().to_str() {
-                    if name.starts_with('.') || name == "target" || name.starts_with("bazel-") {
-                        return false;
-                    }
+                if let Some(name) = e.file_name().to_str()
+                    && (name.starts_with('.') || name == "target" || name.starts_with("bazel-"))
+                {
+                    return false;
                 }
                 true
             })

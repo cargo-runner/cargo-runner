@@ -196,26 +196,26 @@ pub fn override_command(
             if let Some(overrides) = config.get_mut("overrides").and_then(|v| v.as_array_mut()) {
                 // Find and remove matching override
                 overrides.retain(|o| {
-                    if let Some(obj) = o.as_object() {
-                        if let Some(match_obj) = obj.get("match").and_then(|m| m.as_object()) {
-                            // Check if this override matches our identity
-                            let matches = match_obj
-                                .get("file_path")
+                    if let Some(obj) = o.as_object()
+                        && let Some(match_obj) = obj.get("match").and_then(|m| m.as_object())
+                    {
+                        // Check if this override matches our identity
+                        let matches = match_obj
+                            .get("file_path")
+                            .and_then(|v| v.as_str())
+                            .map(|p| Some(p) == resolved_path.to_str())
+                            .unwrap_or(false);
+
+                        if matches && identity.function_name.is_some() {
+                            let func_matches = match_obj
+                                .get("function_name")
                                 .and_then(|v| v.as_str())
-                                .map(|p| Some(p) == resolved_path.to_str())
+                                .map(|f| Some(f.to_string()) == identity.function_name)
                                 .unwrap_or(false);
-
-                            if matches && identity.function_name.is_some() {
-                                let func_matches = match_obj
-                                    .get("function_name")
-                                    .and_then(|v| v.as_str())
-                                    .map(|f| Some(f.to_string()) == identity.function_name)
-                                    .unwrap_or(false);
-                                return !func_matches;
-                            }
-
-                            return !matches;
+                            return !func_matches;
                         }
+
+                        return !matches;
                     }
                     true
                 });
@@ -420,26 +420,26 @@ pub fn override_command(
 
     // Check if an override already exists for this identity
     let existing_index = overrides.iter().position(|o| {
-        if let Some(obj) = o.as_object() {
-            if let Some(match_obj) = obj.get("match").and_then(|m| m.as_object()) {
-                // Check if this override matches our identity
-                let file_matches = match_obj
-                    .get("file_path")
+        if let Some(obj) = o.as_object()
+            && let Some(match_obj) = obj.get("match").and_then(|m| m.as_object())
+        {
+            // Check if this override matches our identity
+            let file_matches = match_obj
+                .get("file_path")
+                .and_then(|v| v.as_str())
+                .map(|p| Some(p) == resolved_path.to_str())
+                .unwrap_or(false);
+
+            if file_matches && identity.function_name.is_some() {
+                let func_matches = match_obj
+                    .get("function_name")
                     .and_then(|v| v.as_str())
-                    .map(|p| Some(p) == resolved_path.to_str())
+                    .map(|f| Some(f.to_string()) == identity.function_name)
                     .unwrap_or(false);
-
-                if file_matches && identity.function_name.is_some() {
-                    let func_matches = match_obj
-                        .get("function_name")
-                        .and_then(|v| v.as_str())
-                        .map(|f| Some(f.to_string()) == identity.function_name)
-                        .unwrap_or(false);
-                    return func_matches;
-                }
-
-                return file_matches;
+                return func_matches;
             }
+
+            return file_matches;
         }
         false
     });
@@ -496,14 +496,12 @@ pub fn override_command(
                 if let Some(env_keys) = parsed_args
                     .get("remove_env_keys")
                     .and_then(|v| v.as_array())
-                {
-                    if let Some(extra_env) =
+                    && let Some(extra_env) =
                         section.get_mut("extra_env").and_then(|v| v.as_object_mut())
-                    {
-                        for key in env_keys {
-                            if let Some(key_str) = key.as_str() {
-                                extra_env.remove(key_str);
-                            }
+                {
+                    for key in env_keys {
+                        if let Some(key_str) = key.as_str() {
+                            extra_env.remove(key_str);
                         }
                     }
                 }
@@ -588,41 +586,41 @@ pub fn override_command(
         if parsed_args.contains_key("channel") {
             println!("      • channel: {}", parsed_args["channel"]);
         }
-        if parsed_args.contains_key("extra_args") {
-            if let Some(args) = parsed_args["extra_args"].as_array() {
-                let args_str: Vec<String> = args
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect();
+        if parsed_args.contains_key("extra_args")
+            && let Some(args) = parsed_args["extra_args"].as_array()
+        {
+            let args_str: Vec<String> = args
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            if file_type == cargo_runner_core::FileType::Standalone {
+                println!("      • build.extra_args: {args_str:?}");
+            } else {
+                println!("      • extra_args: {args_str:?}");
+            }
+        }
+        if parsed_args.contains_key("extra_env")
+            && let Some(env) = parsed_args["extra_env"].as_object()
+        {
+            for (k, v) in env {
                 if file_type == cargo_runner_core::FileType::Standalone {
-                    println!("      • build.extra_args: {args_str:?}");
+                    println!("      • exec.extra_env: {k}={v}");
                 } else {
-                    println!("      • extra_args: {args_str:?}");
+                    println!("      • env: {k}={v}");
                 }
             }
         }
-        if parsed_args.contains_key("extra_env") {
-            if let Some(env) = parsed_args["extra_env"].as_object() {
-                for (k, v) in env {
-                    if file_type == cargo_runner_core::FileType::Standalone {
-                        println!("      • exec.extra_env: {k}={v}");
-                    } else {
-                        println!("      • env: {k}={v}");
-                    }
-                }
-            }
-        }
-        if parsed_args.contains_key("extra_test_binary_args") {
-            if let Some(args) = parsed_args["extra_test_binary_args"].as_array() {
-                let args_str: Vec<String> = args
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect();
-                if file_type == cargo_runner_core::FileType::Standalone {
-                    println!("      • exec.extra_test_binary_args: {args_str:?}");
-                } else {
-                    println!("      • extra_test_binary_args: {args_str:?}");
-                }
+        if parsed_args.contains_key("extra_test_binary_args")
+            && let Some(args) = parsed_args["extra_test_binary_args"].as_array()
+        {
+            let args_str: Vec<String> = args
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            if file_type == cargo_runner_core::FileType::Standalone {
+                println!("      • exec.extra_test_binary_args: {args_str:?}");
+            } else {
+                println!("      • extra_test_binary_args: {args_str:?}");
             }
         }
 
@@ -779,51 +777,51 @@ fn create_file_level_override(
     println!("   📄 File: {filepath}");
 
     // Show what was configured
-    if let Some(cargo_config) = override_entry.get("cargo") {
-        if let Some(obj) = cargo_config.as_object() {
-            if let Some(subcommand) = obj.get("subcommand") {
-                println!(
-                    "   🚀 Subcommand: cargo {}",
-                    subcommand.as_str().unwrap_or("")
-                );
-            }
-            if let Some(extra_args) = obj.get("extra_args") {
-                if let Some(args) = extra_args.as_array() {
-                    let args_str: Vec<String> = args
-                        .iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect();
-                    if !args_str.is_empty() {
-                        println!("   📝 Extra args: {}", args_str.join(" "));
-                    }
-                }
+    if let Some(cargo_config) = override_entry.get("cargo")
+        && let Some(obj) = cargo_config.as_object()
+    {
+        if let Some(subcommand) = obj.get("subcommand") {
+            println!(
+                "   🚀 Subcommand: cargo {}",
+                subcommand.as_str().unwrap_or("")
+            );
+        }
+        if let Some(extra_args) = obj.get("extra_args")
+            && let Some(args) = extra_args.as_array()
+        {
+            let args_str: Vec<String> = args
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
+            if !args_str.is_empty() {
+                println!("   📝 Extra args: {}", args_str.join(" "));
             }
         }
     }
 
-    if let Some(bazel_config) = override_entry.get("bazel") {
-        if let Some(obj) = bazel_config.as_object() {
-            if let Some(extra_test_args) = obj.get("extra_test_args") {
-                if let Some(args) = extra_test_args.as_array() {
-                    let args_str: Vec<String> = args
-                        .iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect();
-                    if !args_str.is_empty() {
-                        println!("   📝 Extra test args (Bazel): {}", args_str.join(" "));
-                    }
-                }
+    if let Some(bazel_config) = override_entry.get("bazel")
+        && let Some(obj) = bazel_config.as_object()
+    {
+        if let Some(extra_test_args) = obj.get("extra_test_args")
+            && let Some(args) = extra_test_args.as_array()
+        {
+            let args_str: Vec<String> = args
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
+            if !args_str.is_empty() {
+                println!("   📝 Extra test args (Bazel): {}", args_str.join(" "));
             }
-            if let Some(extra_run_args) = obj.get("extra_run_args") {
-                if let Some(args) = extra_run_args.as_array() {
-                    let args_str: Vec<String> = args
-                        .iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect();
-                    if !args_str.is_empty() {
-                        println!("   📝 Extra run args (Bazel): {}", args_str.join(" "));
-                    }
-                }
+        }
+        if let Some(extra_run_args) = obj.get("extra_run_args")
+            && let Some(args) = extra_run_args.as_array()
+        {
+            let args_str: Vec<String> = args
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
+            if !args_str.is_empty() {
+                println!("   📝 Extra run args (Bazel): {}", args_str.join(" "));
             }
         }
     }

@@ -482,12 +482,12 @@ impl ConfigMerger {
             let cargo_toml = current.join("Cargo.toml");
             if cargo_toml.exists() {
                 // Check if this is a workspace
-                if let Ok(contents) = std::fs::read_to_string(&cargo_toml) {
-                    if contents.contains("[workspace]") {
-                        let config_path = current.join(".cargo-runner.json");
-                        if config_path.exists() {
-                            return Some(config_path);
-                        }
+                if let Ok(contents) = std::fs::read_to_string(&cargo_toml)
+                    && contents.contains("[workspace]")
+                {
+                    let config_path = current.join(".cargo-runner.json");
+                    if config_path.exists() {
+                        return Some(config_path);
                     }
                 }
                 _found_package_root = true;

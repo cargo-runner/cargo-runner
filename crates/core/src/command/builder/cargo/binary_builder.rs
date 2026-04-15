@@ -46,31 +46,30 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         tracing::debug!("has_override_command: {}", has_override_command);
 
         // Handle override command first (takes precedence)
-        if let Some(override_config) = override_config {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(cmd) = &override_cargo.command {
-                    if cmd != "cargo" {
-                        strategy = CommandStrategy::Shell;
-                        args.push(cmd.clone());
+        if let Some(override_config) = override_config
+            && let Some(override_cargo) = &override_config.cargo
+            && let Some(cmd) = &override_cargo.command
+        {
+            if cmd != "cargo" {
+                strategy = CommandStrategy::Shell;
+                args.push(cmd.clone());
 
-                        // Add subcommand if specified
-                        if let Some(subcommand) = &override_cargo.subcommand {
-                            args.extend(subcommand.split_whitespace().map(String::from));
-                        }
-                    } else {
-                        // Standard cargo with channel
-                        if let Some(channel) = &override_cargo.channel {
-                            args.push(format!("+{channel}"));
-                        } else if let Some(channel) = builder.get_channel(config, file_type) {
-                            args.push(format!("+{channel}"));
-                        }
+                // Add subcommand if specified
+                if let Some(subcommand) = &override_cargo.subcommand {
+                    args.extend(subcommand.split_whitespace().map(String::from));
+                }
+            } else {
+                // Standard cargo with channel
+                if let Some(channel) = &override_cargo.channel {
+                    args.push(format!("+{channel}"));
+                } else if let Some(channel) = builder.get_channel(config, file_type) {
+                    args.push(format!("+{channel}"));
+                }
 
-                        if let Some(subcommand) = &override_cargo.subcommand {
-                            args.extend(subcommand.split_whitespace().map(String::from));
-                        } else {
-                            args.push("run".to_string());
-                        }
-                    }
+                if let Some(subcommand) = &override_cargo.subcommand {
+                    args.extend(subcommand.split_whitespace().map(String::from));
+                } else {
+                    args.push("run".to_string());
                 }
             }
         }
@@ -119,10 +118,10 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
                 }
 
                 // Add framework features (only for cargo commands)
-                if strategy == CommandStrategy::Cargo {
-                    if let Some(features) = &binary_framework.features {
-                        args.extend(features.to_args());
-                    }
+                if strategy == CommandStrategy::Cargo
+                    && let Some(features) = &binary_framework.features
+                {
+                    args.extend(features.to_args());
                 }
 
                 // Add framework args
@@ -140,11 +139,11 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
 
         // Add package (only for cargo commands)
         if strategy == CommandStrategy::Cargo {
-            if let Some(pkg) = package {
-                if !pkg.is_empty() {
-                    args.push("--package".to_string());
-                    args.push(pkg.to_string());
-                }
+            if let Some(pkg) = package
+                && !pkg.is_empty()
+            {
+                args.push("--package".to_string());
+                args.push(pkg.to_string());
             }
 
             // Add binary name
@@ -196,11 +195,11 @@ impl CommandBuilderImpl for BinaryCommandBuilder {
         }
 
         // Apply binary framework env
-        if let Some(binary_framework) = binary_framework {
-            if let Some(extra_env) = &binary_framework.extra_env {
-                for (key, value) in extra_env {
-                    command.env.insert(key.clone(), value.clone());
-                }
+        if let Some(binary_framework) = binary_framework
+            && let Some(extra_env) = &binary_framework.extra_env
+        {
+            for (key, value) in extra_env {
+                command.env.insert(key.clone(), value.clone());
             }
         }
 
@@ -328,12 +327,11 @@ impl BinaryCommandBuilder {
         );
 
         // Apply override args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_args) = &override_cargo.extra_args {
-                    args.extend(extra_args.clone());
-                }
-            }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_cargo) = &override_config.cargo
+            && let Some(extra_args) = &override_cargo.extra_args
+        {
+            args.extend(extra_args.clone());
         }
 
         // Apply global args
@@ -350,13 +348,12 @@ impl BinaryCommandBuilder {
         file_type: FileType,
     ) {
         // Apply override env vars
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_env) = &override_cargo.extra_env {
-                    for (key, value) in extra_env {
-                        command.env.insert(key.clone(), value.clone());
-                    }
-                }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_cargo) = &override_config.cargo
+            && let Some(extra_env) = &override_cargo.extra_env
+        {
+            for (key, value) in extra_env {
+                command.env.insert(key.clone(), value.clone());
             }
         }
     }

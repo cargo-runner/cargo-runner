@@ -26,11 +26,11 @@ pub(crate) fn is_single_file_script_file(file_path: &std::path::Path) -> bool {
         return false;
     }
 
-    if let Ok(content) = std::fs::read_to_string(file_path) {
-        if let Some(first_line) = content.lines().next() {
-            return is_single_file_script_shebang(first_line)
-                && (content.contains("fn main(") || content.contains("fn main ("));
-        }
+    if let Ok(content) = std::fs::read_to_string(file_path)
+        && let Some(first_line) = content.lines().next()
+    {
+        return is_single_file_script_shebang(first_line)
+            && (content.contains("fn main(") || content.contains("fn main ("));
     }
 
     false
@@ -258,10 +258,10 @@ impl SingleFileScriptBuilder {
         let content = std::fs::read_to_string(file_path)
             .map_err(|e| crate::error::Error::IoError(std::io::Error::other(e)))?;
 
-        if let Some(first_line) = content.lines().next() {
-            if is_single_file_script_shebang(first_line) {
-                return Ok(first_line.to_string());
-            }
+        if let Some(first_line) = content.lines().next()
+            && is_single_file_script_shebang(first_line)
+        {
+            return Ok(first_line.to_string());
         }
 
         // Default shebang if not found
@@ -276,12 +276,11 @@ impl SingleFileScriptBuilder {
         file_type: FileType,
     ) {
         // Apply override args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_sfs) = &override_config.single_file_script {
-                if let Some(extra_args) = &override_sfs.extra_args {
-                    args.extend(extra_args.clone());
-                }
-            }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_sfs) = &override_config.single_file_script
+            && let Some(extra_args) = &override_sfs.extra_args
+        {
+            args.extend(extra_args.clone());
         }
 
         // Apply global args
@@ -298,13 +297,12 @@ impl SingleFileScriptBuilder {
         file_type: FileType,
     ) {
         // Apply override env vars
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_sfs) = &override_config.single_file_script {
-                if let Some(extra_env) = &override_sfs.extra_env {
-                    for (key, value) in extra_env {
-                        command.env.insert(key.clone(), value.clone());
-                    }
-                }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_sfs) = &override_config.single_file_script
+            && let Some(extra_env) = &override_sfs.extra_env
+        {
+            for (key, value) in extra_env {
+                command.env.insert(key.clone(), value.clone());
             }
         }
     }
@@ -342,12 +340,11 @@ impl SingleFileScriptBuilder {
         file_type: FileType,
     ) {
         // Apply override test binary args
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_sfs) = &override_config.single_file_script {
-                if let Some(extra_args) = &override_sfs.extra_test_binary_args {
-                    args.extend(extra_args.clone());
-                }
-            }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_sfs) = &override_config.single_file_script
+            && let Some(extra_args) = &override_sfs.extra_test_binary_args
+        {
+            args.extend(extra_args.clone());
         }
 
         // Apply global test binary args

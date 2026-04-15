@@ -26,10 +26,10 @@ impl TemplateRenderer {
         let mut segments: Vec<String> = Vec::new();
 
         for part in parts {
-            if let Some(s) = Self::render_part(part, resolver)? {
-                if !s.is_empty() {
-                    segments.push(s);
-                }
+            if let Some(s) = Self::render_part(part, resolver)?
+                && !s.is_empty()
+            {
+                segments.push(s);
             }
         }
 

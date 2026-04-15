@@ -52,14 +52,14 @@ impl RunnableDetector {
             .unwrap_or(SystemTime::UNIX_EPOCH);
 
         let cached = PARSE_CACHE.with(|c| {
-            if let Some(entry) = c.borrow_mut().get(file_path) {
-                if entry.mtime == mtime {
-                    return Some((
-                        entry.runnables.clone(),
-                        entry.source.clone(),
-                        entry.scopes.clone(),
-                    ));
-                }
+            if let Some(entry) = c.borrow_mut().get(file_path)
+                && entry.mtime == mtime
+            {
+                return Some((
+                    entry.runnables.clone(),
+                    entry.source.clone(),
+                    entry.scopes.clone(),
+                ));
             }
             None
         });
@@ -231,35 +231,35 @@ impl RunnableDetector {
             // But we also need to detect modules that contain tests even if not named "tests"
             for extended_scope in &extended_scopes {
                 let scope = &extended_scope.scope;
-                if let ScopeKind::Module = scope.kind {
-                    if let Some(module_name) = &scope.name {
-                        // Check if this module contains any test functions
-                        let has_tests = extended_scopes.iter().any(|s| {
-                            matches!(s.scope.kind, ScopeKind::Test)
-                                && s.scope.start.line >= scope.start.line
-                                && s.scope.end.line <= scope.end.line
-                        });
+                if let ScopeKind::Module = scope.kind
+                    && let Some(module_name) = &scope.name
+                {
+                    // Check if this module contains any test functions
+                    let has_tests = extended_scopes.iter().any(|s| {
+                        matches!(s.scope.kind, ScopeKind::Test)
+                            && s.scope.start.line >= scope.start.line
+                            && s.scope.end.line <= scope.end.line
+                    });
 
-                        if has_tests {
-                            // Check if we already have a runnable for this module
-                            let already_exists = runnables.iter().any(|r| {
+                    if has_tests {
+                        // Check if we already have a runnable for this module
+                        let already_exists = runnables.iter().any(|r| {
                             matches!(&r.kind, RunnableKind::ModuleTests { module_name: existing_name }
                                 if existing_name == module_name)
                         });
 
-                            if !already_exists {
-                                let runnable = Runnable {
-                                    label: format!("Run all tests in module '{module_name}'"),
-                                    scope: scope.clone(),
-                                    kind: RunnableKind::ModuleTests {
-                                        module_name: module_name.clone(),
-                                    },
-                                    module_path: String::new(), // Will be filled by module resolver
-                                    file_path: file_path.to_path_buf(),
-                                    extended_scope: Some(extended_scope.clone()),
-                                };
-                                runnables.push(runnable);
-                            }
+                        if !already_exists {
+                            let runnable = Runnable {
+                                label: format!("Run all tests in module '{module_name}'"),
+                                scope: scope.clone(),
+                                kind: RunnableKind::ModuleTests {
+                                    module_name: module_name.clone(),
+                                },
+                                module_path: String::new(), // Will be filled by module resolver
+                                file_path: file_path.to_path_buf(),
+                                extended_scope: Some(extended_scope.clone()),
+                            };
+                            runnables.push(runnable);
                         }
                     }
                 }
@@ -323,10 +323,10 @@ impl RunnableDetector {
             .and_then(|m| m.modified())
             .unwrap_or(SystemTime::UNIX_EPOCH);
         let cached = PARSE_CACHE.with(|c| {
-            if let Some(entry) = c.borrow_mut().get(file_path) {
-                if entry.mtime == mtime {
-                    return Some(entry.scopes.clone());
-                }
+            if let Some(entry) = c.borrow_mut().get(file_path)
+                && entry.mtime == mtime
+            {
+                return Some(entry.scopes.clone());
             }
             None
         });

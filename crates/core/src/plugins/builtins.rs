@@ -194,13 +194,11 @@ impl crate::plugins::registry::PrimaryPlugin for BazelPrimaryPlugin {
                 // If we reach the workspace root and it has a BUILD file, we only match
                 // if BazelTargetFinder actually finds a target for this file.
                 // Otherwise, it's likely an ad-hoc or standard rust file at the root.
-                if has_build_file {
-                    if let Ok(mut finder) = crate::bazel::BazelTargetFinder::new() {
-                        if let Ok(targets) = finder.find_targets_for_file(&ctx.file_path, ancestor)
-                        {
-                            return !targets.is_empty();
-                        }
-                    }
+                if has_build_file
+                    && let Ok(mut finder) = crate::bazel::BazelTargetFinder::new()
+                    && let Ok(targets) = finder.find_targets_for_file(&ctx.file_path, ancestor)
+                {
+                    return !targets.is_empty();
                 }
                 return false;
             }

@@ -11,11 +11,11 @@ fn is_single_file_script_file(path: &Path) -> bool {
         return false;
     }
 
-    if let Ok(content) = std::fs::read_to_string(path) {
-        if let Some(first_line) = content.lines().next() {
-            return is_single_file_script_shebang(first_line)
-                && (content.contains("fn main(") || content.contains("fn main ("));
-        }
+    if let Ok(content) = std::fs::read_to_string(path)
+        && let Some(first_line) = content.lines().next()
+    {
+        return is_single_file_script_shebang(first_line)
+            && (content.contains("fn main(") || content.contains("fn main ("));
     }
 
     false
@@ -56,12 +56,11 @@ pub fn determine_file_type(path: &Path) -> String {
     if !has_cargo_toml {
         // Check if it's a cargo script file
         if is_single_file_script_file(path) {
-            if let Ok(content) = std::fs::read_to_string(path) {
-                if let Some(first_line) = content.lines().next() {
-                    if first_line.contains("rust-script") {
-                        return "Rust script file".to_string();
-                    }
-                }
+            if let Ok(content) = std::fs::read_to_string(path)
+                && let Some(first_line) = content.lines().next()
+                && first_line.contains("rust-script")
+            {
+                return "Rust script file".to_string();
             }
             return "Cargo script file".to_string();
         }

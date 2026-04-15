@@ -63,11 +63,11 @@ impl UnifiedRunner {
                 break;
             }
             // Check boundaries BEFORE checking for build system
-            if let Some(ref boundary) = project_boundary {
-                if !check_path.starts_with(boundary) {
-                    tracing::debug!("detect_build_system: reached PROJECT_DIR boundary, stopping");
-                    break;
-                }
+            if let Some(ref boundary) = project_boundary
+                && !check_path.starts_with(boundary)
+            {
+                tracing::debug!("detect_build_system: reached PROJECT_DIR boundary, stopping");
+                break;
             }
 
             if home_boundary

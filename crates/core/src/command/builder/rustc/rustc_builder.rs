@@ -90,13 +90,13 @@ impl RustcCommandBuilder {
 
         // Store exec phase args
         let mut exec_args = Vec::new();
-        if let Some(exec) = &framework.exec {
-            if let Some(args) = &exec.args {
-                exec_args = args
-                    .iter()
-                    .map(|arg| self.expand_template(arg, &runnable.file_path, "", "", test_name))
-                    .collect();
-            }
+        if let Some(exec) = &framework.exec
+            && let Some(args) = &exec.args
+        {
+            exec_args = args
+                .iter()
+                .map(|arg| self.expand_template(arg, &runnable.file_path, "", "", test_name))
+                .collect();
         }
 
         // For individual tests, add --exact flag
@@ -221,13 +221,13 @@ impl RustcCommandBuilder {
 
         // Store exec phase args (like --bench)
         let mut exec_args = Vec::new();
-        if let Some(exec) = &framework.exec {
-            if let Some(args) = &exec.args {
-                exec_args = args
-                    .iter()
-                    .map(|arg| self.expand_template(arg, &runnable.file_path, "", "", bench_name))
-                    .collect();
-            }
+        if let Some(exec) = &framework.exec
+            && let Some(args) = &exec.args
+        {
+            exec_args = args
+                .iter()
+                .map(|arg| self.expand_template(arg, &runnable.file_path, "", "", bench_name))
+                .collect();
         }
 
         // For individual benchmarks, add --exact flag after the benchmark name
@@ -364,15 +364,15 @@ impl RustcCommandBuilder {
         output_name: &str,
         is_test: bool,
     ) -> Vec<String> {
-        if let Some(build) = &framework.build {
-            if let Some(args) = &build.args {
-                let mut result = Vec::new();
-                for arg in args {
-                    let expanded = self.expand_template(arg, source_file, output_name, "", "");
-                    result.push(expanded);
-                }
-                return result;
+        if let Some(build) = &framework.build
+            && let Some(args) = &build.args
+        {
+            let mut result = Vec::new();
+            for arg in args {
+                let expanded = self.expand_template(arg, source_file, output_name, "", "");
+                result.push(expanded);
             }
+            return result;
         }
 
         // Fallback to defaults
@@ -405,16 +405,15 @@ impl RustcCommandBuilder {
         crate_name: &str,
         output_name: &str,
     ) -> Vec<String> {
-        if let Some(build) = &framework.build {
-            if let Some(args) = &build.args {
-                let mut result = Vec::new();
-                for arg in args {
-                    let expanded =
-                        self.expand_template(arg, source_file, output_name, crate_name, "");
-                    result.push(expanded);
-                }
-                return result;
+        if let Some(build) = &framework.build
+            && let Some(args) = &build.args
+        {
+            let mut result = Vec::new();
+            for arg in args {
+                let expanded = self.expand_template(arg, source_file, output_name, crate_name, "");
+                result.push(expanded);
             }
+            return result;
         }
 
         // Fallback to defaults
@@ -441,15 +440,15 @@ impl RustcCommandBuilder {
         source_file: &std::path::Path,
         output_name: &str,
     ) -> Vec<String> {
-        if let Some(build) = &framework.build {
-            if let Some(args) = &build.args {
-                let mut result = Vec::new();
-                for arg in args {
-                    let expanded = self.expand_template(arg, source_file, output_name, "", "");
-                    result.push(expanded);
-                }
-                return result;
+        if let Some(build) = &framework.build
+            && let Some(args) = &build.args
+        {
+            let mut result = Vec::new();
+            for arg in args {
+                let expanded = self.expand_template(arg, source_file, output_name, "", "");
+                result.push(expanded);
             }
+            return result;
         }
 
         // Fallback to defaults
@@ -516,10 +515,10 @@ impl RustcCommandBuilder {
         let mut extra_args = Vec::new();
 
         // Apply framework extra_args
-        if let Some(build) = &framework.build {
-            if let Some(framework_args) = &build.extra_args {
-                extra_args.extend(framework_args.clone());
-            }
+        if let Some(build) = &framework.build
+            && let Some(framework_args) = &build.extra_args
+        {
+            extra_args.extend(framework_args.clone());
         }
 
         // Note: extra_args are now handled through framework-specific configs above
@@ -547,10 +546,10 @@ impl RustcCommandBuilder {
         let mut exec_args = Vec::new();
 
         // Collect exec phase extra_test_binary_args
-        if let Some(exec) = &framework.exec {
-            if let Some(extra_test_binary_args) = &exec.extra_test_binary_args {
-                exec_args.extend(extra_test_binary_args.clone());
-            }
+        if let Some(exec) = &framework.exec
+            && let Some(extra_test_binary_args) = &exec.extra_test_binary_args
+        {
+            exec_args.extend(extra_test_binary_args.clone());
         }
 
         tracing::debug!("apply_exec_config: framework exec_args = {:?}", exec_args);
@@ -575,32 +574,28 @@ impl RustcCommandBuilder {
                 };
 
                 // Apply framework-specific exec args
-                if let Some(framework) = override_framework {
-                    if let Some(exec) = &framework.exec {
-                        if let Some(extra_test_binary_args) = &exec.extra_test_binary_args {
-                            tracing::debug!(
-                                "Adding override exec args: {:?}",
-                                extra_test_binary_args
-                            );
-                            exec_args.extend(extra_test_binary_args.clone());
-                        }
-                    }
+                if let Some(framework) = override_framework
+                    && let Some(exec) = &framework.exec
+                    && let Some(extra_test_binary_args) = &exec.extra_test_binary_args
+                {
+                    tracing::debug!("Adding override exec args: {:?}", extra_test_binary_args);
+                    exec_args.extend(extra_test_binary_args.clone());
                 }
             }
 
             // Also check cargo config for backwards compatibility
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(extra_test_binary_args) = &override_cargo.extra_test_binary_args {
-                    exec_args.extend(extra_test_binary_args.clone());
-                }
+            if let Some(override_cargo) = &override_config.cargo
+                && let Some(extra_test_binary_args) = &override_cargo.extra_test_binary_args
+            {
+                exec_args.extend(extra_test_binary_args.clone());
             }
         }
 
         // Apply global test binary args from cargo config
-        if let Some(cargo_config) = &config.cargo {
-            if let Some(extra_test_binary_args) = &cargo_config.extra_test_binary_args {
-                exec_args.extend(extra_test_binary_args.clone());
-            }
+        if let Some(cargo_config) = &config.cargo
+            && let Some(extra_test_binary_args) = &cargo_config.extra_test_binary_args
+        {
+            exec_args.extend(extra_test_binary_args.clone());
         }
 
         // Store exec args in env for later use by execute()
@@ -647,24 +642,24 @@ impl RustcCommandBuilder {
         };
 
         // Apply env from build phase
-        if let Some(build) = &framework.build {
-            if let Some(env_map) = &build.extra_env {
-                tracing::debug!("apply_env: applying {} build env vars", env_map.len());
-                for (key, value) in env_map {
-                    tracing::debug!("apply_env: build env {}={}", key, value);
-                    command.env.insert(key.clone(), value.clone());
-                }
+        if let Some(build) = &framework.build
+            && let Some(env_map) = &build.extra_env
+        {
+            tracing::debug!("apply_env: applying {} build env vars", env_map.len());
+            for (key, value) in env_map {
+                tracing::debug!("apply_env: build env {}={}", key, value);
+                command.env.insert(key.clone(), value.clone());
             }
         }
 
         // Apply env from exec phase
-        if let Some(exec) = &framework.exec {
-            if let Some(env_map) = &exec.extra_env {
-                tracing::debug!("apply_env: applying {} exec env vars", env_map.len());
-                for (key, value) in env_map {
-                    tracing::debug!("apply_env: exec env {}={}", key, value);
-                    command.env.insert(key.clone(), value.clone());
-                }
+        if let Some(exec) = &framework.exec
+            && let Some(env_map) = &exec.extra_env
+        {
+            tracing::debug!("apply_env: applying {} exec env vars", env_map.len());
+            for (key, value) in env_map {
+                tracing::debug!("apply_env: exec env {}={}", key, value);
+                command.env.insert(key.clone(), value.clone());
             }
         }
 

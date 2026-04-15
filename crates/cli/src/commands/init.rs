@@ -106,10 +106,10 @@ pub fn init_command(
         .follow_links(true)
         .into_iter()
         .filter_entry(|e| {
-            if let Some(name) = e.file_name().to_str() {
-                if name.starts_with("bazel-") {
-                    return false;
-                }
+            if let Some(name) = e.file_name().to_str()
+                && name.starts_with("bazel-")
+            {
+                return false;
             }
             true
         })
@@ -522,10 +522,11 @@ fn read_cargo_package_name(root: &Path) -> Option<String> {
         if trimmed.starts_with('[') {
             in_package = false;
         }
-        if in_package && trimmed.starts_with("name") {
-            if let Some(val) = trimmed.split_once('=').map(|x| x.1) {
-                return Some(val.trim().trim_matches('"').trim_matches('\'').to_string());
-            }
+        if in_package
+            && trimmed.starts_with("name")
+            && let Some(val) = trimmed.split_once('=').map(|x| x.1)
+        {
+            return Some(val.trim().trim_matches('"').trim_matches('\'').to_string());
         }
     }
     None
@@ -731,10 +732,10 @@ fn discover_cargo_tomls(project_root: &Path) -> Vec<PathBuf> {
         .follow_links(true)
         .into_iter()
         .filter_entry(|e| {
-            if let Some(name) = e.file_name().to_str() {
-                if name.starts_with("bazel-") {
-                    return false;
-                }
+            if let Some(name) = e.file_name().to_str()
+                && name.starts_with("bazel-")
+            {
+                return false;
             }
             true
         })

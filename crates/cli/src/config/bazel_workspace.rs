@@ -95,12 +95,11 @@ pub fn find_cargo_workspace_root(start: &Path) -> Option<PathBuf> {
     let mut current = start.to_path_buf();
     loop {
         let cargo = current.join("Cargo.toml");
-        if cargo.exists() {
-            if let Ok(content) = std::fs::read_to_string(&cargo) {
-                if content.contains("[workspace]") {
-                    return Some(current);
-                }
-            }
+        if cargo.exists()
+            && let Ok(content) = std::fs::read_to_string(&cargo)
+            && content.contains("[workspace]")
+        {
+            return Some(current);
         }
         match current.parent() {
             Some(p) => current = p.to_path_buf(),

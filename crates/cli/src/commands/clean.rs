@@ -92,10 +92,10 @@ fn remove_cache_dir(label: &str, raw_path: &str) -> Result<()> {
 }
 
 fn expand_tilde(path: &str) -> std::path::PathBuf {
-    if let Some(rest) = path.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return std::path::PathBuf::from(home).join(rest);
-        }
+    if let Some(rest) = path.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return std::path::PathBuf::from(home).join(rest);
     }
     std::path::PathBuf::from(path)
 }

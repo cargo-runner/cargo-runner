@@ -232,70 +232,72 @@ fn collect_cargo_context(root: &Path, package_name: Option<String>) -> CargoProj
 
     let src = root.join("src");
     let bin_dir = src.join("bin");
-    if bin_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&bin_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        bins.push(stem.to_string());
-                    }
-                } else if path.is_dir() && path.join("main.rs").exists() {
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        bins.push(name.to_string());
-                    }
+    if bin_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&bin_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    bins.push(stem.to_string());
                 }
+            } else if path.is_dir()
+                && path.join("main.rs").exists()
+                && let Some(name) = path.file_name().and_then(|n| n.to_str())
+            {
+                bins.push(name.to_string());
             }
         }
     }
-    if src.join("main.rs").exists() {
-        if let Some(name) = package_name.clone() {
-            bins.push(name);
-        }
+    if src.join("main.rs").exists()
+        && let Some(name) = package_name.clone()
+    {
+        bins.push(name);
     }
 
     let examples_dir = root.join("examples");
-    if examples_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&examples_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        examples.push(stem.to_string());
-                    }
-                } else if path.is_dir() && path.join("main.rs").exists() {
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        examples.push(name.to_string());
-                    }
+    if examples_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&examples_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    examples.push(stem.to_string());
                 }
+            } else if path.is_dir()
+                && path.join("main.rs").exists()
+                && let Some(name) = path.file_name().and_then(|n| n.to_str())
+            {
+                examples.push(name.to_string());
             }
         }
     }
 
     let tests_dir = root.join("tests");
-    if tests_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&tests_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        tests.push(stem.to_string());
-                    }
-                }
+    if tests_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&tests_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("rs")
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            {
+                tests.push(stem.to_string());
             }
         }
     }
 
     let benches_dir = root.join("benches");
-    if benches_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&benches_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        benches.push(stem.to_string());
-                    }
-                }
+    if benches_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&benches_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("rs")
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            {
+                benches.push(stem.to_string());
             }
         }
     }
@@ -390,10 +392,10 @@ fn detect_file_kind(
         return "single_file_script".to_string();
     }
 
-    if let Some(command) = command {
-        if matches!(command.strategy, cargo_runner_core::CommandStrategy::Rustc) {
-            return "standalone".to_string();
-        }
+    if let Some(command) = command
+        && matches!(command.strategy, cargo_runner_core::CommandStrategy::Rustc)
+    {
+        return "standalone".to_string();
     }
 
     let Some(file_path) = file_path else {
@@ -565,17 +567,17 @@ fn detect_recommended_target(
 
     if let Some(command) = command {
         for flag in ["--bin", "--example", "--test", "--bench"] {
-            if let Some(pos) = command.args.iter().position(|arg| arg == flag) {
-                if let Some(value) = command.args.get(pos + 1) {
-                    return Some(value.clone());
-                }
+            if let Some(pos) = command.args.iter().position(|arg| arg == flag)
+                && let Some(value) = command.args.get(pos + 1)
+            {
+                return Some(value.clone());
             }
         }
 
-        if let Some(pos) = command.args.iter().position(|arg| arg == "-p") {
-            if let Some(value) = command.args.get(pos + 1) {
-                return Some(value.clone());
-            }
+        if let Some(pos) = command.args.iter().position(|arg| arg == "-p")
+            && let Some(value) = command.args.get(pos + 1)
+        {
+            return Some(value.clone());
         }
     }
 

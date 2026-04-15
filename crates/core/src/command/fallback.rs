@@ -152,48 +152,47 @@ fn create_synthetic_runnable(
 ) -> Result<Option<Runnable>> {
     debug!("create_synthetic_runnable: file_path={:?}", file_path);
     // First check if this is a cargo script file
-    if file_path.extension().and_then(|s| s.to_str()) == Some("rs") {
-        if let Ok(content) = std::fs::read_to_string(file_path) {
-            if let Some(first_line) = content.lines().next() {
-                debug!("First line of file: {:?}", first_line);
-                if is_single_file_script_file(file_path) {
-                    debug!("Detected single-file script!");
-                    // It's a single-file script
-                    let scope = Scope {
-                        kind: ScopeKind::Function,
-                        name: Some("main".to_string()),
-                        start: Position {
-                            line: 0,
-                            character: 0,
-                        },
-                        end: Position {
-                            line: 0,
-                            character: 0,
-                        },
-                    };
+    if file_path.extension().and_then(|s| s.to_str()) == Some("rs")
+        && let Ok(content) = std::fs::read_to_string(file_path)
+        && let Some(first_line) = content.lines().next()
+    {
+        debug!("First line of file: {:?}", first_line);
+        if is_single_file_script_file(file_path) {
+            debug!("Detected single-file script!");
+            // It's a single-file script
+            let scope = Scope {
+                kind: ScopeKind::Function,
+                name: Some("main".to_string()),
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: 0,
+                    character: 0,
+                },
+            };
 
-                    // Check if it contains benchmarks
-                    let has_benchmarks = content.contains("#[bench]")
-                        || content.contains("criterion_group!")
-                        || content.contains("criterion_main!");
+            // Check if it contains benchmarks
+            let has_benchmarks = content.contains("#[bench]")
+                || content.contains("criterion_group!")
+                || content.contains("criterion_main!");
 
-                    // If it has benchmarks, we'll handle it specially when building the command
-                    return Ok(Some(Runnable {
-                        label: if has_benchmarks {
-                            "Run single-file script benchmarks".to_string()
-                        } else {
-                            "Run single-file script".to_string()
-                        },
-                        scope,
-                        kind: RunnableKind::SingleFileScript {
-                            shebang: first_line.to_string(),
-                        },
-                        module_path: String::new(),
-                        file_path: file_path.to_path_buf(),
-                        extended_scope: None,
-                    }));
-                }
-            }
+            // If it has benchmarks, we'll handle it specially when building the command
+            return Ok(Some(Runnable {
+                label: if has_benchmarks {
+                    "Run single-file script benchmarks".to_string()
+                } else {
+                    "Run single-file script".to_string()
+                },
+                scope,
+                kind: RunnableKind::SingleFileScript {
+                    shebang: first_line.to_string(),
+                },
+                module_path: String::new(),
+                file_path: file_path.to_path_buf(),
+                extended_scope: None,
+            }));
         }
     }
 
@@ -321,20 +320,20 @@ fn check_cargo_toml_for_runnable(
     // Check [[bin]] entries
     if !manifest.bin.is_empty() {
         for bin in &manifest.bin {
-            if let Some(path) = &bin.path {
-                if path == relative_str {
-                    let bin_name = bin.name.clone().unwrap_or_else(|| file_name.to_string());
-                    return Ok(Some(Runnable {
-                        label: format!("Run binary '{bin_name}'"),
-                        scope,
-                        kind: RunnableKind::Binary {
-                            bin_name: Some(bin_name),
-                        },
-                        module_path: package_name.unwrap_or_default().to_string(),
-                        file_path: file_path.to_path_buf(),
-                        extended_scope: None,
-                    }));
-                }
+            if let Some(path) = &bin.path
+                && path == relative_str
+            {
+                let bin_name = bin.name.clone().unwrap_or_else(|| file_name.to_string());
+                return Ok(Some(Runnable {
+                    label: format!("Run binary '{bin_name}'"),
+                    scope,
+                    kind: RunnableKind::Binary {
+                        bin_name: Some(bin_name),
+                    },
+                    module_path: package_name.unwrap_or_default().to_string(),
+                    file_path: file_path.to_path_buf(),
+                    extended_scope: None,
+                }));
             }
         }
     }
@@ -342,23 +341,23 @@ fn check_cargo_toml_for_runnable(
     // Check [[example]] entries
     if !manifest.example.is_empty() {
         for example in &manifest.example {
-            if let Some(path) = &example.path {
-                if path == relative_str {
-                    let example_name = example
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| file_name.to_string());
-                    return Ok(Some(Runnable {
-                        label: format!("Run example '{example_name}'"),
-                        scope,
-                        kind: RunnableKind::Binary {
-                            bin_name: Some(example_name),
-                        },
-                        module_path: package_name.unwrap_or_default().to_string(),
-                        file_path: file_path.to_path_buf(),
-                        extended_scope: None,
-                    }));
-                }
+            if let Some(path) = &example.path
+                && path == relative_str
+            {
+                let example_name = example
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| file_name.to_string());
+                return Ok(Some(Runnable {
+                    label: format!("Run example '{example_name}'"),
+                    scope,
+                    kind: RunnableKind::Binary {
+                        bin_name: Some(example_name),
+                    },
+                    module_path: package_name.unwrap_or_default().to_string(),
+                    file_path: file_path.to_path_buf(),
+                    extended_scope: None,
+                }));
             }
         }
     }
@@ -366,21 +365,21 @@ fn check_cargo_toml_for_runnable(
     // Check [[test]] entries
     if !manifest.test.is_empty() {
         for test in &manifest.test {
-            if let Some(path) = &test.path {
-                if path == relative_str {
-                    let test_name = test.name.clone().unwrap_or_else(|| file_name.to_string());
-                    return Ok(Some(Runnable {
-                        label: format!("Run test '{test_name}'"),
-                        scope,
-                        kind: RunnableKind::Test {
-                            test_name,
-                            is_async: false,
-                        },
-                        module_path: package_name.unwrap_or_default().to_string(),
-                        file_path: file_path.to_path_buf(),
-                        extended_scope: None,
-                    }));
-                }
+            if let Some(path) = &test.path
+                && path == relative_str
+            {
+                let test_name = test.name.clone().unwrap_or_else(|| file_name.to_string());
+                return Ok(Some(Runnable {
+                    label: format!("Run test '{test_name}'"),
+                    scope,
+                    kind: RunnableKind::Test {
+                        test_name,
+                        is_async: false,
+                    },
+                    module_path: package_name.unwrap_or_default().to_string(),
+                    file_path: file_path.to_path_buf(),
+                    extended_scope: None,
+                }));
             }
         }
     }
@@ -388,38 +387,37 @@ fn check_cargo_toml_for_runnable(
     // Check [[bench]] entries
     if !manifest.bench.is_empty() {
         for bench in &manifest.bench {
-            if let Some(path) = &bench.path {
-                if path == relative_str {
-                    let bench_name = bench.name.clone().unwrap_or_else(|| file_name.to_string());
-                    return Ok(Some(Runnable {
-                        label: format!("Run benchmark '{bench_name}'"),
-                        scope,
-                        kind: RunnableKind::Benchmark { bench_name },
-                        module_path: package_name.unwrap_or_default().to_string(),
-                        file_path: file_path.to_path_buf(),
-                        extended_scope: None,
-                    }));
-                }
-            }
-        }
-    }
-
-    // Check [lib] entry
-    if let Some(lib) = &manifest.lib {
-        if let Some(path) = &lib.path {
-            if path == relative_str {
+            if let Some(path) = &bench.path
+                && path == relative_str
+            {
+                let bench_name = bench.name.clone().unwrap_or_else(|| file_name.to_string());
                 return Ok(Some(Runnable {
-                    label: "Run library tests".to_string(),
+                    label: format!("Run benchmark '{bench_name}'"),
                     scope,
-                    kind: RunnableKind::ModuleTests {
-                        module_name: String::new(),
-                    },
-                    module_path: String::new(),
+                    kind: RunnableKind::Benchmark { bench_name },
+                    module_path: package_name.unwrap_or_default().to_string(),
                     file_path: file_path.to_path_buf(),
                     extended_scope: None,
                 }));
             }
         }
+    }
+
+    // Check [lib] entry
+    if let Some(lib) = &manifest.lib
+        && let Some(path) = &lib.path
+        && path == relative_str
+    {
+        return Ok(Some(Runnable {
+            label: "Run library tests".to_string(),
+            scope,
+            kind: RunnableKind::ModuleTests {
+                module_name: String::new(),
+            },
+            module_path: String::new(),
+            file_path: file_path.to_path_buf(),
+            extended_scope: None,
+        }));
     }
 
     Ok(None)
@@ -463,10 +461,10 @@ fn is_standalone_rust_file(file_path: &Path) -> bool {
                 if let Ok(manifest) = Manifest::from_path(&cargo_toml_path) {
                     // Check if this file is explicitly listed as a binary
                     for bin in &manifest.bin {
-                        if let Some(bin_path) = &bin.path {
-                            if bin_path == path_str {
-                                return false; // Listed in Cargo.toml, not standalone
-                            }
+                        if let Some(bin_path) = &bin.path
+                            && bin_path == path_str
+                        {
+                            return false; // Listed in Cargo.toml, not standalone
                         }
                     }
                 }
@@ -486,45 +484,44 @@ fn generate_rustc_command(file_path: &Path) -> Result<Option<Command>> {
     let content = std::fs::read_to_string(file_path).map_err(crate::Error::IoError)?;
 
     // Check if it's a cargo script file (has shebang)
-    if let Some(first_line) = content.lines().next() {
-        if is_single_file_script_file(file_path) {
-            // It's a single-file script
-            let scope = Scope {
-                kind: ScopeKind::Function,
-                name: Some("main".to_string()),
-                start: Position {
-                    line: 0,
-                    character: 0,
-                },
-                end: Position {
-                    line: 0,
-                    character: 0,
-                },
-            };
+    if let Some(first_line) = content.lines().next()
+        && is_single_file_script_file(file_path)
+    {
+        // It's a single-file script
+        let scope = Scope {
+            kind: ScopeKind::Function,
+            name: Some("main".to_string()),
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 0,
+                character: 0,
+            },
+        };
 
-            let runnable = Runnable {
-                label: "Run single-file script".to_string(),
-                scope,
-                kind: RunnableKind::SingleFileScript {
-                    shebang: first_line.to_string(),
-                },
-                module_path: String::new(),
-                file_path: file_path.to_path_buf(),
-                extended_scope: None,
-            };
+        let runnable = Runnable {
+            label: "Run single-file script".to_string(),
+            scope,
+            kind: RunnableKind::SingleFileScript {
+                shebang: first_line.to_string(),
+            },
+            module_path: String::new(),
+            file_path: file_path.to_path_buf(),
+            extended_scope: None,
+        };
 
-            // Use the CommandBuilder to build the command
-            let file_type = if is_single_file_script_file(&runnable.file_path) {
-                crate::types::FileType::SingleFileScript
-            } else {
-                crate::types::FileType::CargoProject
-            };
-            let command =
-                crate::command::builder::CommandBuilder::for_runnable(&runnable, file_type)
-                    .build()?;
+        // Use the CommandBuilder to build the command
+        let file_type = if is_single_file_script_file(&runnable.file_path) {
+            crate::types::FileType::SingleFileScript
+        } else {
+            crate::types::FileType::CargoProject
+        };
+        let command =
+            crate::command::builder::CommandBuilder::for_runnable(&runnable, file_type).build()?;
 
-            return Ok(Some(command));
-        }
+        return Ok(Some(command));
     }
 
     // Not a cargo script, check if it has tests

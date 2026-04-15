@@ -74,10 +74,10 @@ impl TargetRef {
 
     pub fn line_contains(&self, line: u32) -> bool {
         if let Some(runnable) = &self.runnable {
-            if matches!(runnable.kind, RunnableKind::DocTest { .. }) {
-                if let Some(ref extended) = runnable.extended_scope {
-                    return extended.scope.contains_line(line);
-                }
+            if matches!(runnable.kind, RunnableKind::DocTest { .. })
+                && let Some(ref extended) = runnable.extended_scope
+            {
+                return extended.scope.contains_line(line);
             }
             return runnable.scope.contains_line(line);
         }

@@ -63,10 +63,10 @@ impl RuleExtractor {
         let node = cursor.node();
 
         // Check if this is a function call
-        if node.kind() == "call" {
-            if let Some(rule) = Self::extract_rule_call(&node, ast)? {
-                rules.push(rule);
-            }
+        if node.kind() == "call"
+            && let Some(rule) = Self::extract_rule_call(&node, ast)?
+        {
+            rules.push(rule);
         }
 
         // Visit children
@@ -151,14 +151,13 @@ impl RuleExtractor {
             loop {
                 let child = cursor.node();
 
-                if child.kind() == "keyword_argument" {
-                    if let Some(name_node) = child.child_by_field_name("name") {
-                        if let Some(value_node) = child.child_by_field_name("value") {
-                            let name = ast.node_text(&name_node);
-                            if let Some(value) = Self::extract_value(&value_node, ast)? {
-                                attributes.insert(name.to_string(), value);
-                            }
-                        }
+                if child.kind() == "keyword_argument"
+                    && let Some(name_node) = child.child_by_field_name("name")
+                    && let Some(value_node) = child.child_by_field_name("value")
+                {
+                    let name = ast.node_text(&name_node);
+                    if let Some(value) = Self::extract_value(&value_node, ast)? {
+                        attributes.insert(name.to_string(), value);
                     }
                 }
 

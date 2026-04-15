@@ -9,21 +9,21 @@ pub struct TestFnPattern;
 
 impl Pattern for TestFnPattern {
     fn detect(&self, scope: &Scope, _source: &str, file_path: &Path) -> Result<Option<Runnable>> {
-        if let ScopeKind::Test = scope.kind {
-            if let Some(name) = &scope.name {
-                let runnable = Runnable {
-                    label: format!("Run test '{name}'"),
-                    scope: scope.clone(),
-                    kind: RunnableKind::Test {
-                        test_name: name.clone(),
-                        is_async: false, // TODO: detect async tests
-                    },
-                    module_path: String::new(), // Will be filled by module resolver
-                    file_path: file_path.to_path_buf(),
-                    extended_scope: None, // Will be filled by detector
-                };
-                return Ok(Some(runnable));
-            }
+        if let ScopeKind::Test = scope.kind
+            && let Some(name) = &scope.name
+        {
+            let runnable = Runnable {
+                label: format!("Run test '{name}'"),
+                scope: scope.clone(),
+                kind: RunnableKind::Test {
+                    test_name: name.clone(),
+                    is_async: false, // TODO: detect async tests
+                },
+                module_path: String::new(), // Will be filled by module resolver
+                file_path: file_path.to_path_buf(),
+                extended_scope: None, // Will be filled by detector
+            };
+            return Ok(Some(runnable));
         }
         Ok(None)
     }

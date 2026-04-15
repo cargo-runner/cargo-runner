@@ -120,22 +120,23 @@ impl BazelCommandBuilder {
         }
 
         // Add test args (for test subcommand)
-        if subcommand == "test" && test_filter.is_some() {
-            if let Some(test_args) = &framework.test_args {
-                for arg in test_args {
-                    let expanded = self.expand_template(
-                        arg,
-                        &runnable.file_path,
-                        target.unwrap_or(":test"),
-                        test_filter,
-                        binary_name,
-                        &runnable.module_path,
-                    );
-                    if !expanded.is_empty() {
-                        // Add --test_arg before each test argument
-                        args.push("--test_arg".to_string());
-                        args.push(expanded);
-                    }
+        if subcommand == "test"
+            && test_filter.is_some()
+            && let Some(test_args) = &framework.test_args
+        {
+            for arg in test_args {
+                let expanded = self.expand_template(
+                    arg,
+                    &runnable.file_path,
+                    target.unwrap_or(":test"),
+                    test_filter,
+                    binary_name,
+                    &runnable.module_path,
+                );
+                if !expanded.is_empty() {
+                    // Add --test_arg before each test argument
+                    args.push("--test_arg".to_string());
+                    args.push(expanded);
                 }
             }
         }
@@ -151,22 +152,21 @@ impl BazelCommandBuilder {
         }
 
         // Add exec args (for run subcommand)
-        if subcommand == "run" {
-            if let Some(exec_args) = &framework.exec_args {
-                if !exec_args.is_empty() {
-                    args.push("--".to_string());
-                    for arg in exec_args {
-                        let expanded = self.expand_template(
-                            arg,
-                            &runnable.file_path,
-                            target.unwrap_or("//:server"),
-                            test_filter,
-                            binary_name,
-                            &runnable.module_path,
-                        );
-                        args.push(expanded);
-                    }
-                }
+        if subcommand == "run"
+            && let Some(exec_args) = &framework.exec_args
+            && !exec_args.is_empty()
+        {
+            args.push("--".to_string());
+            for arg in exec_args {
+                let expanded = self.expand_template(
+                    arg,
+                    &runnable.file_path,
+                    target.unwrap_or("//:server"),
+                    test_filter,
+                    binary_name,
+                    &runnable.module_path,
+                );
+                args.push(expanded);
             }
         }
 
@@ -383,16 +383,14 @@ impl BazelCommandBuilder {
         }
 
         // Check if using linked projects
-        if let Some(cargo_config) = &config.cargo {
-            if let Some(linked_projects) = &cargo_config.linked_projects {
-                // Try to find which linked project contains this file
-                if let Some(target) = self.find_bazel_target_via_linked_projects(
-                    &abs_file_path,
-                    linked_projects,
-                    is_test,
-                ) {
-                    return target;
-                }
+        if let Some(cargo_config) = &config.cargo
+            && let Some(linked_projects) = &cargo_config.linked_projects
+        {
+            // Try to find which linked project contains this file
+            if let Some(target) =
+                self.find_bazel_target_via_linked_projects(&abs_file_path, linked_projects, is_test)
+            {
+                return target;
             }
         }
 
@@ -720,17 +718,17 @@ impl BazelCommandBuilder {
                 // Future: convert to CommandStrategy::Shell when command != "bazel".
 
                 // Override subcommand (first arg is always the subcommand)
-                if let Some(subcmd) = &ov.subcommand {
-                    if !command.args.is_empty() {
-                        command.args[0] = subcmd.clone();
-                    }
+                if let Some(subcmd) = &ov.subcommand
+                    && !command.args.is_empty()
+                {
+                    command.args[0] = subcmd.clone();
                 }
 
                 // Override target (second arg = target label)
-                if let Some(target) = &ov.target {
-                    if command.args.len() >= 2 {
-                        command.args[1] = target.clone();
-                    }
+                if let Some(target) = &ov.target
+                    && command.args.len() >= 2
+                {
+                    command.args[1] = target.clone();
                 }
 
                 // Replace the base arg block (everything after subcommand+target)
@@ -754,11 +752,11 @@ impl BazelCommandBuilder {
                 }
 
                 // Append exec_args after `--` separator (for `bazel run`)
-                if let Some(exec_args) = &ov.exec_args {
-                    if !exec_args.is_empty() {
-                        command.args.push("--".to_string());
-                        command.args.extend(exec_args.clone());
-                    }
+                if let Some(exec_args) = &ov.exec_args
+                    && !exec_args.is_empty()
+                {
+                    command.args.push("--".to_string());
+                    command.args.extend(exec_args.clone());
                 }
 
                 // Merge environment variables
@@ -789,26 +787,25 @@ impl BazelCommandBuilder {
                 .as_ref()
                 .and_then(|b| b.extra_env.as_ref())
                 .is_some();
-            if !bazel_has_env {
-                if let Some(cargo_config) = &override_.cargo {
-                    if let Some(env) = &cargo_config.extra_env {
-                        let insert_pos = command
-                            .args
-                            .iter()
-                            .position(|r| r == "--")
-                            .unwrap_or(command.args.len());
-                        let mut flags_to_insert = Vec::new();
-                        let subcommand = command.args.first().map(|s| s.as_str()).unwrap_or("");
-                        for (key, value) in env {
-                            command.env.insert(key.clone(), value.clone());
-                            flags_to_insert.push(format!("--action_env={key}={value}"));
-                            if subcommand == "test" || subcommand == "run" {
-                                flags_to_insert.push(format!("--test_env={key}={value}"));
-                            }
-                        }
-                        command.args.splice(insert_pos..insert_pos, flags_to_insert);
+            if !bazel_has_env
+                && let Some(cargo_config) = &override_.cargo
+                && let Some(env) = &cargo_config.extra_env
+            {
+                let insert_pos = command
+                    .args
+                    .iter()
+                    .position(|r| r == "--")
+                    .unwrap_or(command.args.len());
+                let mut flags_to_insert = Vec::new();
+                let subcommand = command.args.first().map(|s| s.as_str()).unwrap_or("");
+                for (key, value) in env {
+                    command.env.insert(key.clone(), value.clone());
+                    flags_to_insert.push(format!("--action_env={key}={value}"));
+                    if subcommand == "test" || subcommand == "run" {
+                        flags_to_insert.push(format!("--test_env={key}={value}"));
                     }
                 }
+                command.args.splice(insert_pos..insert_pos, flags_to_insert);
             }
         }
     }

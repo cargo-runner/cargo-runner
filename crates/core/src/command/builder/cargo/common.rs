@@ -31,30 +31,25 @@ pub trait CargoBuilderHelper {
 
             // Load the config to get linkedProjects
             let config_path = project_root.join(".cargo-runner.json");
-            if let Ok(config_str) = std::fs::read_to_string(&config_path) {
-                if let Ok(config_json) = serde_json::from_str::<serde_json::Value>(&config_str) {
-                    if let Some(linked_projects) = config_json
-                        .get("cargo")
-                        .and_then(|c| c.get("linkedProjects"))
-                        .and_then(|lp| lp.as_array())
-                    {
-                        // Find which linked project contains our file
-                        for project in linked_projects {
-                            if let Some(cargo_toml_path) = project.as_str() {
-                                // linked_projects contains paths to Cargo.toml files relative to PROJECT_ROOT
-                                let cargo_toml_path = project_root.join(cargo_toml_path);
+            if let Ok(config_str) = std::fs::read_to_string(&config_path)
+                && let Ok(config_json) = serde_json::from_str::<serde_json::Value>(&config_str)
+                && let Some(linked_projects) = config_json
+                    .get("cargo")
+                    .and_then(|c| c.get("linkedProjects"))
+                    .and_then(|lp| lp.as_array())
+            {
+                // Find which linked project contains our file
+                for project in linked_projects {
+                    if let Some(cargo_toml_path) = project.as_str() {
+                        // linked_projects contains paths to Cargo.toml files relative to PROJECT_ROOT
+                        let cargo_toml_path = project_root.join(cargo_toml_path);
 
-                                // Get the project directory (parent of Cargo.toml)
-                                if let Some(project_dir) = cargo_toml_path.parent() {
-                                    if abs_path.starts_with(project_dir) {
-                                        tracing::debug!(
-                                            "File belongs to linked project: {:?}",
-                                            project_dir
-                                        );
-                                        return Some(project_dir.to_path_buf());
-                                    }
-                                }
-                            }
+                        // Get the project directory (parent of Cargo.toml)
+                        if let Some(project_dir) = cargo_toml_path.parent()
+                            && abs_path.starts_with(project_dir)
+                        {
+                            tracing::debug!("File belongs to linked project: {:?}", project_dir);
+                            return Some(project_dir.to_path_buf());
                         }
                     }
                 }
@@ -103,17 +98,16 @@ pub trait CargoBuilderHelper {
     /// Check if a directory has .cargo-runner.json with linkedProjects
     fn has_linked_projects(&self, dir: &std::path::Path) -> bool {
         let config_path = dir.join(".cargo-runner.json");
-        if config_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&config_path) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    return json
-                        .get("cargo")
-                        .and_then(|c| c.get("linkedProjects"))
-                        .and_then(|lp| lp.as_array())
-                        .map(|arr| !arr.is_empty())
-                        .unwrap_or(false);
-                }
-            }
+        if config_path.exists()
+            && let Ok(content) = std::fs::read_to_string(&config_path)
+            && let Ok(json) = serde_json::from_str::<serde_json::Value>(&content)
+        {
+            return json
+                .get("cargo")
+                .and_then(|c| c.get("linkedProjects"))
+                .and_then(|lp| lp.as_array())
+                .map(|arr| !arr.is_empty())
+                .unwrap_or(false);
         }
         false
     }
@@ -168,13 +162,12 @@ pub trait CargoBuilderHelper {
         }
 
         // Apply override features
-        if let Some(override_config) = self.get_override(runnable, config, file_type) {
-            if let Some(override_cargo) = &override_config.cargo {
-                if let Some(features) = &override_cargo.features {
-                    args.extend(features.to_args());
-                    // Features are merged by default now
-                }
-            }
+        if let Some(override_config) = self.get_override(runnable, config, file_type)
+            && let Some(override_cargo) = &override_config.cargo
+            && let Some(features) = &override_cargo.features
+        {
+            args.extend(features.to_args());
+            // Features are merged by default now
         }
 
         // Apply provided features

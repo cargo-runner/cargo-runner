@@ -254,11 +254,11 @@ impl BazelTargetFinder {
             let all_targets = self.find_targets_in_build_file(&build_file)?;
 
             Ok(all_targets.into_iter().find(|t| {
-                if matches!(t.kind, BazelTargetKind::DocTest) {
-                    if let Some(crate_ref) = &t.attributes.crate_ref {
-                        let crate_name = crate_ref.strip_prefix(':').unwrap_or(crate_ref);
-                        return crate_name == lib.name;
-                    }
+                if matches!(t.kind, BazelTargetKind::DocTest)
+                    && let Some(crate_ref) = &t.attributes.crate_ref
+                {
+                    let crate_name = crate_ref.strip_prefix(':').unwrap_or(crate_ref);
+                    return crate_name == lib.name;
                 }
                 false
             }))
@@ -320,15 +320,14 @@ impl BazelTargetFinder {
             current = dir.parent();
         }
 
-        if let Some(root) = workspace_root {
-            if let Some(package_dir) = build_file.parent() {
-                if let Ok(rel_path) = package_dir.strip_prefix(root) {
-                    if rel_path.as_os_str().is_empty() {
-                        return "//".to_string();
-                    } else {
-                        return format!("//{}", rel_path.display());
-                    }
-                }
+        if let Some(root) = workspace_root
+            && let Some(package_dir) = build_file.parent()
+            && let Ok(rel_path) = package_dir.strip_prefix(root)
+        {
+            if rel_path.as_os_str().is_empty() {
+                return "//".to_string();
+            } else {
+                return format!("//{}", rel_path.display());
             }
         }
 

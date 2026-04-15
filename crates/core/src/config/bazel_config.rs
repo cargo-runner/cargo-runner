@@ -167,25 +167,25 @@ impl BazelConfig {
         if other.binary_target.is_some() {
             self.binary_target = other.binary_target;
         }
-        if let Some(ref args) = other.extra_test_args {
-            if !args.is_empty() {
-                self.extra_test_args = other.extra_test_args;
-            }
+        if let Some(ref args) = other.extra_test_args
+            && !args.is_empty()
+        {
+            self.extra_test_args = other.extra_test_args;
         }
-        if let Some(ref args) = other.extra_run_args {
-            if !args.is_empty() {
-                self.extra_run_args = other.extra_run_args;
-            }
+        if let Some(ref args) = other.extra_run_args
+            && !args.is_empty()
+        {
+            self.extra_run_args = other.extra_run_args;
         }
-        if let Some(ref args) = other.extra_test_binary_args {
-            if !args.is_empty() {
-                self.extra_test_binary_args = other.extra_test_binary_args;
-            }
+        if let Some(ref args) = other.extra_test_binary_args
+            && !args.is_empty()
+        {
+            self.extra_test_binary_args = other.extra_test_binary_args;
         }
-        if let Some(ref env) = other.extra_env {
-            if !env.is_empty() {
-                self.extra_env = other.extra_env;
-            }
+        if let Some(ref env) = other.extra_env
+            && !env.is_empty()
+        {
+            self.extra_env = other.extra_env;
         }
     }
 
@@ -254,25 +254,25 @@ impl BazelConfig {
             || self.extra_env.is_some()
         {
             let mut fw = self.test_framework.take().unwrap_or_default();
-            if let Some(target) = self.test_target.take() {
-                if fw.target.is_none() {
-                    fw.target = Some(target);
-                }
+            if let Some(target) = self.test_target.take()
+                && fw.target.is_none()
+            {
+                fw.target = Some(target);
             }
-            if let Some(args) = self.extra_test_args.take() {
-                if fw.extra_args.is_none() {
-                    fw.extra_args = Some(args);
-                }
+            if let Some(args) = self.extra_test_args.take()
+                && fw.extra_args.is_none()
+            {
+                fw.extra_args = Some(args);
             }
-            if let Some(tb_args) = self.extra_test_binary_args.take() {
-                if fw.test_args.is_none() {
-                    fw.test_args = Some(tb_args);
-                }
+            if let Some(tb_args) = self.extra_test_binary_args.take()
+                && fw.test_args.is_none()
+            {
+                fw.test_args = Some(tb_args);
             }
-            if let Some(env) = self.extra_env.clone() {
-                if fw.extra_env.is_none() {
-                    fw.extra_env = Some(env);
-                }
+            if let Some(env) = self.extra_env.clone()
+                && fw.extra_env.is_none()
+            {
+                fw.extra_env = Some(env);
             }
             self.test_framework = Some(fw);
         }
@@ -280,20 +280,20 @@ impl BazelConfig {
         if self.binary_target.is_some() || self.extra_run_args.is_some() || self.extra_env.is_some()
         {
             let mut fw = self.binary_framework.take().unwrap_or_default();
-            if let Some(target) = self.binary_target.take() {
-                if fw.target.is_none() {
-                    fw.target = Some(target);
-                }
+            if let Some(target) = self.binary_target.take()
+                && fw.target.is_none()
+            {
+                fw.target = Some(target);
             }
-            if let Some(args) = self.extra_run_args.take() {
-                if fw.extra_args.is_none() {
-                    fw.extra_args = Some(args);
-                }
+            if let Some(args) = self.extra_run_args.take()
+                && fw.extra_args.is_none()
+            {
+                fw.extra_args = Some(args);
             }
-            if let Some(env) = self.extra_env.take() {
-                if fw.extra_env.is_none() {
-                    fw.extra_env = Some(env);
-                }
+            if let Some(env) = self.extra_env.take()
+                && fw.extra_env.is_none()
+            {
+                fw.extra_env = Some(env);
             }
             self.binary_framework = Some(fw);
         }

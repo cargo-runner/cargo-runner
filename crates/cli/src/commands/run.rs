@@ -117,15 +117,15 @@ fn resolve_run_target(
         return Ok(RunTarget::File(absolute_path));
     }
 
-    if filepath.contains("::") {
-        if let Ok(module_path) = resolve_module_path_to_file(runner, filepath, cwd) {
-            debug!(
-                "Resolved module path '{}' to file '{}'",
-                filepath,
-                module_path.display()
-            );
-            return Ok(RunTarget::File(module_path));
-        }
+    if filepath.contains("::")
+        && let Ok(module_path) = resolve_module_path_to_file(runner, filepath, cwd)
+    {
+        debug!(
+            "Resolved module path '{}' to file '{}'",
+            filepath,
+            module_path.display()
+        );
+        return Ok(RunTarget::File(module_path));
     }
 
     let matches = find_selector_matches(runner, cwd, filepath)?;

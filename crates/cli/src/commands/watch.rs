@@ -114,19 +114,18 @@ fn run_cargo_watch(root: &Path, mode: &str) -> Result<()> {
 }
 
 fn resolve_bazel_target(bazel_root: &Path, cwd: &Path) -> String {
-    if let Ok(all) = find_bazel_crates(bazel_root) {
-        if let Some(krate) = all
+    if let Ok(all) = find_bazel_crates(bazel_root)
+        && let Some(krate) = all
             .into_iter()
             .find(|c| cwd.starts_with(&c.dir) || c.dir == cwd)
-        {
-            let rel = krate.dir.strip_prefix(bazel_root).unwrap_or(Path::new(""));
-            let s = rel.to_string_lossy();
-            return if s.is_empty() {
-                "//...".to_string()
-            } else {
-                format!("//{s}:...")
-            };
-        }
+    {
+        let rel = krate.dir.strip_prefix(bazel_root).unwrap_or(Path::new(""));
+        let s = rel.to_string_lossy();
+        return if s.is_empty() {
+            "//...".to_string()
+        } else {
+            format!("//{s}:...")
+        };
     }
     "//...".to_string()
 }
