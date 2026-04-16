@@ -54,3 +54,18 @@ jobs:
         bazel test $EXTRA_FLAGS //...
       shell: bash
 
+  # ── Windows Fallback (Bazel + Windows CI runfiles are broken) ──────────────
+  windows-cargo:
+    name: Cargo tests on Windows
+    runs-on: windows-latest
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "."
+    - name: Tests
+      run: cargo test --all-targets --workspace
+
