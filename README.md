@@ -206,6 +206,7 @@ If you need deep JSON introspection for IDE integration (or debugging why a file
 cargo runner context src/main.rs --json
 ```
 When the input is not an existing file, `cargo runner` scans the current workspace members, matches the runnable `module_path`, and resolves the owning file automatically.
+
 ---
 
 ## Bazel — One-Command Workflow
