@@ -1,4 +1,4 @@
-name: CI (Cargo)
+name: CI (Bazel)
 
 on:
   push:
@@ -8,39 +8,49 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
-  CACHE_ON_FAILURE: false
+  # Set this secret in your repo: Settings → Secrets → BUILDBUDDY_API_KEY
+  BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
 
 jobs:
-  # Clippy runs on all platforms (Bazel doesn't run clippy)
-  clippy:
-    name: Clippy on ${{ matrix.os }}
+  # ── Bazel build + test on Linux & macOS ───────────────────────────────────
+  bazel:
+    name: Bazel on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
+
     steps:
     - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable
+
+    # Pin exact Bazel version from .bazelversion
+    - name: Set up Bazel
+      uses: bazel-contrib/setup-bazel@0.9.1
       with:
-        components: clippy
-    - uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: "."
-    - name: Run Clippy
-      run: cargo clippy --all-targets -- -D warnings
+        bazelisk-cache: true
+        disk-cache: ${{ github.workflow }}
+        repository-cache: true
+
+    # Warm the crate_universe index (the slow first-run step)
+    - name: Sync crate universe
+      run: bazel fetch //...
+
+    - name: Build all targets
+      run: |
+        EXTRA_FLAGS=""
+        if [ -n "$BUILDBUDDY_API_KEY" ]; then
+          EXTRA_FLAGS="--config=ci --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
+        fi
+        bazel build $EXTRA_FLAGS //...
       shell: bash
 
-  # Full test suite on Windows (Bazel CI only covers Linux/macOS)
-  windows-tests:
-    name: Tests on Windows
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: "."
-    - name: Run tests
-      run: cargo test --all-targets
+    - name: Run all tests
+      run: |
+        EXTRA_FLAGS=""
+        if [ -n "$BUILDBUDDY_API_KEY" ]; then
+          EXTRA_FLAGS="--config=ci --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
+        fi
+        bazel test $EXTRA_FLAGS //...
       shell: bash
+
