@@ -1,6 +1,6 @@
 # Cargo Runner
 
-The core build engine for the `cargo-runner` project. Handles command generation, build-system detection, framework dispatch, and per-function override resolution for Cargo, Bazel, Rustc, and single-file-script targets.
+The core build engine for the `cargo-runner` project. Handles command generation, build-system detection, framework dispatch, and per-function override resolution for Cargo, Bazel, Rustc, single-file-script targets, and custom frameworks like Dioxus, Leptos, and Tauri.
 
 ---
 
