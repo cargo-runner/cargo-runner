@@ -7,9 +7,9 @@
 //!
 //! The scaffolder ONLY touches lines between:
 //!   ```text
-//!   # BEGIN raz-managed
+//!   # BEGIN cargo-runner-managed
 //!   ...
-//!   # END raz-managed
+//!   # END cargo-runner-managed
 //!   ```
 //!
 //! If those markers are absent, it appends a new managed block at the end of
@@ -22,8 +22,8 @@ use std::path::{Path, PathBuf};
 use crate::config::bazel_workspace::find_bazel_crates;
 use crate::config::{local_dependency_labels, rust_crate_name};
 
-const MANAGED_BEGIN: &str = "# BEGIN raz-managed";
-const MANAGED_END: &str = "# END raz-managed";
+const MANAGED_BEGIN: &str = "# BEGIN cargo-runner-managed";
+const MANAGED_END: &str = "# END cargo-runner-managed";
 
 /// Run build-sync from `cwd`.
 ///
@@ -982,8 +982,8 @@ mod tests {
 
     #[test]
     fn splice_replaces_existing_block() {
-        let existing = "# hand authored\nrust_binary(name = \"foo\")\n\n# BEGIN raz-managed\nold stuff\n# END raz-managed\n";
-        let new_block = "# BEGIN raz-managed\nnew stuff\n# END raz-managed\n";
+        let existing = "# hand authored\nrust_binary(name = \"foo\")\n\n# BEGIN cargo-runner-managed\nold stuff\n# END cargo-runner-managed\n";
+        let new_block = "# BEGIN cargo-runner-managed\nnew stuff\n# END cargo-runner-managed\n";
         let result = splice_managed_block(existing, new_block);
         assert!(result.contains("new stuff"));
         assert!(!result.contains("old stuff"));
@@ -993,7 +993,7 @@ mod tests {
     #[test]
     fn splice_appends_when_no_markers() {
         let existing = "# hand authored\nrust_binary(name = \"foo\")\n";
-        let new_block = "# BEGIN raz-managed\nnew stuff\n# END raz-managed\n";
+        let new_block = "# BEGIN cargo-runner-managed\nnew stuff\n# END cargo-runner-managed\n";
         let result = splice_managed_block(existing, new_block);
         assert!(result.contains("hand authored"));
         assert!(result.contains("new stuff"));
@@ -1004,14 +1004,14 @@ mod tests {
         let existing = r#"load("@server_crates//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
-# BEGIN raz-managed
+# BEGIN cargo-runner-managed
 rust_binary(
     name = "server_bin",
     srcs = ["src/main.rs"],
     crate_root = "src/main.rs",
     deps = all_crate_deps(normal = True),
 )
-# END raz-managed
+# END cargo-runner-managed
 "#;
 
         let result = normalize_repo_header(existing, "complex_bazel_setup", false);
@@ -1040,14 +1040,14 @@ version = "0.1.0"
             r#"load("@server_crates//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-# BEGIN raz-managed
+# BEGIN cargo-runner-managed
 rust_binary(
     name = "server_bin",
     srcs = ["src/main.rs"],
     crate_root = "src/main.rs",
     deps = all_crate_deps(normal = True),
 )
-# END raz-managed
+# END cargo-runner-managed
 "#,
         )
         .unwrap();

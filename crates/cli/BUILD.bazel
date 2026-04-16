@@ -1,7 +1,7 @@
 load("@cargo_runner_crates//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
-# BEGIN raz-managed
+# BEGIN cargo-runner-managed
 rust_library(
     name = "cargo-runner_lib",
     srcs = glob(["src/**/*.rs"]),
@@ -38,4 +38,4 @@ rust_test_suite(
     deps = [":cargo-runner_lib"] + all_crate_deps(normal = True, normal_dev = True),
 )
 
-# END raz-managed
+# END cargo-runner-managed

@@ -1,6 +1,6 @@
 # Cargo Runner
 
-The core build engine for the `raz` monorepo. Handles command generation, build-system detection, framework dispatch, and per-function override resolution for Cargo, Bazel, Rustc, and single-file-script targets.
+The core build engine for the `cargo-runner` project. Handles command generation, build-system detection, framework dispatch, and per-function override resolution for Cargo, Bazel, Rustc, and single-file-script targets.
 
 ## Architecture
 
@@ -364,11 +364,11 @@ Doctests use Bazel natively. There is **no cargo fallback** — if it's a Bazel 
 ```python
 # Hand-authored rules above are NEVER touched
 
-# BEGIN raz-managed — do not edit this block manually
+# BEGIN cargo-runner-managed — do not edit this block manually
 rust_library(...)
 rust_test(...)
 rust_doc_test(...)
-# END raz-managed
+# END cargo-runner-managed
 ```
 
 Deduplication is name-aware and content-aware:
