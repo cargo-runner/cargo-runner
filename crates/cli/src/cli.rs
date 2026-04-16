@@ -23,7 +23,7 @@ pub enum Command {
 
 #[derive(Parser, Debug)]
 #[command(name = "cargo-runner")]
-#[command(version, about, long_about = None)]
+#[command(version, about = "Run Rust code at specific locations", long_about = None)]
 pub struct Runner {
     #[command(subcommand)]
     pub command: Commands,
