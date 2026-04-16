@@ -53,6 +53,29 @@ Bazel support targets **pure Rust projects**: API servers, CLI tools, libraries,
 
 ---
 
+## Implicit Execution & Target Inference
+
+When running `cargo runner run` without explicit file arguments, the runner intelligently infers what to execute based on Cargo's `default-run` settings and standard Rust project conventions.
+
+It uses these exact filesystem layout patterns to automatically detect binaries, tests, benchmarks, and libraries—both for resolving implicitly executed targets and for generating underlying Bazel rules:
+
+| Rust Source Path | Inferred Target Kind | Notes / Bazel Mapping |
+|------------------|----------------------|-----------------------|
+| `src/main.rs` | Project Binary | The default entry point, maps to `rust_binary` |
+| `src/lib.rs` | Library & Doc Tests | Maps to `rust_library` and `rust_doc_test` |
+| `src/bin/*.rs` | Additional Binary | Scaffolded/detected only if `fn main()` is present |
+| `src/bin/*/main.rs` | Directory Binary | Scaffolded/detected only if `fn main()` is present |
+| `tests/*.rs` | Integration Test | Automatically maps to `rust_test_suite` |
+| `examples/*.rs` | Example Binary | Scaffolded/detected only if `fn main()` is present |
+| `benches/*.rs` | Benchmark | Scaffolded/detected only if `fn main()` is present |
+| `build.rs` | Build Script | Maps to `cargo_build_script` internally |
+
+**Priority:** Explicit `Cargo.toml` definitions (`[[bin]]`, `[[test]]`, `[[bench]]`, `[[example]]`) always take priority over the filesystem conventions above.
+
+**`fn main()` heuristic**: Files in `src/bin/` and `examples/` are only detected as runnable binaries if they actually contain a `fn main()` function — helper modules are silently skipped.
+
+---
+
 ## Scoped Execution
 
 `cargo runner run path/to/file.rs:25` detects the surrounding project context and automatically builds the correct compilation and execution command.
@@ -137,31 +160,6 @@ cargo runner context runners::unified_runner::tests --json
 ```
 
 When the input is not an existing file, `cargo runner` scans the current workspace members, matches the runnable `module_path`, and resolves the owning file automatically.
-
----
-
-## Target Inference
-
-`init --bazel` uses a **combined** strategy for discovering Bazel targets:
-
-| Source | Strategy | Target generated |
-|--------|----------|-----------------|
-| `src/lib.rs` | Always | `rust_library` + `rust_test` (unit tests) + `rust_doc_test` |
-| `src/main.rs` | Always | `rust_binary` |
-| `src/bin/*.rs` | Only if `fn main()` present | `rust_binary` per file |
-| `src/bin/*/main.rs` | Subdirectory binaries | `rust_binary` per dir |
-| `tests/*.rs` | Always (harness provides entry) | `rust_test_suite` |
-| `examples/*.rs` | Only if `fn main()` present | `rust_binary` |
-| `benches/*.rs` | Only if `fn main()` present | `rust_binary` |
-| `build.rs` | Always | `cargo_build_script` + warning |
-| `Cargo.toml` `[[bin]]` | Explicit definitions win | `rust_binary` per entry |
-| `Cargo.toml` `[[test]]` | Explicit definitions | `rust_test_suite` |
-| `Cargo.toml` `[[bench]]` | Explicit definitions | `rust_binary` per entry |
-| `Cargo.toml` `[[example]]` | Explicit definitions | `rust_binary` per entry |
-
-**Priority**: Explicit `Cargo.toml` definitions always win over filesystem convention.
-
-**`fn main()` heuristic**: Files in `src/bin/` and `examples/` are only scaffolded as binaries if they contain `fn main()` — helper modules are silently skipped.
 
 ---
 
