@@ -299,7 +299,9 @@ fn cargo_runner() -> Command {
     // Convert to an absolute path first.
     if let Ok(bin_path) = std::env::var("CARGO_BIN_EXE_cargo-runner") {
         let path = std::path::Path::new(&bin_path);
-        if !path.is_absolute() && let Ok(cwd) = std::env::current_dir() {
+        if !path.is_absolute()
+            && let Ok(cwd) = std::env::current_dir()
+        {
             let abs_path = cwd.join(path);
             unsafe {
                 std::env::set_var("CARGO_BIN_EXE_cargo-runner", abs_path);
