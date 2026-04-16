@@ -18,7 +18,6 @@ Alternatively, you can build from source:
 cargo install cargo-runner-cli
 ```
 
-
 ---
 
 ## Scoped Execution
@@ -56,42 +55,6 @@ When `cargo runner run` is called without a file, it now prefers Cargo
 `default-run` targets first, then falls back to the usual `src/main.rs` /
 workspace binary heuristics.
 
-### Waz integration
-
-If you use `waz`, the same lookup model is available there too:
-
-```bash
-waz run src/main.rs:25
-waz run runners::unified_runner::tests
-waz runnables
-waz runnables runners::unified_runner::tests
-```
-
-`waz run` is the non-interactive path; it reuses the same project and
-module-path resolution so you can skip the TUI when you already know what you
-want to run.
-
-`waz runnables` is the companion listing command when you want to inspect the
-available run targets first, either for the whole workspace or for a specific
-module path.
-
-`--bin`, `--test`, `--bench`, and `--doc` narrow the result set by runnable
-kind. `--name` does a case-insensitive, punctuation-insensitive substring
-match against the label, module path, and function name. Add `--exact` to
-require the normalized name to match exactly instead of by substring, so
-`foo bar`, `foo_bar`, and `FooBar` still collapse to the same search key but
-`foo` will no longer match `foobar` when `--exact` is present.
-
-`--symbol` filters symbol-like targets, such as doc-tested structs, enums,
-unions, module test groups, and binary names. It can be combined with `--name`
-and the kind filters.
-
-`cargo runner run` accepts the same selector styles:
-
-- bare function or method name: `cargo runner run test_helper`
-- full module path plus function: `cargo runner run runners::unified_runner::tests::test_helper`
-- doc-test symbol: `cargo runner run Users`
-
 ### Single-file scripts
 
 `cargo runner run` also recognizes single-file Rust scripts when the file has a
@@ -107,6 +70,31 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+
+---
+
+## Target Inference
+
+`init --bazel` uses a **combined** strategy for discovering Bazel targets:
+
+| Source | Strategy | Target generated |
+|--------|----------|-----------------|
+| `src/lib.rs` | Always | `rust_library` + `rust_test` (unit tests) + `rust_doc_test` |
+| `src/main.rs` | Always | `rust_binary` |
+| `src/bin/*.rs` | Only if `fn main()` present | `rust_binary` per file |
+| `src/bin/*/main.rs` | Subdirectory binaries | `rust_binary` per dir |
+| `tests/*.rs` | Always (harness provides entry) | `rust_test_suite` |
+| `examples/*.rs` | Only if `fn main()` present | `rust_binary` |
+| `benches/*.rs` | Only if `fn main()` present | `rust_binary` |
+| `build.rs` | Always | `cargo_build_script` + warning |
+| `Cargo.toml` `[[bin]]` | Explicit definitions win | `rust_binary` per entry |
+| `Cargo.toml` `[[test]]` | Explicit definitions | `rust_test_suite` |
+| `Cargo.toml` `[[bench]]` | Explicit definitions | `rust_binary` per entry |
+| `Cargo.toml` `[[example]]` | Explicit definitions | `rust_binary` per entry |
+
+**Priority**: Explicit `Cargo.toml` definitions always win over filesystem convention.
+
+**`fn main()` heuristic**: Files in `src/bin/` and `examples/` are only scaffolded as binaries if they contain `fn main()` — helper modules are silently skipped.
 
 ---
 
@@ -151,29 +139,6 @@ For Cargo workspaces, `init --bazel` automatically:
 - Generates per-member `BUILD.bazel` files
 - Creates a unified `MODULE.bazel` at the root
 
-### Target inference
-
-`init --bazel` uses a **combined** strategy for discovering Bazel targets:
-
-| Source | Strategy | Target generated |
-|--------|----------|-----------------|
-| `src/lib.rs` | Always | `rust_library` + `rust_test` (unit tests) + `rust_doc_test` |
-| `src/main.rs` | Always | `rust_binary` |
-| `src/bin/*.rs` | Only if `fn main()` present | `rust_binary` per file |
-| `src/bin/*/main.rs` | Subdirectory binaries | `rust_binary` per dir |
-| `tests/*.rs` | Always (harness provides entry) | `rust_test_suite` |
-| `examples/*.rs` | Only if `fn main()` present | `rust_binary` |
-| `benches/*.rs` | Only if `fn main()` present | `rust_binary` |
-| `build.rs` | Always | `cargo_build_script` + warning |
-| `Cargo.toml` `[[bin]]` | Explicit definitions win | `rust_binary` per entry |
-| `Cargo.toml` `[[test]]` | Explicit definitions | `rust_test_suite` |
-| `Cargo.toml` `[[bench]]` | Explicit definitions | `rust_binary` per entry |
-| `Cargo.toml` `[[example]]` | Explicit definitions | `rust_binary` per entry |
-
-**Priority**: Explicit `Cargo.toml` definitions always win over filesystem convention.
-
-**`fn main()` heuristic**: Files in `src/bin/` and `examples/` are only scaffolded as binaries if they contain `fn main()` — helper modules are silently skipped.
-
 ### Doctests
 
 Library crates (`src/lib.rs`) automatically get a `rust_doc_test` target:
@@ -217,7 +182,6 @@ Deduplication is name-aware and content-aware:
 | `cargo runner run <file\|module::path>[:<line>]` | Scope-based execution: detects build system and runs the target at the given line or module path |
 | `cargo runner runnables [file\|module::path[:line]] [--bin] [--test] [--bench] [--doc] [--name QUERY] [--symbol SYMBOL] [--exact]` | List runnable items for a file, module path, or entire workspace |
 | `cargo runner context [file\|module::path[:line]] --json` | Emit machine-readable project/file context for TMP and other tooling |
-
 
 ---
 
@@ -427,7 +391,6 @@ This applies globally without needing per-file overrides.
 cargo runner override src/main.rs -- -
 ```
 
-
 ---
 
 ## Build System & Framework Detection
@@ -461,6 +424,43 @@ Bazel support targets **pure Rust projects**: API servers, CLI tools, libraries,
 | Tauri | `cargo tauri dev / build` | ❌ Not supported — use Tauri CLI |
 | Pure Rust (lib, bin, tests) | `cargo` or `bazel` | ✅ Fully supported |
 
+---
+
+## Waz Integration
+
+If you use `waz`, the same lookup model is available there too:
+
+```bash
+waz run src/main.rs:25
+waz run runners::unified_runner::tests
+waz runnables
+waz runnables runners::unified_runner::tests
+```
+
+`waz run` is the non-interactive path; it reuses the same project and
+module-path resolution so you can skip the TUI when you already know what you
+want to run.
+
+`waz runnables` is the companion listing command when you want to inspect the
+available run targets first, either for the whole workspace or for a specific
+module path.
+
+`--bin`, `--test`, `--bench`, and `--doc` narrow the result set by runnable
+kind. `--name` does a case-insensitive, punctuation-insensitive substring
+match against the label, module path, and function name. Add `--exact` to
+require the normalized name to match exactly instead of by substring, so
+`foo bar`, `foo_bar`, and `FooBar` still collapse to the same search key but
+`foo` will no longer match `foobar` when `--exact` is present.
+
+`--symbol` filters symbol-like targets, such as doc-tested structs, enums,
+unions, module test groups, and binary names. It can be combined with `--name`
+and the kind filters.
+
+`cargo runner run` accepts the same selector styles:
+
+- bare function or method name: `cargo runner run test_helper`
+- full module path plus function: `cargo runner run runners::unified_runner::tests::test_helper`
+- doc-test symbol: `cargo runner run Users`
 
 ---
 
