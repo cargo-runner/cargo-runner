@@ -20,6 +20,39 @@ cargo install cargo-runner-cli
 
 ---
 
+## Build System & Framework Detection
+
+`UnifiedRunner` uses a Plugin Registry to allow overrides (framework overlays) before falling back to generic build-system detection:
+
+```
+┌─ Framework Overlays (highest priority) ───────────────────────┐
+│  Dioxus.toml in ancestor dirs    →  DioxusOverlayPlugin       │
+│  "leptos" in Cargo.toml          →  LeptosOverlayPlugin       │
+└───────────────────────────────────────────────────────────────┘
+         │ (no plugin claimed the path)
+         ▼
+┌─ Build system detection ──────────────────────────────────────┐
+│  MODULE.bazel present            →  BazelRunner               │
+│  Cargo.toml present              →  CargoRunner               │
+│  (none)                          →  RustcPrimaryPlugin        │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### Framework vs Bazel — design boundary
+
+Framework-managed projects (Dioxus, Leptos, Tauri) **always use their native CLI**, never Bazel. These frameworks orchestrate WASM compilation, asset bundling, hot-reload dev servers, and platform-specific builds internally — capabilities that Bazel cannot replicate.
+
+Bazel support targets **pure Rust projects**: API servers, CLI tools, libraries, and monorepos with shared dependency graphs.
+
+| Framework | CLI | Bazel support? |
+|-----------|-----|----------------|
+| Dioxus | `dx serve / dx build` | ❌ Not supported — use `dx` |
+| Leptos | `cargo leptos watch / build` | ❌ Not supported — use `cargo-leptos` |
+| Tauri | `cargo tauri dev / build` | ❌ Not supported — use Tauri CLI |
+| Pure Rust (lib, bin, tests) | `cargo` or `bazel` | ✅ Fully supported |
+
+---
+
 ## Scoped Execution
 
 `cargo runner run path/to/file.rs:25` works identically for both Cargo and Bazel projects:
@@ -390,39 +423,6 @@ This applies globally without needing per-file overrides.
 ```bash
 cargo runner override src/main.rs -- -
 ```
-
----
-
-## Build System & Framework Detection
-
-`UnifiedRunner` uses a Plugin Registry to allow overrides (framework overlays) before falling back to generic build-system detection:
-
-```
-┌─ Framework Overlays (highest priority) ───────────────────────┐
-│  Dioxus.toml in ancestor dirs    →  DioxusOverlayPlugin       │
-│  "leptos" in Cargo.toml          →  LeptosOverlayPlugin       │
-└───────────────────────────────────────────────────────────────┘
-         │ (no plugin claimed the path)
-         ▼
-┌─ Build system detection ──────────────────────────────────────┐
-│  MODULE.bazel present            →  BazelRunner               │
-│  Cargo.toml present              →  CargoRunner               │
-│  (none)                          →  RustcPrimaryPlugin        │
-└───────────────────────────────────────────────────────────────┘
-```
-
-### Framework vs Bazel — design boundary
-
-Framework-managed projects (Dioxus, Leptos, Tauri) **always use their native CLI**, never Bazel. These frameworks orchestrate WASM compilation, asset bundling, hot-reload dev servers, and platform-specific builds internally — capabilities that Bazel cannot replicate.
-
-Bazel support targets **pure Rust projects**: API servers, CLI tools, libraries, and monorepos with shared dependency graphs.
-
-| Framework | CLI | Bazel support? |
-|-----------|-----|----------------|
-| Dioxus | `dx serve / dx build` | ❌ Not supported — use `dx` |
-| Leptos | `cargo leptos watch / build` | ❌ Not supported — use `cargo-leptos` |
-| Tauri | `cargo tauri dev / build` | ❌ Not supported — use Tauri CLI |
-| Pure Rust (lib, bin, tests) | `cargo` or `bazel` | ✅ Fully supported |
 
 ---
 
