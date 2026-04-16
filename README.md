@@ -78,7 +78,7 @@ It uses these exact filesystem layout patterns to automatically detect binaries,
 
 ## Scoped Execution
 
-`cargo runner run path/to/file.rs:25` detects the surrounding project context and automatically builds the correct compilation and execution command.
+`cargo runner run <path>` detects the surrounding project context and automatically builds the correct compilation and execution command. To preview any command without executing it, simply append `--dry-run`.
 
 It evaluates the environment in this specific priority:
 
@@ -104,6 +104,10 @@ edition = "2021"
 ---
 fn main() { println!("nightly cargo script!"); }
 ```
+```bash
+cargo runner run my_script.rs
+# Generates: cargo +nightly -Zscript my_script.rs
+```
 
 **Rust-Script Example:**
 ```rust
@@ -114,10 +118,22 @@ fn main() { println!("nightly cargo script!"); }
 //! ```
 fn main() { println!("rust-script execution!"); }
 ```
+```bash
+cargo runner run my_rust_script.rs
+# Generates: rust-script my_rust_script.rs
+```
 
-### 3. Cargo Projects
+### 3. Cargo Projects & Workspaces
 
-Inside a standard Cargo workspace, execution paths are mapped intelligently:
+Inside a standard Cargo project or massively scaled virtual Workspace, execution paths are mapped intelligently:
+
+```bash
+cargo runner run src/main.rs
+# Generates: cargo run --bin my_app
+
+cargo runner run tests/integration.rs
+# Generates: cargo test --test integration
+```
 
 | What you cursor into | Cargo generates |
 |---------------------|-----------------|
@@ -131,6 +147,14 @@ Inside a standard Cargo workspace, execution paths are mapped intelligently:
 
 In a Bazel workspace, the runner maps standard Rust layout conventions to their exact Bazel targets so you don't have to think about `//:labels`:
 
+```bash
+cargo runner run src/main.rs
+# Generates: bazel run //:my_app
+
+cargo runner run src/lib.rs:25 
+# Generates: bazel test //:unit_tests --test_arg="tests::add"
+```
+
 | What you cursor into | Bazel generates |
 |---------------------|-----------------|
 | `#[test] fn test_add()` | `bazel test //:unit_tests --test_arg="test_add"` |
@@ -143,24 +167,45 @@ In a Bazel workspace, the runner maps standard Rust layout conventions to their 
 
 When working inside a frontend framework, `cargo-runner` hands off execution to the native CLI orchestrator required to run the WebAssembly bundling and hot-reloading dev servers.
 
+```bash
+cargo runner run src/main.rs
+```
+
 - **Dioxus:** Automatically invokes `dx serve` or `dx build`.
 - **Leptos:** Automatically invokes `cargo leptos watch` or `cargo leptos build`.
 - **Tauri:** Automatically invokes the `cargo tauri` developer environment.
 
 ---
 
-### Advanced Routing
+## Tooling & Debugging Commands
 
-The runner also accepts a raw module path when you already know the Rust module name instead of the file path:
+Beyond executing files, Cargo Runner provides powerful introspection commands. You can pass raw module paths (like `runners::unified_runner::tests`) or standard file paths to these utilities.
 
+### Previewing Commands (`--dry-run`)
+If you aren't sure what command Cargo Runner will synthesize for a specific file or framework, use `--dry-run`. It will print the exact internal `Command` structure without spawning it:
 ```bash
-cargo runner run runners::unified_runner::tests
-cargo runner runnables runners::unified_runner::tests
-cargo runner context runners::unified_runner::tests --json
+cargo runner run src/main.rs --dry-run
 ```
 
-When the input is not an existing file, `cargo runner` scans the current workspace members, matches the runnable `module_path`, and resolves the owning file automatically.
+### Exploring Targets (`runnables`)
+Use `runnables` to list all valid execution targets. You can filter by `--bin`, `--test`, `--bench`, or substring matches:
+```bash
+# List all targets in a specific file
+cargo runner runnables src/lib.rs
 
+# Search the entire workspace for binaries
+cargo runner runnables --bin
+
+# Find a specific module block or test
+cargo runner runnables runners::unified_runner::tests --exact
+```
+
+### Inspecting Context (`context`)
+If you need deep JSON introspection for IDE integration (or debugging why a file resolved a certain way), the `context` command reveals exactly how Cargo Runner interpreted the environment:
+```bash
+cargo runner context src/main.rs --json
+```
+When the input is not an existing file, `cargo runner` scans the current workspace members, matches the runnable `module_path`, and resolves the owning file automatically.
 ---
 
 ## Bazel — One-Command Workflow
