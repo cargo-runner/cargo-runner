@@ -62,7 +62,8 @@ jobs:
         fi
         if [ "${{ runner.os }}" == "Windows" ]; then
           # MSVC link.exe fails with LNK1181 because rules_rust doc tests exceed MAX_PATH in bazel runfiles
-          bazel test $EXTRA_FLAGS $(bazel query 'tests(//...) except filter("doc_tests", tests(//...))')
+          TARGETS=$(bazel query 'tests(//...) except filter("doc_tests", tests(//...))' | tr -d '\r')
+          bazel test $EXTRA_FLAGS $TARGETS
         else
           bazel test $EXTRA_FLAGS //...
         fi
