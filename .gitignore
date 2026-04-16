@@ -7,6 +7,7 @@ bazel-testlogs
 bazel-cargo-runner
 *.md
 !README.md
+!docs/**/*.md
 *.py
 !test_builder.rs
 !test_*.rs
