@@ -320,7 +320,7 @@ The `overrides` array lets you customize commands for specific functions, tests,
 
 **Note on Cargo Environments**: Overrides correctly inject environment variables into `cargo` commands contextually. Due to accurate `FileType` contextual propagation, `RUSTFLAGS` or other systemic flags apply perfectly onto `cargo run`/`cargo test` invocations without mistakenly triggering standalone `rustc` fallbacks.
 
-#### Bazel override — **flat shape** (v2)
+#### Bazel override
 
 The `"bazel"` block inside an override is a **flat `BazelOverride`** — fields are promoted from the framework level directly to the override. You no longer need to nest `test_framework.test_args`.
 
