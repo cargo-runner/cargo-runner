@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@v4
@@ -35,6 +35,15 @@ jobs:
     # Warm the crate_universe index (the slow first-run step)
     - name: Sync crate universe
       run: bazel fetch //...
+
+    # Windows Bazel specifically requires runfiles and symlinks to be manually enabled or 
+    # process_wrapper.exe resolution fails.
+    - name: Configure Windows Bazel Runfiles
+      if: runner.os == 'Windows'
+      run: |
+        echo "startup --windows_enable_symlinks" >> .bazelrc
+        echo "build --enable_runfiles" >> .bazelrc
+      shell: bash
 
     - name: Build all targets
       run: |
@@ -53,19 +62,3 @@ jobs:
         fi
         bazel test $EXTRA_FLAGS //...
       shell: bash
-
-  # ── Windows Fallback (Bazel + Windows CI runfiles are broken) ──────────────
-  windows-cargo:
-    name: Cargo tests on Windows
-    runs-on: windows-latest
-    env:
-      CARGO_INCREMENTAL: 0
-    steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: "."
-    - name: Tests
-      run: cargo test --all-targets --workspace
-
