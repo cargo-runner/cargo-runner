@@ -4,6 +4,223 @@ The core build engine for the `cargo-runner` project. Handles command generation
 
 ---
 
+## Installation
+
+The recommended way to install is via `cargo-binstall` to download pre-compiled binaries directly from GitHub Releases:
+
+```bash
+cargo binstall cargo-runner-cli
+```
+
+Alternatively, you can build from source:
+
+```bash
+cargo install cargo-runner-cli
+```
+
+
+---
+
+## Scoped Execution
+
+`cargo runner run path/to/file.rs:25` works identically for both Cargo and Bazel projects:
+
+```
+1. Parse file:line → find the smallest scope containing that line
+2. Detect build system (Bazel or Cargo)
+3. Generate the right command with test filter / bench filter
+```
+
+| What you cursor into | Cargo generates | Bazel generates |
+|---------------------|-----------------|-----------------|
+| `#[test] fn test_add()` | `cargo test test_add --exact` | `bazel test //:unit_tests --test_arg="test_add"` |
+| `mod tests { }` block | `cargo test tests::` | `bazel test //:unit_tests --test_arg="tests::"` |
+| `/// ``` doctest` | `cargo test --doc add` | `bazel test //:doc_tests` |
+| `fn main()` binary | `cargo run --bin name` | `bazel run //:name` |
+| Benchmark function | `cargo bench name` | `bazel run //:bench_name -c opt` |
+
+The same resolver also accepts a module path when you already know the Rust
+module name instead of the file path:
+
+```bash
+cargo runner run runners::unified_runner::tests
+cargo runner runnables runners::unified_runner::tests
+cargo runner context runners::unified_runner::tests --json
+```
+
+When the input is not an existing file, `cargo runner` scans the current
+workspace members, matches the runnable `module_path`, and resolves the owning
+file before building the final command or context.
+
+When `cargo runner run` is called without a file, it now prefers Cargo
+`default-run` targets first, then falls back to the usual `src/main.rs` /
+workspace binary heuristics.
+
+### Waz integration
+
+If you use `waz`, the same lookup model is available there too:
+
+```bash
+waz run src/main.rs:25
+waz run runners::unified_runner::tests
+waz runnables
+waz runnables runners::unified_runner::tests
+```
+
+`waz run` is the non-interactive path; it reuses the same project and
+module-path resolution so you can skip the TUI when you already know what you
+want to run.
+
+`waz runnables` is the companion listing command when you want to inspect the
+available run targets first, either for the whole workspace or for a specific
+module path.
+
+`--bin`, `--test`, `--bench`, and `--doc` narrow the result set by runnable
+kind. `--name` does a case-insensitive, punctuation-insensitive substring
+match against the label, module path, and function name. Add `--exact` to
+require the normalized name to match exactly instead of by substring, so
+`foo bar`, `foo_bar`, and `FooBar` still collapse to the same search key but
+`foo` will no longer match `foobar` when `--exact` is present.
+
+`--symbol` filters symbol-like targets, such as doc-tested structs, enums,
+unions, module test groups, and binary names. It can be combined with `--name`
+and the kind filters.
+
+`cargo runner run` accepts the same selector styles:
+
+- bare function or method name: `cargo runner run test_helper`
+- full module path plus function: `cargo runner run runners::unified_runner::tests::test_helper`
+- doc-test symbol: `cargo runner run Users`
+
+### Single-file scripts
+
+`cargo runner run` also recognizes single-file Rust scripts when the file has a
+script shebang and a `fn main()` entry point.
+
+Cargo nightly script example:
+
+```rust
+#!/usr/bin/env -S cargo +nightly -Zscript
+---cargo
+[package]
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+
+---
+
+## Bazel — One-Command Workflow
+
+> **Goal**: Use a Bazel-managed Rust workspace as if it were plain Cargo — no manual Bazel bookkeeping.
+
+### `cargo runner init --bazel`
+
+This is the **single entry point** for all Bazel scaffolding. It handles both initial setup and subsequent syncs.
+
+#### First run — scaffolds the workspace
+
+```bash
+cargo runner init --bazel
+```
+
+Generates:
+- `MODULE.bazel` — bzlmod dependency graph via `crate.from_cargo()`
+- `.bazelversion` — pins Bazel 7.4.1
+- `.bazelrc` — build flags + shared disk/repo caches
+- `BUILD.bazel` — targets for each crate (see below)
+- `Cargo.lock` — required by `crate_universe`
+- `.cargo-runner.json` — framework defaults
+
+Then runs:
+1. `bazel sync` — downloads toolchain + resolves crate deps
+2. `bazel build --nobuild //...` — validates all BUILD files without compiling
+
+#### Re-run — idempotent sync
+
+```bash
+cargo runner init --bazel   # safe to re-run anytime
+```
+
+Re-scans source files, adds missing targets, skips existing ones. The single command replaces the old `build-sync` workflow.
+
+#### Workspace support
+
+For Cargo workspaces, `init --bazel` automatically:
+- Parses `[workspace] members` (supports explicit lists and globs)
+- Generates per-member `BUILD.bazel` files
+- Creates a unified `MODULE.bazel` at the root
+
+### Target inference
+
+`init --bazel` uses a **combined** strategy for discovering Bazel targets:
+
+| Source | Strategy | Target generated |
+|--------|----------|-----------------|
+| `src/lib.rs` | Always | `rust_library` + `rust_test` (unit tests) + `rust_doc_test` |
+| `src/main.rs` | Always | `rust_binary` |
+| `src/bin/*.rs` | Only if `fn main()` present | `rust_binary` per file |
+| `src/bin/*/main.rs` | Subdirectory binaries | `rust_binary` per dir |
+| `tests/*.rs` | Always (harness provides entry) | `rust_test_suite` |
+| `examples/*.rs` | Only if `fn main()` present | `rust_binary` |
+| `benches/*.rs` | Only if `fn main()` present | `rust_binary` |
+| `build.rs` | Always | `cargo_build_script` + warning |
+| `Cargo.toml` `[[bin]]` | Explicit definitions win | `rust_binary` per entry |
+| `Cargo.toml` `[[test]]` | Explicit definitions | `rust_test_suite` |
+| `Cargo.toml` `[[bench]]` | Explicit definitions | `rust_binary` per entry |
+| `Cargo.toml` `[[example]]` | Explicit definitions | `rust_binary` per entry |
+
+**Priority**: Explicit `Cargo.toml` definitions always win over filesystem convention.
+
+**`fn main()` heuristic**: Files in `src/bin/` and `examples/` are only scaffolded as binaries if they contain `fn main()` — helper modules are silently skipped.
+
+### Doctests
+
+Library crates (`src/lib.rs`) automatically get a `rust_doc_test` target:
+
+```python
+rust_doc_test(
+    name = "doc_tests",
+    crate = ":my_lib",
+)
+```
+
+Doctests use Bazel natively. There is **no cargo fallback** — if it's a Bazel project, everything goes through Bazel.
+
+### BUILD.bazel safety model
+
+`build-sync` only modifies lines inside a **managed block** — anything outside the fences is left untouched:
+
+```python
+# Hand-authored rules above are NEVER touched
+
+# BEGIN cargo-runner-managed — do not edit this block manually
+rust_library(...)
+rust_test(...)
+rust_doc_test(...)
+# END cargo-runner-managed
+```
+
+Deduplication is name-aware and content-aware:
+- Exact name matches are skipped
+- Any existing `rust_doc_test(` rule (regardless of name) prevents duplicate doc test targets
+
+### Other commands
+
+| Command | What it does |
+|---------|-------------|
+| `cargo runner add <crate> [--features f] [--dev]` | `cargo add` + `cargo update` + `bazel sync` + `gen_rust_project` in one shot |
+| `cargo runner sync [--crate <name>] [--skip-ide]` | Sync Bazel crate-universe after any `Cargo.toml` edit |
+| `cargo runner build-sync [--crate <name>] [--dry-run]` | Update `BUILD.bazel` targets (also runs as part of `init --bazel`) |
+| `cargo runner clean` | Context-aware clean: `bazel clean` (Bazel) or `cargo clean` (Cargo) |
+| `cargo runner watch` | Context-aware file watcher: `ibazel` (Bazel) or `cargo watch` (Cargo) |
+| `cargo runner run <file\|module::path>[:<line>]` | Scope-based execution: detects build system and runs the target at the given line or module path |
+| `cargo runner runnables [file\|module::path[:line]] [--bin] [--test] [--bench] [--doc] [--name QUERY] [--symbol SYMBOL] [--exact]` | List runnable items for a file, module path, or entire workspace |
+| `cargo runner context [file\|module::path[:line]] --json` | Emit machine-readable project/file context for TMP and other tooling |
+
+
+---
+
 ## Configuration Reference
 
 Configuration lives in `.cargo-runner.json` at your crate root.
@@ -210,6 +427,7 @@ This applies globally without needing per-file overrides.
 cargo runner override src/main.rs -- -
 ```
 
+
 ---
 
 ## Build System & Framework Detection
@@ -243,239 +461,6 @@ Bazel support targets **pure Rust projects**: API servers, CLI tools, libraries,
 | Tauri | `cargo tauri dev / build` | ❌ Not supported — use Tauri CLI |
 | Pure Rust (lib, bin, tests) | `cargo` or `bazel` | ✅ Fully supported |
 
----
-
-## Bazel — One-Command Workflow
-
-> **Goal**: Use a Bazel-managed Rust workspace as if it were plain Cargo — no manual Bazel bookkeeping.
-
-### Prerequisites
-
-```bash
-cargo install cargo-runner  # installs the cargo-runner binary
-```
-
-### `cargo runner init --bazel`
-
-This is the **single entry point** for all Bazel scaffolding. It handles both initial setup and subsequent syncs.
-
-#### First run — scaffolds the workspace
-
-```bash
-cargo runner init --bazel
-```
-
-Generates:
-- `MODULE.bazel` — bzlmod dependency graph via `crate.from_cargo()`
-- `.bazelversion` — pins Bazel 7.4.1
-- `.bazelrc` — build flags + shared disk/repo caches
-- `BUILD.bazel` — targets for each crate (see below)
-- `Cargo.lock` — required by `crate_universe`
-- `.cargo-runner.json` — framework defaults
-
-Then runs:
-1. `bazel sync` — downloads toolchain + resolves crate deps
-2. `bazel build --nobuild //...` — validates all BUILD files without compiling
-
-#### Re-run — idempotent sync
-
-```bash
-cargo runner init --bazel   # safe to re-run anytime
-```
-
-Re-scans source files, adds missing targets, skips existing ones. The single command replaces the old `build-sync` workflow.
-
-#### Workspace support
-
-For Cargo workspaces, `init --bazel` automatically:
-- Parses `[workspace] members` (supports explicit lists and globs)
-- Generates per-member `BUILD.bazel` files
-- Creates a unified `MODULE.bazel` at the root
-
-### Target inference
-
-`init --bazel` uses a **combined** strategy for discovering Bazel targets:
-
-| Source | Strategy | Target generated |
-|--------|----------|-----------------|
-| `src/lib.rs` | Always | `rust_library` + `rust_test` (unit tests) + `rust_doc_test` |
-| `src/main.rs` | Always | `rust_binary` |
-| `src/bin/*.rs` | Only if `fn main()` present | `rust_binary` per file |
-| `src/bin/*/main.rs` | Subdirectory binaries | `rust_binary` per dir |
-| `tests/*.rs` | Always (harness provides entry) | `rust_test_suite` |
-| `examples/*.rs` | Only if `fn main()` present | `rust_binary` |
-| `benches/*.rs` | Only if `fn main()` present | `rust_binary` |
-| `build.rs` | Always | `cargo_build_script` + warning |
-| `Cargo.toml` `[[bin]]` | Explicit definitions win | `rust_binary` per entry |
-| `Cargo.toml` `[[test]]` | Explicit definitions | `rust_test_suite` |
-| `Cargo.toml` `[[bench]]` | Explicit definitions | `rust_binary` per entry |
-| `Cargo.toml` `[[example]]` | Explicit definitions | `rust_binary` per entry |
-
-**Priority**: Explicit `Cargo.toml` definitions always win over filesystem convention.
-
-**`fn main()` heuristic**: Files in `src/bin/` and `examples/` are only scaffolded as binaries if they contain `fn main()` — helper modules are silently skipped.
-
-### Doctests
-
-Library crates (`src/lib.rs`) automatically get a `rust_doc_test` target:
-
-```python
-rust_doc_test(
-    name = "doc_tests",
-    crate = ":my_lib",
-)
-```
-
-Doctests use Bazel natively. There is **no cargo fallback** — if it's a Bazel project, everything goes through Bazel.
-
-### BUILD.bazel safety model
-
-`build-sync` only modifies lines inside a **managed block** — anything outside the fences is left untouched:
-
-```python
-# Hand-authored rules above are NEVER touched
-
-# BEGIN cargo-runner-managed — do not edit this block manually
-rust_library(...)
-rust_test(...)
-rust_doc_test(...)
-# END cargo-runner-managed
-```
-
-Deduplication is name-aware and content-aware:
-- Exact name matches are skipped
-- Any existing `rust_doc_test(` rule (regardless of name) prevents duplicate doc test targets
-
-### Other commands
-
-| Command | What it does |
-|---------|-------------|
-| `cargo runner add <crate> [--features f] [--dev]` | `cargo add` + `cargo update` + `bazel sync` + `gen_rust_project` in one shot |
-| `cargo runner sync [--crate <name>] [--skip-ide]` | Sync Bazel crate-universe after any `Cargo.toml` edit |
-| `cargo runner build-sync [--crate <name>] [--dry-run]` | Update `BUILD.bazel` targets (also runs as part of `init --bazel`) |
-| `cargo runner clean` | Context-aware clean: `bazel clean` (Bazel) or `cargo clean` (Cargo) |
-| `cargo runner watch` | Context-aware file watcher: `ibazel` (Bazel) or `cargo watch` (Cargo) |
-| `cargo runner run <file\|module::path>[:<line>]` | Scope-based execution: detects build system and runs the target at the given line or module path |
-| `cargo runner runnables [file\|module::path[:line]] [--bin] [--test] [--bench] [--doc] [--name QUERY] [--symbol SYMBOL] [--exact]` | List runnable items for a file, module path, or entire workspace |
-| `cargo runner context [file\|module::path[:line]] --json` | Emit machine-readable project/file context for TMP and other tooling |
-
----
-
-## Scoped Execution
-
-`cargo runner run path/to/file.rs:25` works identically for both Cargo and Bazel projects:
-
-```
-1. Parse file:line → find the smallest scope containing that line
-2. Detect build system (Bazel or Cargo)
-3. Generate the right command with test filter / bench filter
-```
-
-| What you cursor into | Cargo generates | Bazel generates |
-|---------------------|-----------------|-----------------|
-| `#[test] fn test_add()` | `cargo test test_add --exact` | `bazel test //:unit_tests --test_arg="test_add"` |
-| `mod tests { }` block | `cargo test tests::` | `bazel test //:unit_tests --test_arg="tests::"` |
-| `/// ``` doctest` | `cargo test --doc add` | `bazel test //:doc_tests` |
-| `fn main()` binary | `cargo run --bin name` | `bazel run //:name` |
-| Benchmark function | `cargo bench name` | `bazel run //:bench_name -c opt` |
-
-The same resolver also accepts a module path when you already know the Rust
-module name instead of the file path:
-
-```bash
-cargo runner run runners::unified_runner::tests
-cargo runner runnables runners::unified_runner::tests
-cargo runner context runners::unified_runner::tests --json
-```
-
-When the input is not an existing file, `cargo runner` scans the current
-workspace members, matches the runnable `module_path`, and resolves the owning
-file before building the final command or context.
-
-When `cargo runner run` is called without a file, it now prefers Cargo
-`default-run` targets first, then falls back to the usual `src/main.rs` /
-workspace binary heuristics.
-
-### Waz integration
-
-If you use `waz`, the same lookup model is available there too:
-
-```bash
-waz run src/main.rs:25
-waz run runners::unified_runner::tests
-waz runnables
-waz runnables runners::unified_runner::tests
-```
-
-`waz run` is the non-interactive path; it reuses the same project and
-module-path resolution so you can skip the TUI when you already know what you
-want to run.
-
-`waz runnables` is the companion listing command when you want to inspect the
-available run targets first, either for the whole workspace or for a specific
-module path.
-
-`--bin`, `--test`, `--bench`, and `--doc` narrow the result set by runnable
-kind. `--name` does a case-insensitive, punctuation-insensitive substring
-match against the label, module path, and function name. Add `--exact` to
-require the normalized name to match exactly instead of by substring, so
-`foo bar`, `foo_bar`, and `FooBar` still collapse to the same search key but
-`foo` will no longer match `foobar` when `--exact` is present.
-
-`--symbol` filters symbol-like targets, such as doc-tested structs, enums,
-unions, module test groups, and binary names. It can be combined with `--name`
-and the kind filters.
-
-`cargo runner run` accepts the same selector styles:
-
-- bare function or method name: `cargo runner run test_helper`
-- full module path plus function: `cargo runner run runners::unified_runner::tests::test_helper`
-- doc-test symbol: `cargo runner run Users`
-
-### Single-file scripts
-
-`cargo runner run` also recognizes single-file Rust scripts when the file has a
-script shebang and a `fn main()` entry point.
-
-Cargo nightly script example:
-
-```rust
-#!/usr/bin/env -S cargo +nightly -Zscript
----cargo
-[package]
-edition = "2021"
-
-[dependencies]
-clap = { version = "4.5", features = ["derive"] }
----
-fn main() {
-    println!("hello");
-}
-```
-
-`rust-script` example:
-
-```rust
-#!/usr/bin/env rust-script
-//! ```cargo
-//! [dependencies]
-//! anyhow = "1"
-//! clap = { version = "4.5", features = ["derive"] }
-//! ```
-//!
-//! [package]
-//! edition = "2024"
-
-fn main() {
-    println!("hello");
-}
-```
-
-In both cases, the file is treated as a single-file script only when `fn main()`
-is present. Without that entry point, it falls back to normal Rust file handling.
-
----
----
 
 ---
 
