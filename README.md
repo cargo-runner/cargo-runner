@@ -55,24 +55,80 @@ Bazel support targets **pure Rust projects**: API servers, CLI tools, libraries,
 
 ## Scoped Execution
 
-`cargo runner run path/to/file.rs:25` works identically for both Cargo and Bazel projects:
+`cargo runner run path/to/file.rs:25` detects the surrounding project context and automatically builds the correct compilation and execution command.
 
+It evaluates the environment in this specific priority:
+
+### 1. Standalone Rust Files (`rustc`)
+
+If a Rust file sits outside of any framework or build system (no `Cargo.toml`, no Bazel), Cargo Runner transparently falls back to `rustc`.
+
+```bash
+cargo runner run standalone.rs
+# Generates: rustc standalone.rs -o /tmp/... && /tmp/...
 ```
-1. Parse file:line → find the smallest scope containing that line
-2. Detect build system (Bazel or Cargo)
-3. Generate the right command with test filter / bench filter
+
+### 2. Single-file Scripts
+
+Cargo Runner recognizes single-file Rust scripts explicitly via their shebangs and a `fn main()` entry point.
+
+**Cargo Nightly Script Example (`-Zscript`):**
+```rust
+#!/usr/bin/env -S cargo +nightly -Zscript
+---cargo
+[package]
+edition = "2021"
+---
+fn main() { println!("nightly cargo script!"); }
 ```
 
-| What you cursor into | Cargo generates | Bazel generates |
-|---------------------|-----------------|-----------------|
-| `#[test] fn test_add()` | `cargo test test_add --exact` | `bazel test //:unit_tests --test_arg="test_add"` |
-| `mod tests { }` block | `cargo test tests::` | `bazel test //:unit_tests --test_arg="tests::"` |
-| `/// ``` doctest` | `cargo test --doc add` | `bazel test //:doc_tests` |
-| `fn main()` binary | `cargo run --bin name` | `bazel run //:name` |
-| Benchmark function | `cargo bench name` | `bazel run //:bench_name -c opt` |
+**Rust-Script Example:**
+```rust
+#!/usr/bin/env rust-script
+//! ```cargo
+//! [dependencies]
+//! anyhow = "1"
+//! ```
+fn main() { println!("rust-script execution!"); }
+```
 
-The same resolver also accepts a module path when you already know the Rust
-module name instead of the file path:
+### 3. Cargo Projects
+
+Inside a standard Cargo workspace, execution paths are mapped intelligently:
+
+| What you cursor into | Cargo generates |
+|---------------------|-----------------|
+| `#[test] fn test_add()` | `cargo test test_add --exact` |
+| `mod tests { }` block | `cargo test tests::` |
+| `/// ``` doctest` | `cargo test --doc add` |
+| `fn main()` binary | `cargo run --bin name` |
+| Benchmark function | `cargo bench name` |
+
+### 4. Bazel Projects
+
+In a Bazel workspace, the runner maps standard Rust layout conventions to their exact Bazel targets so you don't have to think about `//:labels`:
+
+| What you cursor into | Bazel generates |
+|---------------------|-----------------|
+| `#[test] fn test_add()` | `bazel test //:unit_tests --test_arg="test_add"` |
+| `mod tests { }` block | `bazel test //:unit_tests --test_arg="tests::"` |
+| `/// ``` doctest` | `bazel test //:doc_tests` |
+| `fn main()` binary | `bazel run //:name` |
+| Benchmark function | `bazel run //:bench_name -c opt` |
+
+### 5. Dioxus and Leptos (Custom Frameworks)
+
+When working inside a frontend framework, `cargo-runner` hands off execution to the native CLI orchestrator required to run the WebAssembly bundling and hot-reloading dev servers.
+
+- **Dioxus:** Automatically invokes `dx serve` or `dx build`.
+- **Leptos:** Automatically invokes `cargo leptos watch` or `cargo leptos build`.
+- **Tauri:** Automatically invokes the `cargo tauri` developer environment.
+
+---
+
+### Advanced Routing
+
+The runner also accepts a raw module path when you already know the Rust module name instead of the file path:
 
 ```bash
 cargo runner run runners::unified_runner::tests
@@ -80,30 +136,7 @@ cargo runner runnables runners::unified_runner::tests
 cargo runner context runners::unified_runner::tests --json
 ```
 
-When the input is not an existing file, `cargo runner` scans the current
-workspace members, matches the runnable `module_path`, and resolves the owning
-file before building the final command or context.
-
-When `cargo runner run` is called without a file, it now prefers Cargo
-`default-run` targets first, then falls back to the usual `src/main.rs` /
-workspace binary heuristics.
-
-### Single-file scripts
-
-`cargo runner run` also recognizes single-file Rust scripts when the file has a
-script shebang and a `fn main()` entry point.
-
-Cargo nightly script example:
-
-```rust
-#!/usr/bin/env -S cargo +nightly -Zscript
----cargo
-[package]
-edition = "2021"
-
-[dependencies]
-clap = { version = "4.5", features = ["derive"] }
-
+When the input is not an existing file, `cargo runner` scans the current workspace members, matches the runnable `module_path`, and resolves the owning file automatically.
 ---
 
 ## Target Inference
