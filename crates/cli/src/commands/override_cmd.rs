@@ -175,8 +175,13 @@ pub fn override_command(
         parsed_args.insert("channel".to_string(), json!(ch));
     }
 
-    // Check if we should remove the entire override
-    if override_args.len() == 1 && override_args[0] == "-" {
+    // Check if we should remove the entire override (`-` or legacy `!!`)
+    if parsed_args
+        .get("remove_override")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+        || (override_args.len() == 1 && (override_args[0] == "-" || override_args[0] == "!!"))
+    {
         // Load config and remove matching override
         let config_path = if root {
             let root_path = env::var("PROJECT_ROOT")
@@ -231,6 +236,12 @@ pub fn override_command(
         println!("❌ No matching override found to remove");
         return Ok(());
     }
+
+    // Drop internal control flags before writing config sections
+    parsed_args.remove("remove_override");
+    // Append mode (`@` first token) is recorded for future merge-on-write;
+    // today new override entries still replace via identity match when present.
+    parsed_args.remove("append");
 
     // Add configuration based on file type
     match file_type {
@@ -827,4 +838,211 @@ fn create_file_level_override(
     }
 
     Ok(())
+}
+
+/// List overrides from `.cargo-runner.json` files under the workspace.
+///
+/// When `file_filter` is set, only overrides whose `match.file_path` equals
+/// that path (after resolution) are returned.
+pub fn list_overrides_command(file_filter: Option<&str>, json: bool) -> Result<()> {
+    let cwd = env::current_dir().context("failed to get current directory")?;
+    let filter_path = file_filter.map(|f| resolve_path(&cwd, f));
+
+    let configs = collect_cargo_runner_configs(&cwd)?;
+    let mut entries = Vec::new();
+
+    for config_path in configs {
+        let content = fs::read_to_string(&config_path).with_context(|| {
+            format!("failed to read config {}", config_path.display())
+        })?;
+        let config: Value = serde_json::from_str(&content).with_context(|| {
+            format!("failed to parse config {}", config_path.display())
+        })?;
+        let Some(overrides) = config.get("overrides").and_then(|v| v.as_array()) else {
+            continue;
+        };
+
+        for ov in overrides {
+            if let Some(ref filter) = filter_path {
+                let matched = ov
+                    .get("match")
+                    .and_then(|m| m.get("file_path"))
+                    .and_then(|p| p.as_str())
+                    .map(|p| Path::new(p) == filter.as_path() || p == filter.to_string_lossy())
+                    .unwrap_or(false);
+                if !matched {
+                    continue;
+                }
+            }
+
+            let mut entry = Map::new();
+            entry.insert(
+                "config_path".to_string(),
+                json!(config_path.to_string_lossy()),
+            );
+            entry.insert("override".to_string(), ov.clone());
+            entries.push(Value::Object(entry));
+        }
+    }
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&entries)?);
+    } else if entries.is_empty() {
+        println!("No overrides found.");
+    } else {
+        println!("Found {} override(s):\n", entries.len());
+        for (i, entry) in entries.iter().enumerate() {
+            let config_path = entry
+                .get("config_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let ov = entry.get("override");
+            let match_obj = ov.and_then(|o| o.get("match"));
+            let func = match_obj
+                .and_then(|m| m.get("function_name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("(file-level)");
+            let file = match_obj
+                .and_then(|m| m.get("file_path"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            println!("{}. {func}", i + 1);
+            println!("   file: {file}");
+            println!("   config: {config_path}");
+            if let Some(cargo) = ov.and_then(|o| o.get("cargo")) {
+                println!("   cargo: {cargo}");
+            }
+            if let Some(bazel) = ov.and_then(|o| o.get("bazel")) {
+                println!("   bazel: {bazel}");
+            }
+            println!();
+        }
+    }
+
+    Ok(())
+}
+
+/// Show the override matching a filepath (and optional line-selected function).
+pub fn show_override_command(filepath_arg: &str, json: bool) -> Result<()> {
+    let (filepath, line) = parse_filepath_with_line(filepath_arg);
+    let cwd = env::current_dir().context("failed to get current directory")?;
+    let absolute = resolve_path(&cwd, &filepath);
+
+    let runner = cargo_runner_core::UnifiedRunner::new()?;
+    let function_name = if absolute.exists() {
+        if let Some(line_num) = line {
+            runner
+                .get_best_runnable_at_line(&absolute, line_num as u32)?
+                .and_then(|r| r.get_function_name())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let configs = collect_cargo_runner_configs(&cwd)?;
+    let mut matches = Vec::new();
+
+    for config_path in configs {
+        let content = fs::read_to_string(&config_path)?;
+        let Ok(config) = serde_json::from_str::<Value>(&content) else {
+            continue;
+        };
+        let Some(overrides) = config.get("overrides").and_then(|v| v.as_array()) else {
+            continue;
+        };
+
+        for ov in overrides {
+            let Some(match_obj) = ov.get("match").and_then(|m| m.as_object()) else {
+                continue;
+            };
+            let file_ok = match_obj
+                .get("file_path")
+                .and_then(|p| p.as_str())
+                .map(|p| Path::new(p) == absolute.as_path() || p == absolute.to_string_lossy())
+                .unwrap_or(false);
+            if !file_ok {
+                continue;
+            }
+            if let Some(ref want_fn) = function_name {
+                let fn_ok = match_obj
+                    .get("function_name")
+                    .and_then(|f| f.as_str())
+                    .map(|f| f == want_fn.as_str())
+                    .unwrap_or(false);
+                if !fn_ok {
+                    continue;
+                }
+            }
+
+            let mut entry = Map::new();
+            entry.insert(
+                "config_path".to_string(),
+                json!(config_path.to_string_lossy()),
+            );
+            entry.insert("override".to_string(), ov.clone());
+            matches.push(Value::Object(entry));
+        }
+    }
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&matches)?);
+    } else if matches.is_empty() {
+        println!("No matching override found for {filepath_arg}");
+    } else {
+        for entry in &matches {
+            println!("{}", serde_json::to_string_pretty(entry)?);
+        }
+    }
+
+    Ok(())
+}
+
+fn resolve_path(cwd: &Path, filepath: &str) -> PathBuf {
+    let path = Path::new(filepath);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    }
+}
+
+/// Walk from cwd upward and into children to find `.cargo-runner.json` files.
+fn collect_cargo_runner_configs(cwd: &Path) -> Result<Vec<PathBuf>> {
+    let mut configs = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Prefer nearest configs walking up from cwd.
+    let mut current = Some(cwd);
+    while let Some(dir) = current {
+        let candidate = dir.join(".cargo-runner.json");
+        if candidate.is_file() && seen.insert(candidate.clone()) {
+            configs.push(candidate);
+        }
+        current = dir.parent();
+    }
+
+    // Also scan one level of children (workspace members often have local configs).
+    if let Ok(entries) = fs::read_dir(cwd) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let candidate = path.join(".cargo-runner.json");
+                if candidate.is_file() && seen.insert(candidate.clone()) {
+                    configs.push(candidate);
+                }
+            }
+        }
+    }
+
+    // PROJECT_ROOT if set
+    if let Ok(root) = env::var("PROJECT_ROOT") {
+        let candidate = PathBuf::from(root).join(".cargo-runner.json");
+        if candidate.is_file() && seen.insert(candidate.clone()) {
+            configs.push(candidate);
+        }
+    }
+
+    Ok(configs)
 }

@@ -765,6 +765,31 @@ fn run_dry_run_binary() {
 }
 
 #[test]
+fn run_dry_run_json_binary() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-dryrun-json");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args(["run", "src/main.rs", "--dry-run", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""protocol_version": 1"#))
+        .stdout(predicate::str::contains(r#""program": "cargo""#))
+        .stdout(predicate::str::contains(r#""shell":"#))
+        .stdout(predicate::str::contains(r#""strategy": "cargo""#));
+}
+
+#[test]
 fn run_dry_run_rust_script() {
     let tmp = TempDir::new().unwrap();
     scaffold_rust_script_file(tmp.path(), "power.rs");
@@ -966,6 +991,76 @@ fn analyze_binary_file() {
         .success()
         .stdout(predicate::str::contains("Analyzing"))
         .stdout(predicate::str::contains("main"));
+}
+
+#[test]
+fn runnables_json_binary_file() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-runnables-json");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args(["runnables", "src/main.rs", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""label":"#))
+        .stdout(predicate::str::contains(r#""file_path":"#))
+        .stdout(predicate::str::contains("main.rs"));
+}
+
+#[test]
+fn runnables_json_with_commands() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-runnables-cmds");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args(["runnables", "src/main.rs", "--json", "--with-commands"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""command":"#))
+        .stdout(predicate::str::contains(r#""shell":"#))
+        .stdout(predicate::str::contains(r#""program":"#));
+}
+
+#[test]
+fn override_list_json_empty() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-override-list");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args(["override", "--list", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[]"));
 }
 
 #[test]

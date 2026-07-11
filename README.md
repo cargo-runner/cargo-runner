@@ -18,6 +18,18 @@ Alternatively, you can build from source:
 cargo install cargo-runner-cli
 ```
 
+### VS Code extension
+
+A VS Code adapter lives in [`extensions/vscode`](extensions/vscode). It auto-downloads the CLI, binds **Cmd+R** / **Cmd+Shift+R**, and shows runnables/overrides in the sidebar.
+
+```bash
+make vscode
+# F5 with extensions/vscode, or package a VSIX:
+make vscode-package
+```
+
+Machine-readable CLI contracts for IDE integrations: [`docs/ide-protocol.md`](docs/ide-protocol.md).
+
 ---
 
 ## Build System & Framework Detection

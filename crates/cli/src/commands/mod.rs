@@ -19,7 +19,7 @@ pub use build_sync::build_sync_command;
 pub use clean::clean_command;
 pub use context::context_command;
 pub use init::init_command;
-pub use override_cmd::override_command;
+pub use override_cmd::{list_overrides_command, override_command, show_override_command};
 pub use run::run_command;
 pub use unset::unset_command;
 pub use watch::watch_command;

@@ -1,0 +1,360 @@
+{
+  "name": "cargo-runner",
+  "displayName": "Cargo Runner",
+  "description": "Run, test, build, and debug Rust (and Bazel/Dioxus/Leptos) with cargo-runner. Cmd+R to run, Cmd+Shift+R to override.",
+  "author": "Uriah Galang <codeitlikemiley@gmail.com>",
+  "license": "MIT",
+  "version": "0.1.0",
+  "publisher": "cargo-runner",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cargo-runner/cargo-runner"
+  },
+  "homepage": "https://github.com/cargo-runner/cargo-runner",
+  "bugs": {
+    "url": "https://github.com/cargo-runner/cargo-runner/issues"
+  },
+  "engines": {
+    "vscode": "^1.89.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Debuggers",
+    "Other"
+  ],
+  "keywords": [
+    "rust",
+    "cargo",
+    "bazel",
+    "test",
+    "dioxus",
+    "leptos",
+    "runner",
+    "debug"
+  ],
+  "activationEvents": [
+    "onLanguage:rust",
+    "workspaceContains:**/Cargo.toml",
+    "workspaceContains:**/MODULE.bazel"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "rust-lang.rust-analyzer",
+    "vadimcn.vscode-lldb"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "cargoRunner.run",
+        "title": "Run at Cursor",
+        "category": "Cargo Runner",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cargoRunner.override",
+        "title": "Override Config",
+        "category": "Cargo Runner",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "cargoRunner.runAt",
+        "title": "Run at Location",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.debugAt",
+        "title": "Debug at Location",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.overrideAt",
+        "title": "Override at Location",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.selectRunnable",
+        "title": "Select and Run Runnable",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.runTreeItem",
+        "title": "Run",
+        "category": "Cargo Runner",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cargoRunner.overrideTreeItem",
+        "title": "Override",
+        "category": "Cargo Runner",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "cargoRunner.copyCommand",
+        "title": "Copy Command",
+        "category": "Cargo Runner",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "cargoRunner.runOverride",
+        "title": "Run Override",
+        "category": "Cargo Runner",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cargoRunner.deleteOverride",
+        "title": "Delete Override",
+        "category": "Cargo Runner",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargoRunner.setupBinary",
+        "title": "Setup Binary",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.updateBinary",
+        "title": "Update Binary",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.refreshRunnables",
+        "title": "Refresh Runnables",
+        "category": "Cargo Runner",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cargoRunner.refreshOverrides",
+        "title": "Refresh Overrides",
+        "category": "Cargo Runner",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cargoRunner.toggleWorkspaceScan",
+        "title": "Toggle Workspace Scan",
+        "category": "Cargo Runner",
+        "icon": "$(folder-library)"
+      },
+      {
+        "command": "cargoRunner.init",
+        "title": "Initialize Config",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.clean",
+        "title": "Clean",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.watch",
+        "title": "Watch",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.context",
+        "title": "Show Context (JSON)",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.showOutput",
+        "title": "Show Output",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.openRunnables",
+        "title": "Open Runnables View",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.showDebugInfo",
+        "title": "Show Debug Info",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.toggleBreakpointDetection",
+        "title": "Toggle Breakpoint Detection",
+        "category": "Cargo Runner"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "cargoRunner.run",
+        "key": "ctrl+r",
+        "mac": "cmd+r",
+        "when": "editorTextFocus && resourceExtname == .rs"
+      },
+      {
+        "command": "cargoRunner.override",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorTextFocus && resourceExtname == .rs"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cargo-runner",
+          "title": "Cargo Runner",
+          "icon": "$(play-circle)"
+        }
+      ]
+    },
+    "views": {
+      "cargo-runner": [
+        {
+          "id": "cargoRunner.runnables",
+          "name": "Runnables",
+          "icon": "$(list-tree)",
+          "contextualTitle": "Cargo Runner Runnables"
+        },
+        {
+          "id": "cargoRunner.overrides",
+          "name": "Overrides",
+          "icon": "$(settings-gear)",
+          "contextualTitle": "Cargo Runner Overrides"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "cargoRunner.refreshRunnables",
+          "when": "view == cargoRunner.runnables",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cargoRunner.toggleWorkspaceScan",
+          "when": "view == cargoRunner.runnables",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cargoRunner.refreshOverrides",
+          "when": "view == cargoRunner.overrides",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cargoRunner.runTreeItem",
+          "when": "view == cargoRunner.runnables && viewItem == cargoRunnerRunnable",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargoRunner.overrideTreeItem",
+          "when": "view == cargoRunner.runnables && viewItem == cargoRunnerRunnable",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargoRunner.runTreeItem",
+          "when": "view == cargoRunner.runnables && viewItem == cargoRunnerRunnable",
+          "group": "1_run@1"
+        },
+        {
+          "command": "cargoRunner.overrideTreeItem",
+          "when": "view == cargoRunner.runnables && viewItem == cargoRunnerRunnable",
+          "group": "1_run@2"
+        },
+        {
+          "command": "cargoRunner.copyCommand",
+          "when": "view == cargoRunner.runnables && viewItem == cargoRunnerRunnable",
+          "group": "1_run@3"
+        },
+        {
+          "command": "cargoRunner.runOverride",
+          "when": "view == cargoRunner.overrides && viewItem == cargoRunnerOverride",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargoRunner.deleteOverride",
+          "when": "view == cargoRunner.overrides && viewItem == cargoRunnerOverride",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargoRunner.runOverride",
+          "when": "view == cargoRunner.overrides && viewItem == cargoRunnerOverride",
+          "group": "1_run@1"
+        },
+        {
+          "command": "cargoRunner.deleteOverride",
+          "when": "view == cargoRunner.overrides && viewItem == cargoRunnerOverride",
+          "group": "1_run@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Cargo Runner",
+      "properties": {
+        "cargoRunner.path": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the cargo-runner binary. Leave empty for auto-download, or set to 'cargo-runner' to use PATH."
+        },
+        "cargoRunner.useTaskRunner": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use VS Code tasks for better concurrency (long-running dx serve / cargo leptos watch)."
+        },
+        "cargoRunner.enableCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show CodeLens Run / Debug / Override actions above runnables."
+        },
+        "cargoRunner.enableBreakpointDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "When breakpoints exist in the current symbol, Cmd+R starts a debug session."
+        },
+        "cargoRunner.showOutput": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reveal the terminal/output when running a command."
+        },
+        "cargoRunner.cliMinVersion": {
+          "type": "string",
+          "default": "1.0.0",
+          "description": "Minimum cargo-runner CLI version required by this extension."
+        },
+        "cargoRunner.releaseRepo": {
+          "type": "string",
+          "default": "cargo-runner/cargo-runner",
+          "description": "GitHub repo used to download prebuilt CLI binaries."
+        }
+      }
+    },
+    "taskDefinitions": [
+      {
+        "type": "cargo-runner",
+        "required": ["args"],
+        "properties": {
+          "args": {
+            "type": "array",
+            "description": "Arguments passed to cargo-runner"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Working directory"
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package-ext",
+    "compile": "tsc -p ./",
+    "watch": "node esbuild.js --watch",
+    "package-ext": "node esbuild.js --production",
+    "package": "vsce package --no-dependencies",
+    "build": "npm run compile && npm run package-ext",
+    "lint": "tsc -p ./ --noEmit"
+  },
+  "dependencies": {
+    "tar": "^7.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/tar": "^6.1.13",
+    "@types/vscode": "1.89.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2"
+  }
+}
