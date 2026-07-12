@@ -6,19 +6,23 @@ The core build engine for the `cargo-runner` project. Handles command generation
 
 ## Installation
 
-The recommended way to install is via `cargo-binstall` to download pre-compiled binaries directly from GitHub Releases:
+**Prebuilt binary** (fastest; from GitHub Releases):
 
 ```bash
 cargo binstall cargo-runner-cli
 ```
 
-Alternatively, you can build from source:
+**From crates.io** (builds from source):
 
 ```bash
 cargo install cargo-runner-cli
 ```
 
-### VS Code extension
+**VS Code:** install [Cargo Runner](https://marketplace.visualstudio.com/items?itemName=masterustacean.cargo-runner) (`masterustacean.cargo-runner`). It can auto-download a matching CLI from Releases.
+
+See **[CHANGELOG.md](CHANGELOG.md)** for release history.
+
+### VS Code extension (dev)
 
 A VS Code adapter lives in [`extensions/vscode`](extensions/vscode). It auto-downloads the CLI, binds **Cmd+R** / **Cmd+Shift+R**, and shows runnables/overrides in the sidebar.
 
