@@ -7,3 +7,7 @@ esbuild.js
 **/*.map
 .gitignore
 *.vsix
+images/icon-source.html
+images/icon-512.png
+images/icon-128.png
+# keep images/icon.png (extension marketplace icon)

@@ -10,6 +10,14 @@ published on GitHub as tag `cargo-runner-cli-v{VERSION}`.
 
 ---
 
+## [2.1.2] — 2026-07-13
+
+### Added
+
+- **VS Code extension icon** (`images/icon.png`, 256×256) + dark `galleryBanner` so Marketplace no longer shows the empty placeholder.
+
+---
+
 ## [2.1.1] — 2026-07-13
 
 ### Changed
