@@ -3,7 +3,7 @@
 Machine-readable CLI contracts for the VS Code (and future) adapters.
 
 **Protocol version:** 1  
-**Version parity:** CLI and VS Code extension share the same semver (e.g. both `1.6.2`).  
+**Version parity:** CLI and VS Code extension share the same semver (e.g. both `2.1.x`).  
 Release tags: `cargo-runner-cli-v{version}`. The extension prefers downloading that exact tag.
 
 All JSON success modes print **only** JSON on stdout (no emoji banners).
@@ -166,7 +166,7 @@ Parser: `OverrideManager::parse_override_args` in `crates/core/src/config/overri
 
 Tags: `cargo-runner-cli-v*` — **must match** the VS Code extension `package.json` version.
 
-Example: extension `1.6.2` downloads tag `cargo-runner-cli-v1.6.2`.
+Example: extension `2.1.1` downloads tag `cargo-runner-cli-v2.1.1`.
 
 Asset pattern:
 
@@ -192,7 +192,7 @@ Multi-platform builds: `.github/workflows/release.yml` (triggered by tag push).
 
 ---
 
-## Extension settings (planned)
+## Extension settings
 
 ```jsonc
 {
@@ -200,9 +200,12 @@ Multi-platform builds: `.github/workflows/release.yml` (triggered by tag push).
   "cargoRunner.useTaskRunner": true,
   "cargoRunner.enableCodeLens": true,
   "cargoRunner.enableBreakpointDetection": true,
-  "cargoRunner.cliMinVersion": "1.0.0",
+  "cargoRunner.checkCliUpdates": true,
+  "cargoRunner.cliUpdateCheckIntervalHours": 24,
   "cargoRunner.releaseRepo": "cargo-runner/cargo-runner"
 }
 ```
 
-Project config remains **`.cargo-runner.json`** only.
+Project config remains **`.cargo-runner.json`** only (shared with CLI).
+
+Palette commands of note: **Cargo Runner: Agent Init** → `agent-init` (no shell script).

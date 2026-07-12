@@ -1,8 +1,8 @@
 # Limitations & intentional hold-offs
 
-Cargo Runner aims for fast, source-level resolution without driving a full
-rustc/rustdoc expansion pipeline. These cases are **out of scope** (or limited)
-by design.
+Cargo Runner aims for fast, source-level resolution **without rust-analyzer** and
+without a full rustc/rustdoc expansion pipeline. These cases are **out of scope**
+(or limited) by design.
 
 | Case | Behavior | Escape hatch |
 |------|----------|--------------|
@@ -11,6 +11,7 @@ by design.
 | Bazel per-example doctest | Runs **all** crate doctests | Accept crate-level run; note in dry-run `warnings` |
 | ibazel | Not integrated | `cargo runner watch` (notify) or install `cargo-watch` |
 | `watch` without a file:line | Project-level build/run/test only | `watch path/to/file.rs:LINE` replays resolved `run` command |
+| Custom tools not auto-detected (Spin, make, …) | Default may be wrong | `cargo runner override <entry> -- @tool.sub …` once, then plain `run` |
 
 ## Scoped doctests (supported)
 
@@ -21,4 +22,9 @@ mod / union / **trait** / impl method. Fence tags `ignore`, `no_run`, and
 ## IDE JSON errors
 
 When using `--json` (or `run --dry-run --json`), failures emit a structured
-object on stdout (see `docs/ide-protocol.md`).
+object on stdout (see [ide-protocol.md](./ide-protocol.md)).
+
+## Agent instructions
+
+See [AGENTS.cargo-runner.md](./AGENTS.cargo-runner.md) for the scan → run →
+override once → plain run loop.

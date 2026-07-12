@@ -14,127 +14,110 @@ The extension downloads **`cargo-runner-cli-v{extensionVersion}`**, so the numbe
 
 ## Bump policy
 
-Use **semver** with this product rule:
-
 | What changed | Bump | Example |
 |--------------|------|---------|
-| **VS Code extension** features/UX/UI (or any user-facing product release that includes the extension) | **minor** (patch → `0`) | `1.6.3` → **`1.7.0`** |
-| **CLI / core only** (engine, plugins, overrides, doctests, doctor, …) | **patch** | `1.7.0` → **`1.7.1`** |
-| Breaking API / protocol / remove features | **major** | `1.7.1` → **`2.0.0`** |
-
-Examples (same idea as `0.1` → `0.2` for product, then `0.2.1` for CLI fixes):
+| **VS Code** features / UX / product surface | **minor** (patch → `0`) | `2.1.0` → **`2.2.0`** |
+| **CLI / core only**, or **docs-only** re-publish so crates.io + marketplace show new README | **patch** | `2.1.0` → **`2.1.1`** |
+| Breaking API / protocol | **major** | `2.1.1` → **`3.0.0`** |
 
 ```text
-1.6.3   current
-1.7.0   new VS Code UI + maybe CLI  → publish extension + CLI tag + crates.io
-1.7.1   CLI-only Spin/Leptos fix    → CLI tag + crates.io  (extension marketplace optional)
-1.7.2   another CLI-only fix
-1.8.0   next VS Code feature drop
+2.1.0   product (Agent Init + agent-init CLI)
+2.1.1   docs polish / small CLI fixes  → tag + crates.io + marketplace if README should update there
+2.2.0   next VS Code feature drop
 ```
 
 ### CLI-only vs Marketplace
 
-- **CLI-only patch:** always ship GitHub tag + crates.io. You do **not** have to publish a new VSIX if the extension code did not change.
-- **Caveat:** Marketplace users still have extension version `X.Y.Z` and download `cargo-runner-cli-vX.Y.Z`.  
-  - Prefer **bumping the shared version (patch)** so the next “Download CLI” after a git-synced build matches, **or** re-upload binaries under the same tag only when necessary (crates.io cannot overwrite a version).  
-  - Cleanest CLI-only path: **`./scripts/release.sh cli`** (patch) → users update via `cargo binstall` / PATH, and the extension can re-download when its version is bumped or when Download CLI falls back to **latest** if the exact tag is missing.
+- **CLI-only patch:** ship GitHub tag + crates.io. Marketplace optional if extension code did not change.
+- **Docs / README visibility on Marketplace:** bump shared version and publish with `--marketplace` so the VSIX embeds the new README.
+- Marketplace users download `cargo-runner-cli-v{extensionVersion}` — keep tag and extension version in lockstep when shipping both.
 
 ---
 
 ## Script: `./scripts/release.sh`
 
 ```bash
-# CLI / core only → patch (1.6.3 → 1.6.4)
+# CLI / core / docs patch
 ./scripts/release.sh cli
 
-# VS Code / product surface → minor (1.6.3 → 1.7.0)
+# VS Code / product surface → minor
 ./scripts/release.sh vscode
 
-# Breaking → major (1.6.3 → 2.0.0)
+# Breaking → major
 ./scripts/release.sh major
 
 # Explicit version
-./scripts/release.sh 1.7.0
+./scripts/release.sh 2.1.1
 
 # Options
-./scripts/release.sh cli --no-crates      # skip crates.io
-./scripts/release.sh vscode --marketplace # also vsce publish
-./scripts/release.sh cli --dry-run        # print plan only
-./scripts/release.sh cli --no-push        # commit/tag locally only
+./scripts/release.sh cli --no-crates
+./scripts/release.sh cli --marketplace   # also vsce publish
+./scripts/release.sh vscode --marketplace
+./scripts/release.sh cli --dry-run
+./scripts/release.sh cli --no-push
 ```
 
 What the script does (unless dry-run):
 
-1. Bumps `Cargo.toml` workspace version, `crates/cli` core dep, `extensions/vscode/package.json`
-2. Appends a stub section to `CHANGELOG.md` if missing for that version
+1. Bumps workspace version, CLI core dep pin, VS Code `package.json`
+2. Appends a CHANGELOG stub if missing for that version
 3. Commits + pushes `main` (unless `--no-push`)
-4. Creates annotated tag `cargo-runner-cli-v{VERSION}` and pushes it (triggers multi-arch GitHub Release)
-5. Publishes `cargo-runner-core` then `cargo-runner-cli` to crates.io (unless `--no-crates` or version already published)
-6. Optionally `vsce publish` for the extension (`--marketplace`)
+4. Creates annotated tag `cargo-runner-cli-v{VERSION}` and pushes it
+5. Publishes `cargo-runner-core` then `cargo-runner-cli` to crates.io
+6. Optionally `vsce publish` (`--marketplace`)
 
-**Makefile:**
-
-```bash
-make release-cli
-make release-vscode
-make release VERSION=1.7.0
-```
+**Makefile:** `make release-cli` · `make release-vscode` · `make release VERSION=2.1.1`
 
 ---
 
-## Checklist (humans)
+## Checklist
 
-### CLI-only (`release.sh cli`)
+### Patch (`release.sh cli`)
 
-- [ ] CHANGELOG entry under the new patch
-- [ ] Tests / clippy green
+- [ ] CHANGELOG entry
+- [ ] Tests green
 - [ ] Tag + GitHub Actions release green
-- [ ] crates.io `cargo-runner-cli` shows new version
+- [ ] crates.io shows new version
 - [ ] Smoke: `cargo binstall cargo-runner-cli` or Download CLI
+- [ ] If README should appear on Marketplace: pass `--marketplace`
 
-### VS Code / product (`release.sh vscode`)
+### Minor (`release.sh vscode`)
 
-- [ ] CHANGELOG entry under the new minor
+- [ ] CHANGELOG entry
 - [ ] Extension builds: `make vscode-package`
-- [ ] CLI tag + crates.io as above
-- [ ] `vsce publish` (or `./scripts/release.sh vscode --marketplace`)
-- [ ] Marketplace page shows new version; extension id `masterustacean.cargo-runner`
+- [ ] CLI tag + crates.io
+- [ ] `vsce publish` / `--marketplace`
+- [ ] Marketplace shows version; id `masterustacean.cargo-runner`
 
 ### Never
 
 - Do not re-publish the same version on **crates.io**
-- Do not bump major for routine CLI fixes
-- Do not ship extension-only version that cannot resolve a matching `cargo-runner-cli-v*` tag (unless Download CLI is intentionally set to “latest”)
+- Do not bump major for routine fixes
+- Do not ship extension-only version without a matching `cargo-runner-cli-v*` tag (unless Download CLI intentionally uses latest)
 
 ---
 
 ## Agent instructions installer
 
-Install LLM / agent rules into a consumer project:
-
 ```bash
 # VS Code: Command Palette → "Cargo Runner: Agent Init"
-
-# CLI (preferred when not using VS Code):
 cargo runner agent-init --root ~/Code/my-app
 cargo runner agent-init --dry-run
 cargo runner agent-init AGENTS.md CLAUDE.md
 
-# From a cargo-runner checkout (script, same behavior):
+# Optional script (same behavior):
 ./scripts/install-agent-instructions.sh --root ~/Code/my-app
-./scripts/install-agent-instructions.sh --dry-run
 ```
 
-See [AGENTS.cargo-runner.md](./AGENTS.cargo-runner.md).  
-Symlinks are followed and **deduped** (only the real file is written).
+See [AGENTS.cargo-runner.md](./AGENTS.cargo-runner.md). Symlinks are followed and **deduped**.
 
 ---
 
 ## Version sources of truth
 
 ```text
-Cargo.toml                    [workspace.package] version = "X.Y.Z"
-crates/cli/Cargo.toml         cargo-runner-core = { version = "X.Y.Z", path = "..." }
+Cargo.toml                      [workspace.package] version = "X.Y.Z"
+crates/cli/Cargo.toml           cargo-runner-core = { version = "X.Y.Z", path = "..." }
 extensions/vscode/package.json  "version": "X.Y.Z"
-GitHub tag                    cargo-runner-cli-vX.Y.Z
+GitHub tag                      cargo-runner-cli-vX.Y.Z
 ```

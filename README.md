@@ -1,72 +1,100 @@
 # Cargo Runner
 
-The core build engine for the `cargo-runner` project. Handles command generation, build-system detection, framework dispatch, and per-function override resolution for Cargo, Bazel, Rustc, single-file-script targets, and custom frameworks like Dioxus, Leptos, and Tauri.
+**Run Rust without waiting for rust-analyzer** — and stop AI agents from inventing the wrong `cargo test` every chat.
+
+Cargo Runner has its own **scope / runnables engine**. Point it at a file or `file:line` and it builds the right command for:
+
+| Support | Examples |
+|---------|----------|
+| **Cargo** | run · test · bench · doc |
+| **rustc** | standalone files |
+| **Single-file scripts** | `cargo +nightly -Zscript`, `rust-script` |
+| **Bazel** | run · test · bench (from source path, not hand-written labels) |
+| **Frameworks** | Dioxus (`dx`), Leptos (`cargo leptos`), Tauri (`cargo tauri`) |
+| **Custom tools** | Spin, make, anything — **override once**, then plain `run` forever |
+
+CLI and VS Code extension share one version. Config lives in **`.cargo-runner.json`**.
+
+| | |
+|--|--|
+| **CLI** | `cargo binstall cargo-runner-cli` / `cargo install cargo-runner-cli` |
+| **VS Code** | [masterustacean.cargo-runner](https://marketplace.visualstudio.com/items?itemName=masterustacean.cargo-runner) |
+| **Changelog** | [CHANGELOG.md](CHANGELOG.md) · release process [docs/release.md](docs/release.md) |
+| **Agent playbook** | [docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md) |
+| **IDE JSON** | [docs/ide-protocol.md](docs/ide-protocol.md) |
+| **Limits** | [docs/limitations.md](docs/limitations.md) |
 
 ---
 
-## Installation
-
-**Prebuilt binary** (fastest; from GitHub Releases):
+## Quick start
 
 ```bash
-cargo binstall cargo-runner-cli
+cargo binstall cargo-runner-cli          # or: cargo install cargo-runner-cli
+cd your-rust-project
+cargo runner init                        # once → .cargo-runner.json
+cargo runner runnables --json --with-commands   # scan what can run
+cargo runner run src/lib.rs:42           # test/doc under that line
+cargo runner run src/main.rs             # binary / app entry
 ```
 
-**From crates.io** (builds from source):
+**VS Code:** install the extension → **Cmd+R** / **Ctrl+R** run at cursor · **Cmd+Shift+R** override.
+
+### Custom tools (Spin, make, …)
+
+When the default is wrong (e.g. Leptos overlay but you need Spin):
 
 ```bash
-cargo install cargo-runner-cli
+# once — bind to the entry you will keep running
+cargo runner override src/main.rs -- @spin.build --up
+# no main.rs? use the lib or bin path:
+# cargo runner override src/lib.rs -- @make.test
+
+# forever after — no tokens, override is automatic
+cargo runner run src/main.rs
 ```
 
-**VS Code:** install [Cargo Runner](https://marketplace.visualstudio.com/items?itemName=masterustacean.cargo-runner) (`masterustacean.cargo-runner`). It can auto-download a matching CLI from Releases.
+---
 
-See **[CHANGELOG.md](CHANGELOG.md)** for release history and **[docs/release.md](docs/release.md)** for how we version and ship (CLI patch vs VS Code minor).
+## AI / coding agents
 
-### AI / coding agents
+Agents should **scan → run if supported → override once if not → plain `run` forever**. Full instructions: [docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md).
 
-Point your project’s `AGENTS.md` (Cursor, Claude Code, Gemini, etc.) at cargo-runner so models **run tests without guessing Cargo commands**.
+**Install those instructions into a project** (no need to copy-paste by hand):
 
-**VS Code (recommended):** Command Palette → **Cargo Runner: Agent Init**  
-(uses the extension CLI; no shell script).
-
-**CLI:**
+| Method | Command |
+|--------|---------|
+| **VS Code** | Palette → **Cargo Runner: Agent Init** |
+| **CLI** | `cargo runner agent-init` · `cargo runner agent-init --dry-run` |
+| **Script** (optional) | `./scripts/install-agent-instructions.sh --root /path/to/app` |
 
 ```bash
 cargo runner agent-init --root /path/to/your-rust-app
-cargo runner agent-init --root /path/to/app AGENTS.md CLAUDE.md
-cargo runner agent-init --root /path/to/app --dry-run
+cargo runner agent-init AGENTS.md CLAUDE.md
 ```
 
-**Script (same behavior):**
+Installers find `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, Cursor/Copilot paths, etc.; **follow symlinks** and **dedupe** real files; upsert a managed HTML-comment block (safe to re-run).
+
+---
+
+## Installation details
 
 ```bash
-# From a cargo-runner checkout — scan a project and update common agent files
-./scripts/install-agent-instructions.sh --root /path/to/your-rust-app
-./scripts/install-agent-instructions.sh --root /path/to/app AGENTS.md CLAUDE.md
-./scripts/install-agent-instructions.sh --root /path/to/app --dry-run
+# Prebuilt (fast)
+cargo binstall cargo-runner-cli
+
+# From source
+cargo install cargo-runner-cli
 ```
 
-Installers:
+**VS Code** auto-downloads CLI tag `cargo-runner-cli-v{extensionVersion}` from GitHub Releases (or use PATH / `cargoRunner.path`).
 
-- Find `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.cursor/rules/*`, Copilot instructions, etc.
-- **Follow symlinks** and **dedupe** (if `AGENTS.md` → `CLAUDE.md`, only the real file is updated once)
-- Upsert a managed block between HTML comments (safe to re-run)
-
-Source text: [docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md). Override source with `--source` or `CARGO_RUNNER_AGENT_DOC`.
-
-Overrides (e.g. `spin build --up`) live in `.cargo-runner.json` — set once with `cargo runner override`, then plain `cargo runner run` / VS Code **Cmd+R** reuses them.
-
-### VS Code extension (dev)
-
-A VS Code adapter lives in [`extensions/vscode`](extensions/vscode). It auto-downloads the CLI, binds **Cmd+R** / **Cmd+Shift+R**, and shows runnables/overrides in the sidebar.
+### Extension development
 
 ```bash
 make vscode
-# F5 with extensions/vscode, or package a VSIX:
+# F5 with extensions/vscode open, or:
 make vscode-package
 ```
-
-Machine-readable CLI contracts for IDE integrations: [`docs/ide-protocol.md`](docs/ide-protocol.md).
 
 ---
 
@@ -372,7 +400,10 @@ Deduplication is name-aware and content-aware:
 | `cargo runner watch` | Context-aware file watcher: notify + bazel run/test/build (Bazel), or cargo-watch / notify fallback (Cargo) |
 | `cargo runner run <file\|module::path>[:<line>]` | Scope-based execution: detects build system and runs the target at the given line or module path |
 | `cargo runner runnables [file\|module::path[:line]] [--bin] [--test] [--bench] [--doc] [--name QUERY] [--symbol SYMBOL] [--exact]` | List runnable items for a file, module path, or entire workspace |
-| `cargo runner context [file\|module::path[:line]] --json` | Emit machine-readable project/file context for TMP and other tooling |
+| `cargo runner context [file\|module::path[:line]] --json` | Emit machine-readable project/file context for IDEs and agents |
+| `cargo runner agent-init [PATH...]` | Install agent instructions into AGENTS.md / CLAUDE.md / Cursor / Copilot |
+| `cargo runner doctor [--json]` | Project + toolchain health checks |
+| `cargo runner override …` | Persist custom commands (spin, make, env, …) in `.cargo-runner.json` |
 
 ---
 
@@ -584,41 +615,23 @@ cargo runner override src/main.rs -- -
 
 ---
 
-## Waz Integration
+## Selectors & filters
 
-If you use `waz`, the same lookup model is available there too:
+`cargo runner run` accepts:
 
-```bash
-waz run src/main.rs:25
-waz run runners::unified_runner::tests
-waz runnables
-waz runnables runners::unified_runner::tests
-```
-
-`waz run` is the non-interactive path; it reuses the same project and
-module-path resolution so you can skip the TUI when you already know what you
-want to run.
-
-`waz runnables` is the companion listing command when you want to inspect the
-available run targets first, either for the whole workspace or for a specific
-module path.
-
-`--bin`, `--test`, `--bench`, and `--doc` narrow the result set by runnable
-kind. `--name` does a case-insensitive, punctuation-insensitive substring
-match against the label, module path, and function name. Add `--exact` to
-require the normalized name to match exactly instead of by substring, so
-`foo bar`, `foo_bar`, and `FooBar` still collapse to the same search key but
-`foo` will no longer match `foobar` when `--exact` is present.
-
-`--symbol` filters symbol-like targets, such as doc-tested structs, enums,
-unions, module test groups, and binary names. It can be combined with `--name`
-and the kind filters.
-
-`cargo runner run` accepts the same selector styles:
-
+- file / line: `cargo runner run src/lib.rs:42`
 - bare function or method name: `cargo runner run test_helper`
-- full module path plus function: `cargo runner run runners::unified_runner::tests::test_helper`
+- full module path: `cargo runner run runners::unified_runner::tests::test_helper`
 - doc-test symbol: `cargo runner run Users`
+
+`runnables` filters:
+
+| Flag | Meaning |
+|------|---------|
+| `--bin` / `--test` / `--bench` / `--doc` | Kind filters |
+| `--name QUERY` | Case- and punctuation-insensitive substring on label / module / function |
+| `--exact` | Exact normalized name match (not substring) |
+| `--symbol SYMBOL` | Symbol-like targets (structs, enums, bins, module groups, …) |
 
 ---
 

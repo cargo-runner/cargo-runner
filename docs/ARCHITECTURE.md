@@ -20,6 +20,8 @@ cargo-runner/
 | **Config** | `crates/core/src/config/` | v2 schema: `BazelConfig`, `BazelOverride`, `Override` |
 | **Error Handling** | `crates/core/src/error.rs` | Strongly-typed `thiserror` variants defining distinct error conditions without generic string wrappers. |
 | **CLI Modules** | `crates/cli/src/{commands,config,display,utils}/` | Fully decoupled CLI routing. Each subcommand lives in its own module. |
+| **Agent init** | `crates/cli/src/commands/agent_init.rs` + `assets/AGENTS.cargo-runner.md` | Upserts managed agent instructions into consumer projects (symlink-safe). |
+| **VS Code adapter** | `extensions/vscode/` | Cmd+R / overrides / CodeLens / Agent Init; downloads matching CLI tag. |
 
 ### Stability & Idiomatic Rust
 The Cargo Runner codebase is designed with strict resilience:

@@ -11,19 +11,22 @@
 
 Use **cargo-runner** so you do not invent `cargo test` / Bazel / framework commands.
 
-**Full copy-paste instructions for user projects:**
+**Full copy-paste instructions:** → **[docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md)**  
+**Install into a user project:** `cargo runner agent-init` or VS Code **Cargo Runner: Agent Init**
 
-→ **[docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md)**
+### Decision loop (always)
 
-### Quick rules
+```text
+1. INIT once:  .cargo-runner.json missing? → cargo runner init
+2. SCAN:       cargo runner runnables --json --with-commands
+               cargo runner run <entry> --dry-run --json
+3. SUPPORTED?  → cargo runner run <entry>
+4. NOT OK?     (spin / make / wrong framework default)
+               → cargo runner override <entry> -- @tool.sub …
+5. FOREVER:    cargo runner run <entry>   # NO override tokens again
+```
 
-1. `cargo runner init` once if `.cargo-runner.json` is missing.  
-2. Discover: `cargo runner runnables [path] --json --with-commands`.  
-3. Run: `cargo runner run path/to/file.rs:LINE` (1-based line).  
-4. Preview: `cargo runner run … --dry-run --json`.  
-5. Permanent custom command (Spin/Dioxus/env/nightly):  
-   `cargo runner override path -- @spin.build --up` **once**, then plain `run` forever.  
-6. List/remove: `override --list` / `override path -- -`.
+`<entry>` = `src/main.rs` if present, else `src/lib.rs` (or the bin/test path you mean).
 
 ### Install (user machines)
 
@@ -33,4 +36,4 @@ cargo binstall cargo-runner-cli
 cargo install cargo-runner-cli
 ```
 
-VS Code: marketplace extension **`masterustacean.cargo-runner`** (Cmd+R / Cmd+Shift+R).
+VS Code: marketplace **`masterustacean.cargo-runner`** (Cmd+R / Cmd+Shift+R / Agent Init).

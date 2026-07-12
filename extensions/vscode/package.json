@@ -1,7 +1,7 @@
 {
   "name": "cargo-runner",
   "displayName": "Cargo Runner",
-  "description": "Run, test, build, and debug Rust (and Bazel/Dioxus/Leptos) with cargo-runner. Cmd+R to run, Cmd+Shift+R to override.",
+  "description": "Run Rust without waiting for rust-analyzer. Cargo, Bazel, Dioxus/Leptos/Tauri, custom tools (Spin/make). Cmd+R, overrides, Agent Init for AI.",
   "author": "Uriah Galang <codeitlikemiley@gmail.com>",
   "license": "MIT",
   "version": "2.1.0",

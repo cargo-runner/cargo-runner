@@ -1,52 +1,61 @@
 # Cargo Runner for VS Code
 
-Run, test, build, and override Rust targets with the **cargo-runner** CLI — Cargo, Bazel, Dioxus, Leptos, Tauri, and standalone files.
+Run, test, build, and override Rust targets with the **cargo-runner** CLI — **without waiting for rust-analyzer** to index.
+
+Supports **Cargo**, **Bazel**, **Dioxus / Leptos / Tauri**, **rustc** / single-file scripts, and **custom tools** (Spin, make, …) via sticky overrides.
+
+CLI and extension share the same version (e.g. both **2.1.x**).
 
 ## Features
 
 - **`Cmd+R` / `Ctrl+R`** — run the best target at the cursor
 - **`Cmd+Shift+R` / `Ctrl+Shift+R`** — set override tokens, then save & run
 - **CodeLens** — ▶ Run · Debug · ⚙ Override above each detected runnable
-- **Sidebar** — browse runnables and overrides; run/override/delete from context menus
-- **Auto binary** — downloads a prebuilt `cargo-runner` from GitHub Releases (or uses PATH)
-- **Task runner** — long-running commands (`dx serve`, `cargo leptos watch`) as VS Code tasks
-- **Breakpoint awareness** — Cmd+R uses rust-analyzer Debug CodeLens when BPs are in the current function
-- **Palette commands** — init, **Agent Init**, clean, watch, context dump, select runnable
-- **Agent Init** — install cargo-runner instructions into `AGENTS.md` / `CLAUDE.md` / Cursor / Copilot files so coding agents use `cargo runner` (no shell script required)
+- **Sidebar** — browse runnables and overrides
+- **Auto binary** — downloads `cargo-runner` from GitHub Releases (or PATH)
+- **Task runner** — long-running commands (`dx serve`, `cargo leptos watch`) as tasks
+- **Breakpoint awareness** — when BPs are present, can use rust-analyzer Debug CodeLens
+- **Agent Init** — palette command installs cargo-runner instructions into `AGENTS.md` / `CLAUDE.md` / Cursor / Copilot (no shell script)
+- **Other palette commands** — init, clean, watch, context dump, select runnable, Download CLI
 
 ## Requirements
 
-- [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) (debug CodeLens / optional BP path)
 - [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
 - Rust toolchain (`cargo` / `rustc`) for your projects
-- **cargo-runner CLI** — same version as this extension (e.g. both `1.6.2`)
+- **cargo-runner CLI** — same version as this extension
 
-### CLI install prompt
+> **Run does not require rust-analyzer.** The extension shells out to the CLI’s own scope engine. RA is only needed for the optional debug/breakpoint path.
 
-On first activate, if the CLI is missing you get **Download CLI** / **Later**.
+### CLI install / update
 
-If you press **Cmd+R** or **Cmd+Shift+R** without a CLI:
+On first activate, if the CLI is missing: **Download CLI** / **Later**.
 
-1. A status-bar toast appears for **5 seconds**
-2. An error notification offers **Download CLI**
-3. Clicking **Download CLI** fetches `cargo-runner-cli-v{extensionVersion}` for your platform, extracts it, runs `chmod +x` (and clears macOS quarantine when possible), then verifies with `--version`
+**Download CLI** fetches `cargo-runner-cli-v{extensionVersion}`, extracts it, `chmod +x`, clears macOS quarantine when possible, verifies with `--version`.
 
-You can also run **Cargo Runner: Download CLI** from the command palette.
+If a **newer CLI** exists on GitHub while this extension is older: toast + **Download Update** / **Later** / **Skip**.
 
-### CLI update prompts (extension stays put)
+| Setting | Default |
+|---------|---------|
+| `cargoRunner.checkCliUpdates` | on |
+| `cargoRunner.cliUpdateCheckIntervalHours` | 24 |
 
-If a **newer CLI** is published on GitHub while the VS Code extension is still an older version, on activate you get:
+Manual: **Cargo Runner: Check for CLI Updates** · **Cargo Runner: Download CLI**.
 
-- Status-bar toast (~5s)
-- Notification: *CLI vX is available (you have vY)* → **Download Update** / **Later** / **Skip this version**
+## Agent Init
 
-Settings: `cargoRunner.checkCliUpdates` (default on), `cargoRunner.cliUpdateCheckIntervalHours` (default 24).  
-Manual check: **Cargo Runner: Check for CLI Updates**.
+Command Palette → **Cargo Runner: Agent Init**
+
+1. Scans / installs agent instructions (managed HTML-comment block)
+2. Agents then **scan** with `runnables`, **run** if supported, **override once** for Spin/make/custom, then plain `cargo runner run <entry>` forever
+
+See [docs/AGENTS.cargo-runner.md](../../docs/AGENTS.cargo-runner.md).
 
 ## Override tokens
 
 ```
 @dx.serve --release RUST_LOG=debug /--nocapture
+@spin.build --up
 ```
 
 | Token | Meaning |
@@ -57,11 +66,10 @@ Manual check: **Cargo Runner: Check for CLI Updates**.
 | `KEY=value` | environment |
 | `/args` or `# args` | test binary args |
 | `-` / `!!` | remove override |
-| `!env` / `!#` | reset fields |
 
-Config is stored in **`.cargo-runner.json`** (shared with the CLI).
+Stored in **`.cargo-runner.json`** (shared with CLI). After override, **Cmd+R** uses it with no extra tokens.
 
-See [IDE protocol](../../docs/ide-protocol.md) for JSON contracts.
+IDE JSON contracts: [docs/ide-protocol.md](../../docs/ide-protocol.md).
 
 ## Settings
 
@@ -78,11 +86,9 @@ See [IDE protocol](../../docs/ide-protocol.md) for JSON contracts.
 cd extensions/vscode
 npm install
 npm run build
-# Press F5 in VS Code with this folder open, or:
+# F5, or:
 code --extensionDevelopmentPath=extensions/vscode
 ```
-
-Use a local CLI during development:
 
 ```json
 {

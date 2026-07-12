@@ -10,6 +10,17 @@ published on GitHub as tag `cargo-runner-cli-v{VERSION}`.
 
 ---
 
+## [2.1.1] — 2026-07-13
+
+### Changed
+
+- Documentation overhaul for **2.x**: product-focused README (quick start, agent decision loop, custom tools).
+- Removed obsolete **Waz** section from README.
+- Aligned VS Code README, `docs/release.md`, `docs/ide-protocol.md`, `docs/limitations.md`, `docs/ARCHITECTURE.md`, and root `AGENTS.md` with agent-init + scan → override → plain run.
+- Release notes use current 2.x version examples.
+
+---
+
 ## [2.1.0] — 2026-07-13
 
 ### Added
