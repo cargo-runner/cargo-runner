@@ -272,6 +272,38 @@ fn identity_for_override(
     }
 }
 
+/// Build a shell command from a cargo-section override when `command` is not `cargo`
+/// (e.g. `@spin.build --up` → `spin build --up`). Used so framework overlays
+/// (Leptos/Tauri) do not force `cargo leptos` / `cargo tauri` over custom tools.
+fn shell_command_from_cargo_override(
+    base: CommandSpec,
+    ov: &crate::config::CargoConfig,
+    cmd: &str,
+) -> CommandSpec {
+    let mut args = Vec::new();
+    if let Some(sub) = &ov.subcommand {
+        args.extend(sub.split_whitespace().map(String::from));
+    }
+    if let Some(extra) = &ov.extra_args {
+        args.extend(extra.clone());
+    }
+    let mut env = base.env.clone();
+    if let Some(extra_env) = &ov.extra_env {
+        env.extend(extra_env.iter().map(|(k, v)| (k.clone(), v.clone())));
+    }
+    CommandSpec {
+        strategy: CommandStrategy::Shell,
+        program: cmd.to_string(),
+        args,
+        working_dir: base.working_dir,
+        env,
+        test_filter: base.test_filter,
+        exec_args: base.exec_args,
+        pipe_command: base.pipe_command,
+        test_binary_args: base.test_binary_args,
+    }
+}
+
 impl crate::plugins::registry::PrimaryPlugin for BazelPrimaryPlugin {
     fn id(&self) -> &'static str {
         "bazel"
@@ -505,6 +537,14 @@ impl crate::plugins::registry::OverlayPlugin for LeptosOverlayPlugin {
             .config
             .get_override_for(&identity_for_override(runnable, ctx));
 
+        // Custom program override (e.g. @spin.build --up) must win over cargo leptos.
+        if let Some(ov) = override_config.and_then(|o| o.cargo.as_ref())
+            && let Some(cmd) = &ov.command
+            && cmd != "cargo"
+        {
+            return Ok(shell_command_from_cargo_override(command, ov, cmd));
+        }
+
         let mut subcommand = "serve".to_string();
         let mut extra_args = Vec::new();
         let mut env = command.env.clone();
@@ -574,16 +614,25 @@ impl crate::plugins::registry::OverlayPlugin for TauriOverlayPlugin {
         }
 
         // Default: cargo tauri dev (hot reload). Override with e.g. @cargo.tauri build
+        // Custom program (e.g. @spin.serve) must win over cargo tauri.
+        let override_cargo = ctx
+            .config
+            .get_override_for(&identity_for_override(runnable, ctx))
+            .and_then(|o| o.cargo.as_ref());
+
+        if let Some(ov) = override_cargo
+            && let Some(cmd) = &ov.command
+            && cmd != "cargo"
+        {
+            return Ok(shell_command_from_cargo_override(command, ov, cmd));
+        }
+
         let mut subcommand = "dev".to_string();
         let mut extra_args = Vec::new();
         let mut env = command.env.clone();
         let mut channel: Option<String> = None;
 
-        if let Some(ov) = ctx
-            .config
-            .get_override_for(&identity_for_override(runnable, ctx))
-            .and_then(|o| o.cargo.as_ref())
-        {
+        if let Some(ov) = override_cargo {
             if let Some(sub) = &ov.subcommand {
                 // Accept "tauri dev", "tauri build", or bare "dev"/"build"
                 subcommand = if let Some(stripped) = sub.strip_prefix("tauri ") {
