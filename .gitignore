@@ -17,3 +17,8 @@ bazel-cargo-runner
 !test_*.rs
 # Local Bazelrc with API keys — never commit
 user.bazelrc
+
+# generated / local screenshot refs
+extensions/vscode/images/icon-128.png
+extensions/vscode/images/icon-512.png
+images/vscode-marketplace-ref.png
