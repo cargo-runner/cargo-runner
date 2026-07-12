@@ -4,7 +4,7 @@
   "description": "Run, test, build, and debug Rust (and Bazel/Dioxus/Leptos) with cargo-runner. Cmd+R to run, Cmd+Shift+R to override.",
   "author": "Uriah Galang <codeitlikemiley@gmail.com>",
   "license": "MIT",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "publisher": "masterustacean",
   "repository": {
     "type": "git",
