@@ -11,12 +11,25 @@ use crate::config::bazel_workspace::find_cargo_workspace_root;
 use crate::display::ide_json::DryRunOutput;
 use crate::utils::parse_filepath_with_line;
 
+/// First-class cargo flags applied before passthrough args.
+#[derive(Debug, Clone, Default)]
+pub struct RunCargoFlags {
+    pub features: Option<String>,
+    pub all_features: bool,
+    pub no_default_features: bool,
+    pub release: bool,
+    pub package: Option<String>,
+    pub nextest: bool,
+    pub no_nextest: bool,
+}
+
 /// Options for `cargo runner run`.
 pub struct RunOptions<'a> {
     pub dry_run: bool,
     pub json: bool,
     pub quiet: bool,
     pub passthrough: &'a [String],
+    pub flags: RunCargoFlags,
 }
 
 pub fn run_command(
@@ -25,6 +38,7 @@ pub fn run_command(
     json: bool,
     quiet: bool,
     passthrough: &[String],
+    flags: RunCargoFlags,
 ) -> Result<()> {
     run_command_with_options(
         filepath_arg,
@@ -33,63 +47,95 @@ pub fn run_command(
             json,
             quiet,
             passthrough,
+            flags,
         },
     )
 }
 
-fn run_command_with_options(filepath_arg: &str, opts: RunOptions<'_>) -> Result<()> {
-    // Parse filepath and line number first
+/// Resolve the command that `run` would execute (for watch replay / dry inspection).
+pub fn resolve_command_for_selector(
+    filepath_arg: &str,
+    flags: RunCargoFlags,
+    passthrough: &[String],
+) -> Result<Command> {
+    let (mut command, _summary) = build_command(filepath_arg, &flags)?;
+    append_passthrough(&mut command, passthrough);
+    Ok(command)
+}
+
+fn build_command(filepath_arg: &str, flags: &RunCargoFlags) -> Result<(Command, String)> {
     let (filepath, line) = parse_filepath_with_line(filepath_arg);
     let cwd = std::env::current_dir()?;
-
     let mut runner = cargo_runner_core::UnifiedRunner::new()?;
 
-    let (mut command, matched_runnable, summary) =
-        match resolve_run_target(&mut runner, &cwd, &filepath)? {
-            RunTarget::File(resolved_path) => {
-                debug!(
-                    "Running file: {} at line: {:?}",
-                    resolved_path.display(),
-                    line
-                );
-                let runnable = if let Some(line_num) = line {
+    let (mut command, summary) = match resolve_run_target(&mut runner, &cwd, &filepath)? {
+        RunTarget::File(resolved_path) => {
+            debug!(
+                "Running file: {} at line: {:?}",
+                resolved_path.display(),
+                line
+            );
+            let runnable = if let Some(line_num) = line {
+                runner
+                    .get_best_runnable_at_line(&resolved_path, line_num as u32)
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            };
+            let command = if line.is_none() {
+                runner
+                    .get_file_command(&resolved_path)?
+                    .ok_or_else(|| anyhow::anyhow!("No runnable found in file"))?
+            } else {
+                runner.get_command_at_position_with_dir(&resolved_path, line.map(|l| l as u32))?
+            };
+            let summary = if let Some(ref r) = runnable {
+                format!("{} ({})", r.label, resolved_path.display())
+            } else {
+                format!("file {}", resolved_path.display())
+            };
+            (command, summary)
+        }
+        RunTarget::Runnable(runnable) => {
+            debug!(
+                "Running runnable selector: {:?} -> {:?}",
+                filepath, runnable.label
+            );
+            let command = runner
+                .build_command_for_runnable(&runnable)?
+                .ok_or_else(|| anyhow::anyhow!("No runnable found for selector"))?;
+            let summary = format!("{} ({})", runnable.label, runnable.file_path.display());
+            (command, summary)
+        }
+    };
+
+    apply_cargo_flags(&mut command, flags);
+    Ok((command, summary))
+}
+
+fn run_command_with_options(filepath_arg: &str, opts: RunOptions<'_>) -> Result<()> {
+    let (mut command, summary) = build_command(filepath_arg, &opts.flags)?;
+    // Re-resolve matched runnable for dry-run JSON (optional detail)
+    let matched_runnable = {
+        let (filepath, line) = parse_filepath_with_line(filepath_arg);
+        let cwd = std::env::current_dir()?;
+        let mut runner = cargo_runner_core::UnifiedRunner::new()?;
+        match resolve_run_target(&mut runner, &cwd, &filepath) {
+            Ok(RunTarget::File(path)) => {
+                if let Some(line_num) = line {
                     runner
-                        .get_best_runnable_at_line(&resolved_path, line_num as u32)
+                        .get_best_runnable_at_line(&path, line_num as u32)
                         .ok()
                         .flatten()
                 } else {
                     None
-                };
-                let command = if line.is_none() {
-                    // For file-level commands (no line specified), use get_file_command
-                    // which has special logic to prefer test commands over doc tests
-                    runner
-                        .get_file_command(&resolved_path)?
-                        .ok_or_else(|| anyhow::anyhow!("No runnable found in file"))?
-                } else {
-                    // For line-specific commands, use the regular method
-                    runner
-                        .get_command_at_position_with_dir(&resolved_path, line.map(|l| l as u32))?
-                };
-                let summary = if let Some(ref r) = runnable {
-                    format!("{} ({})", r.label, resolved_path.display())
-                } else {
-                    format!("file {}", resolved_path.display())
-                };
-                (command, runnable, summary)
+                }
             }
-            RunTarget::Runnable(runnable) => {
-                debug!(
-                    "Running runnable selector: {:?} -> {:?}",
-                    filepath, runnable.label
-                );
-                let command = runner
-                    .build_command_for_runnable(&runnable)?
-                    .ok_or_else(|| anyhow::anyhow!("No runnable found for selector"))?;
-                let summary = format!("{} ({})", runnable.label, runnable.file_path.display());
-                (command, Some(*runnable), summary)
-            }
-        };
+            Ok(RunTarget::Runnable(r)) => Some(*r),
+            Err(_) => None,
+        }
+    };
 
     append_passthrough(&mut command, opts.passthrough);
 
@@ -143,6 +189,81 @@ fn run_command_with_options(filepath_arg: &str, opts: RunOptions<'_>) -> Result<
     }
 
     Ok(())
+}
+
+/// Apply first-class cargo flags (features, release, package, nextest).
+pub fn apply_cargo_flags(command: &mut Command, flags: &RunCargoFlags) {
+    if !matches!(
+        command.strategy,
+        CommandStrategy::Cargo | CommandStrategy::CargoScript
+    ) {
+        return;
+    }
+
+    // nextest: rewrite `cargo test` → `cargo nextest run` when requested and available
+    let want_nextest =
+        flags.nextest || (!flags.no_nextest && std::env::var_os("CARGO_RUNNER_NEXTEST").is_some());
+    if want_nextest
+        && !flags.no_nextest
+        && nextest_available()
+        && let Some(pos) = command.args.iter().position(|a| a == "test")
+    {
+        command.args[pos] = "nextest".to_string();
+        command.args.insert(pos + 1, "run".to_string());
+    }
+
+    // Insert cargo switches after the subcommand (test/run/bench/nextest run)
+    let insert_at = cargo_flag_insert_index(&command.args);
+    let mut extra = Vec::new();
+    if let Some(ref feats) = flags.features {
+        extra.push("--features".to_string());
+        extra.push(feats.clone());
+    }
+    if flags.all_features {
+        extra.push("--all-features".to_string());
+    }
+    if flags.no_default_features {
+        extra.push("--no-default-features".to_string());
+    }
+    if flags.release {
+        extra.push("--release".to_string());
+    }
+    if let Some(ref pkg) = flags.package {
+        // Avoid duplicating --package if already present
+        if !command.args.iter().any(|a| a == "--package" || a == "-p") {
+            extra.push("--package".to_string());
+            extra.push(pkg.clone());
+        }
+    }
+    if !extra.is_empty() {
+        command.args.splice(insert_at..insert_at, extra);
+    }
+}
+
+fn cargo_flag_insert_index(args: &[String]) -> usize {
+    // After: test | run | bench | build | nextest run
+    if let Some(i) = args.iter().position(|a| a == "nextest") {
+        return (i + 2).min(args.len()); // after `nextest run`
+    }
+    if let Some(i) = args
+        .iter()
+        .position(|a| matches!(a.as_str(), "test" | "run" | "bench" | "build"))
+    {
+        return i + 1;
+    }
+    // After channel (+nightly) if present
+    if args.first().is_some_and(|a| a.starts_with('+')) {
+        return 1.min(args.len());
+    }
+    0
+}
+
+fn nextest_available() -> bool {
+    std::process::Command::new("cargo")
+        .args(["nextest", "--version"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 /// Forward trailing CLI args into the generated command.
@@ -288,7 +409,14 @@ mod tests {
 
     #[test]
     fn test_file_not_found() {
-        let result = run_command("nonexistent.rs", true, false, true, &[]);
+        let result = run_command(
+            "nonexistent.rs",
+            true,
+            false,
+            true,
+            &[],
+            RunCargoFlags::default(),
+        );
         if let Err(e) = &result {
             println!("Debug err: {:?}", e);
         }
@@ -298,6 +426,23 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("No runnable found for selector")
+        );
+    }
+
+    #[test]
+    fn apply_features_after_test_subcommand() {
+        let mut cmd = Command::cargo(vec!["test".into(), "--package".into(), "p".into()]);
+        apply_cargo_flags(
+            &mut cmd,
+            &RunCargoFlags {
+                features: Some("foo".into()),
+                release: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            cmd.args,
+            vec!["test", "--features", "foo", "--release", "--package", "p"]
         );
     }
 

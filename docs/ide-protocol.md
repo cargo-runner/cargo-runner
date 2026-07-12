@@ -6,7 +6,22 @@ Machine-readable CLI contracts for the VS Code (and future) adapters.
 **Version parity:** CLI and VS Code extension share the same semver (e.g. both `1.6.2`).  
 Release tags: `cargo-runner-cli-v{version}`. The extension prefers downloading that exact tag.
 
-All JSON modes print **only** JSON on stdout (no emoji banners). Errors still go to stderr and non-zero exit codes.
+All JSON success modes print **only** JSON on stdout (no emoji banners).
+
+### Structured errors
+
+When a JSON mode fails, stdout receives:
+
+```json
+{
+  "protocol_version": 1,
+  "error": true,
+  "message": "human readable explanation",
+  "code": null
+}
+```
+
+The same message is also printed on stderr. Exit code is non-zero.
 
 ---
 

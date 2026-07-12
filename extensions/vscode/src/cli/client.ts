@@ -63,8 +63,21 @@ export class CliClient {
         this.output.appendLine(e.stderr);
       }
       if (e.stdout) {
-        // Some failures still print JSON diagnostics
         this.output.appendLine(e.stdout);
+        // Prefer structured IDE error JSON when present
+        try {
+          const parsed = JSON.parse(e.stdout.trim()) as {
+            error?: boolean;
+            message?: string;
+          };
+          if (parsed?.error && parsed.message) {
+            throw new Error(parsed.message);
+          }
+        } catch (inner) {
+          if (inner instanceof Error && inner.message && !inner.message.includes("JSON")) {
+            throw inner;
+          }
+        }
       }
       throw new Error(e.stderr || e.message || String(err));
     }

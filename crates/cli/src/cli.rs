@@ -25,6 +25,14 @@ pub enum Command {
 #[command(name = "cargo-runner")]
 #[command(version, about = "Run Rust code at specific locations", long_about = None)]
 pub struct Runner {
+    /// Reduce non-essential stderr banners (also: CARGO_RUNNER_QUIET=1)
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
+
+    /// Strip decorative emojis from human output (also: CARGO_RUNNER_NO_EMOJI=1 / NO_EMOJI=1)
+    #[arg(long, global = true)]
+    pub no_emoji: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -121,8 +129,36 @@ pub enum Commands {
         json: bool,
 
         /// Suppress the “Using: …” entrypoint notice on real runs
-        #[arg(short, long)]
+        #[arg(long)]
         quiet: bool,
+
+        /// Enable Cargo features (comma-separated)
+        #[arg(long, value_name = "FEATURES")]
+        features: Option<String>,
+
+        /// Enable all features
+        #[arg(long)]
+        all_features: bool,
+
+        /// Disable default features
+        #[arg(long)]
+        no_default_features: bool,
+
+        /// Build/run in release mode
+        #[arg(long)]
+        release: bool,
+
+        /// Override package selection (`--package`)
+        #[arg(long, value_name = "NAME")]
+        package: Option<String>,
+
+        /// Prefer `cargo nextest run` when available
+        #[arg(long)]
+        nextest: bool,
+
+        /// Force classic `cargo test` even if nextest is configured
+        #[arg(long)]
+        no_nextest: bool,
 
         /// Extra args forwarded into the generated command (place after `--`)
         #[arg(last = true)]
@@ -230,6 +266,10 @@ pub enum Commands {
         /// Emit machine-readable JSON only (IDE contract)
         #[arg(long)]
         json: bool,
+
+        /// Print common override recipes and exit
+        #[arg(long)]
+        examples: bool,
 
         /// Override tokens and extra arguments (see help above)
         #[arg(last = true)]
@@ -346,6 +386,17 @@ pub enum Commands {
         debounce: u64,
     },
 
+    /// Diagnose project + toolchain health (Cargo, Bazel, frameworks)
+    ///
+    /// Examples:
+    ///   cargo runner doctor
+    ///   cargo runner doctor --json
+    Doctor {
+        /// Emit machine-readable JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Generate shell completions (bash, zsh, fish, elvish, powershell)
     ///
     /// Examples:
@@ -361,6 +412,19 @@ pub enum Commands {
 impl Commands {
     /// Execute the command
     pub fn execute(self) -> Result<()> {
+        use crate::display::style;
+
+        // Enable structured JSON errors for IDE modes.
+        let json_mode = match &self {
+            Commands::Runnables { json, .. } => *json,
+            Commands::Context { json, .. } => *json,
+            Commands::Run { json, dry_run, .. } => *json && *dry_run,
+            Commands::Override { json, .. } => *json,
+            Commands::Doctor { json, .. } => *json,
+            _ => false,
+        };
+        style::set_json_error_mode(json_mode);
+
         match self {
             Commands::Runnables {
                 filepath,
@@ -400,6 +464,13 @@ impl Commands {
                 dry_run,
                 json,
                 quiet,
+                features,
+                all_features,
+                no_default_features,
+                release,
+                package,
+                nextest,
+                no_nextest,
                 passthrough,
             } => {
                 if json && !dry_run {
@@ -408,8 +479,18 @@ impl Commands {
                          Example: cargo runner run src/lib.rs:10 --dry-run --json"
                     );
                 }
+                let quiet = quiet || style::is_quiet();
                 let fp = crate::utils::path::resolve_filepath_arg(filepath)?;
-                run_command(&fp, dry_run, json, quiet, &passthrough)
+                let flags = crate::commands::run::RunCargoFlags {
+                    features,
+                    all_features,
+                    no_default_features,
+                    release,
+                    package,
+                    nextest,
+                    no_nextest,
+                };
+                run_command(&fp, dry_run, json, quiet, &passthrough, flags)
             }
             Commands::Init {
                 cwd,
@@ -439,6 +520,7 @@ impl Commands {
                 show,
                 file,
                 json,
+                examples,
                 override_args,
             } => {
                 if list {
@@ -451,9 +533,14 @@ impl Commands {
                         anyhow::anyhow!("override --show requires a filepath argument")
                     })?;
                     crate::commands::override_cmd::show_override_command(&fp, json)
+                } else if examples {
+                    crate::commands::override_cmd::print_override_examples();
+                    Ok(())
                 } else {
                     let fp = filepath.ok_or_else(|| {
-                        anyhow::anyhow!("override requires a filepath (or use --list / --show)")
+                        anyhow::anyhow!(
+                            "override requires a filepath (or use --list / --show / --examples)"
+                        )
                     })?;
                     override_command(&fp, root, command, subcommand, channel, override_args)
                 }
@@ -490,6 +577,7 @@ impl Commands {
                 test,
                 debounce,
             } => watch_command(filepath.as_deref(), run, test, debounce),
+            Commands::Doctor { json } => crate::commands::doctor::doctor_command(json),
             Commands::Completions { shell } => {
                 use clap::CommandFactory;
                 let mut cmd = Runner::command();

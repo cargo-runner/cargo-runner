@@ -96,9 +96,29 @@ It uses these exact filesystem layout patterns to automatically detect binaries,
 cargo runner run src/lib.rs:12 --dry-run          # print command
 cargo runner run src/lib.rs:12 --dry-run --json   # IDE JSON (requires --dry-run)
 cargo runner run src/lib.rs:12 -- --nocapture     # forward test binary args
+cargo runner run src/lib.rs:12 --features foo --release --dry-run
 cargo runner run --quiet                          # real run without “Using: …” notice
+cargo runner --no-emoji runnables                 # human output without decorative emoji
+cargo runner watch src/lib.rs:12                  # re-run resolved command on save
+cargo runner doctor                               # project + toolchain health
+cargo runner override --examples                  # override cookbook
 cargo runner completions zsh                      # shell completions
 ```
+
+### Shell completions
+
+```bash
+# zsh (example)
+cargo runner completions zsh > ~/.zfunc/_cargo-runner
+# bash
+cargo runner completions bash | sudo tee /etc/bash_completion.d/cargo-runner
+# fish
+cargo runner completions fish > ~/.config/fish/completions/cargo-runner.fish
+```
+
+Completions target the `cargo-runner` binary name. When using `cargo runner …`, Cargo’s own completion applies to the `runner` subcommand name.
+
+See also [docs/limitations.md](docs/limitations.md) for intentional hold-offs (macro doctests, Bazel per-example docs, etc.).
 
 It evaluates the environment in this specific priority:
 

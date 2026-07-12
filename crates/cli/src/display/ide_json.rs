@@ -4,6 +4,44 @@ use cargo_runner_core::{Command, Runnable};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+/// Structured error for IDE JSON modes (`protocol_version` aligned with dry-run).
+#[derive(Debug, Clone, Serialize)]
+pub struct ErrorOutput {
+    pub protocol_version: u32,
+    pub error: bool,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+
+impl ErrorOutput {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            protocol_version: 1,
+            error: true,
+            message: message.into(),
+            code: None,
+        }
+    }
+
+    pub fn with_code(mut self, code: impl Into<String>) -> Self {
+        self.code = Some(code.into());
+        self
+    }
+
+    pub fn from_anyhow(err: &anyhow::Error) -> Self {
+        // Prefer the top-level message; chain is available via Debug if needed later.
+        Self::new(format!("{err:#}"))
+    }
+
+    pub fn to_json_string(&self) -> String {
+        serde_json::to_string_pretty(self).unwrap_or_else(|_| {
+            r#"{"protocol_version":1,"error":true,"message":"failed to serialize error"}"#
+                .to_string()
+        })
+    }
+}
+
 /// Versioned envelope for dry-run command previews.
 #[derive(Debug, Clone, Serialize)]
 pub struct DryRunOutput {

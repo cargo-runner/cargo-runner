@@ -1093,3 +1093,44 @@ fn collect_cargo_runner_configs(cwd: &Path) -> Result<Vec<PathBuf>> {
 
     Ok(configs)
 }
+
+/// Print common override recipes (`cargo runner override --examples`).
+pub fn print_override_examples() {
+    println!(
+        r#"Override cookbook — copy/paste after a file:line selector
+
+  # Dioxus dev server
+  cargo runner override src/main.rs -- @dx.serve
+
+  # Leptos (command stays cargo; set leptos subcommand)
+  cargo runner override src/main.rs -- @cargo.leptos.watch
+
+  # Tauri
+  cargo runner override src/main.rs --subcommand build
+
+  # Nightly toolchain
+  cargo runner override src/lib.rs:12 -- +nightly
+
+  # Env vars
+  cargo runner override src/main.rs -- RUST_LOG=debug RUST_BACKTRACE=1
+
+  # Test binary args (like cargo test -- --nocapture)
+  cargo runner override src/lib.rs:20 -- /--nocapture
+
+  # Named flags
+  cargo runner override src/main.rs --command dx --subcommand serve
+
+  # Append/merge into existing override (bare @ first)
+  cargo runner override src/main.rs -- @ RUST_LOG=trace
+
+  # Remove entire override for a location
+  cargo runner override src/main.rs -- -
+
+  # List / show (IDE)
+  cargo runner override --list --json
+  cargo runner override --show src/lib.rs:12 --json
+
+See also: README “Overrides” and docs/ide-protocol.md
+"#
+    );
+}

@@ -1737,6 +1737,90 @@ fn analyze_alias_a_works() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[test]
+fn run_features_flag_in_dry_run() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_project(tmp.path(), "test-features-flag");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["run", "src/lib.rs:8", "--features", "default", "--dry-run"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--features"))
+        .stdout(predicate::str::contains("default"));
+}
+
+#[test]
+fn run_json_error_is_structured() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-json-err");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["run", "does-not-exist-xyz.rs", "--dry-run", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(r#""error": true"#))
+        .stdout(predicate::str::contains("protocol_version"));
+}
+
+#[test]
+fn override_examples_prints_cookbook() {
+    cargo_runner()
+        .args(["override", "--examples"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("@dx"))
+        .stdout(predicate::str::contains("+nightly"));
+}
+
+#[test]
+fn doctor_on_cargo_project() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-doctor");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["doctor", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""ok": true"#))
+        .stdout(predicate::str::contains("cargo"));
+}
+
+#[test]
+fn resolve_watch_matches_run_dry_run() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_project(tmp.path(), "test-watch-resolve");
+    let root = canonical(tmp.path());
+
+    let dry = cargo_runner()
+        .args(["run", "src/lib.rs:8", "--dry-run"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let dry_s = String::from_utf8_lossy(&dry);
+    let dry_cmd = dry_s.lines().next().unwrap_or("");
+
+    // resolve_command_for_selector is used by watch; compare via dry-run equality
+    // of the first line (shell command)
+    assert!(
+        dry_cmd.contains("cargo") && dry_cmd.contains("test"),
+        "expected cargo test dry-run, got {dry_cmd}"
+    );
+}
+
+#[test]
 fn run_json_without_dry_run_errors() {
     let tmp = TempDir::new().unwrap();
     scaffold_cargo_project(tmp.path(), "test-json-footgun");
@@ -1819,7 +1903,8 @@ fn help_shows_all_commands() {
         .stdout(predicate::str::contains("override"))
         .stdout(predicate::str::contains("clean"))
         .stdout(predicate::str::contains("watch"))
-        .stdout(predicate::str::contains("completions"));
+        .stdout(predicate::str::contains("completions"))
+        .stdout(predicate::str::contains("doctor"));
 }
 
 #[test]

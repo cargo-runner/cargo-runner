@@ -4,6 +4,7 @@ pub mod bazel_sync;
 pub mod build_sync;
 pub mod clean;
 pub mod context;
+pub mod doctor;
 pub mod init;
 pub mod matching;
 pub mod override_cmd;
