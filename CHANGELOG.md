@@ -10,6 +10,25 @@ published on GitHub as tag `cargo-runner-cli-v{VERSION}`.
 
 ---
 
+## [2.0.0] — 2026-07-13
+
+### Changed
+
+- **Version reset to 2.0.0** — clean product line for the rebuilt CLI + VS Code extension stack.
+- Release cycle documented in `docs/release.md`: **minor** for VS Code/product, **patch** for CLI-only.
+
+### Fixed
+
+- Leptos/Tauri overlays respect non-cargo command overrides (e.g. `@spin.build --up` → `spin build --up`).
+
+### Packaging
+
+- GitHub Release `cargo-runner-cli-v2.0.0`
+- crates.io: `cargo-runner-core` + `cargo-runner-cli` 2.0.0
+- VS Code Marketplace: `masterustacean.cargo-runner` 2.0.0
+
+---
+
 ## [1.6.3] — 2026-07-12
 
 ### Added

@@ -1,7 +1,25 @@
-.PHONY: publish vscode vscode-package
+.PHONY: publish release-cli release-vscode release-major release vscode vscode-package
 
+# Legacy alias → new release script (patch / CLI-only)
 publish:
-	@bash scripts/publish.sh $(filter-out $@,$(MAKECMDGOALS))
+	@bash scripts/release.sh cli $(filter-out $@,$(MAKECMDGOALS))
+
+# Prefer these:
+#   make release-cli              # patch (CLI/core only)
+#   make release-vscode           # minor (product / VS Code)
+#   make release-vscode MARKETPLACE=1
+#   make release VERSION=1.7.0
+release-cli:
+	@bash scripts/release.sh cli $(if $(DRY_RUN),--dry-run,) $(if $(NO_CRATES),--no-crates,) $(if $(MARKETPLACE),--marketplace,)
+
+release-vscode:
+	@bash scripts/release.sh vscode $(if $(DRY_RUN),--dry-run,) $(if $(NO_CRATES),--no-crates,) $(if $(MARKETPLACE),--marketplace,)
+
+release-major:
+	@bash scripts/release.sh major $(if $(DRY_RUN),--dry-run,) $(if $(NO_CRATES),--no-crates,) $(if $(MARKETPLACE),--marketplace,)
+
+release:
+	@bash scripts/release.sh $(VERSION) $(if $(DRY_RUN),--dry-run,) $(if $(NO_CRATES),--no-crates,) $(if $(MARKETPLACE),--marketplace,)
 
 # Build the VS Code extension (TypeScript → out/extension.js)
 vscode:

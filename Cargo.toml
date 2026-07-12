@@ -3,8 +3,9 @@ members = ["crates/core", "crates/cli"]
 resolver = "2"
 
 [workspace.package]
-# Keep in lockstep with extensions/vscode/package.json (VS Code extension version).
-version = "1.6.3"
+# Shared semver: CLI, core, and VS Code extension (see docs/release.md).
+# vscode/product changes → minor; CLI-only → patch.
+version = "2.0.0"
 edition = "2024"
 authors = ["Uriah Galang <codeitlikemiley@gmail.com>"]
 license = "MIT"

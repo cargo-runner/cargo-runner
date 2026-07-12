@@ -20,7 +20,7 @@ cargo install cargo-runner-cli
 
 **VS Code:** install [Cargo Runner](https://marketplace.visualstudio.com/items?itemName=masterustacean.cargo-runner) (`masterustacean.cargo-runner`). It can auto-download a matching CLI from Releases.
 
-See **[CHANGELOG.md](CHANGELOG.md)** for release history.
+See **[CHANGELOG.md](CHANGELOG.md)** for release history and **[docs/release.md](docs/release.md)** for how we version and ship (CLI patch vs VS Code minor).
 
 ### VS Code extension (dev)
 
