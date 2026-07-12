@@ -117,13 +117,19 @@ mod tests {
 
     #[test]
     fn relative_and_absolute_file_paths_match() {
+        // Windows only treats drive-letter paths as absolute; `/proj/...` is not.
+        let absolute = if cfg!(windows) {
+            PathBuf::from(r"C:\proj\src\lib.rs")
+        } else {
+            PathBuf::from("/proj/src/lib.rs")
+        };
         let stored = FunctionIdentity {
             file_path: Some(PathBuf::from("src/lib.rs")),
             function_name: Some("t".into()),
             ..Default::default()
         };
         let lookup = FunctionIdentity {
-            file_path: Some(PathBuf::from("/proj/src/lib.rs")),
+            file_path: Some(absolute),
             function_name: Some("t".into()),
             ..Default::default()
         };
