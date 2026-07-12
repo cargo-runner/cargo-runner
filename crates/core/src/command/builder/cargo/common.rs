@@ -1,12 +1,16 @@
 //! Common functionality for cargo builders
 
 use crate::{
+    command::{
+        CommandStrategy,
+        builder::ConfigAccess,
+    },
     config::{Config, Features},
     types::{FileType, FunctionIdentity, Runnable},
 };
 
 /// Helper trait for common builder functionality
-pub trait CargoBuilderHelper {
+pub trait CargoBuilderHelper: ConfigAccess {
     /// Find the cargo root directory for a given file with smart PROJECT_ROOT resolution
     fn find_cargo_root(&self, file_path: &std::path::Path) -> Option<std::path::PathBuf> {
         tracing::debug!("find_cargo_root called with: {:?}", file_path);
@@ -135,8 +139,18 @@ pub trait CargoBuilderHelper {
         config: &Config,
         file_type: FileType,
     ) -> FunctionIdentity {
+        // Prefer config package, fall back to Cargo.toml near the runnable so
+        // CLI-written overrides that store package names still match.
+        let package = config
+            .cargo
+            .as_ref()
+            .and_then(|c| c.package.clone())
+            .or_else(|| {
+                crate::runners::common::get_cargo_package_name(&runnable.file_path)
+            });
+
         FunctionIdentity {
-            package: config.cargo.as_ref().and_then(|c| c.package.clone()),
+            package,
             module_path: if runnable.module_path.is_empty() {
                 None
             } else {
@@ -189,5 +203,74 @@ pub trait CargoBuilderHelper {
                 command.env.insert(key.clone(), value.clone());
             }
         }
+    }
+
+    /// Apply per-function cargo override command / subcommand / channel to `args`.
+    ///
+    /// Returns the resulting [`CommandStrategy`] and whether a non-cargo command
+    /// was selected (so callers can skip cargo-only flags like `--package`).
+    ///
+    /// When no override command is set, returns `None` so the caller keeps its
+    /// default framework / subcommand setup. When an override **subcommand** is
+    /// set without a custom command, still injects channel + subcommand.
+    fn apply_cargo_override_command(
+        &self,
+        args: &mut Vec<String>,
+        runnable: &Runnable,
+        config: &Config,
+        file_type: FileType,
+        default_subcommand: &str,
+    ) -> Option<(CommandStrategy, bool)> {
+        let override_cargo = self
+            .get_override(runnable, config, file_type)
+            .and_then(|o| o.cargo.as_ref())?;
+
+        // command + optional subcommand
+        if let Some(cmd) = &override_cargo.command {
+            if cmd != "cargo" {
+                args.clear();
+                args.push(cmd.clone());
+                if let Some(subcommand) = &override_cargo.subcommand {
+                    args.extend(subcommand.split_whitespace().map(String::from));
+                } else if !default_subcommand.is_empty() {
+                    args.extend(default_subcommand.split_whitespace().map(String::from));
+                }
+                return Some((CommandStrategy::Shell, true));
+            }
+
+            // cargo with optional channel + subcommand
+            args.clear();
+            if let Some(channel) = &override_cargo.channel {
+                args.push(format!("+{channel}"));
+            } else if let Some(channel) = self.get_channel(config, file_type) {
+                args.push(format!("+{channel}"));
+            }
+            if let Some(subcommand) = &override_cargo.subcommand {
+                args.extend(subcommand.split_whitespace().map(String::from));
+            } else {
+                args.extend(default_subcommand.split_whitespace().map(String::from));
+            }
+            return Some((CommandStrategy::Cargo, false));
+        }
+
+        // Subcommand-only or channel-only override (keep cargo strategy)
+        let has_sub = override_cargo.subcommand.is_some();
+        let has_ch = override_cargo.channel.is_some();
+        if !has_sub && !has_ch {
+            return None;
+        }
+
+        args.clear();
+        if let Some(channel) = &override_cargo.channel {
+            args.push(format!("+{channel}"));
+        } else if let Some(channel) = self.get_channel(config, file_type) {
+            args.push(format!("+{channel}"));
+        }
+        if let Some(subcommand) = &override_cargo.subcommand {
+            args.extend(subcommand.split_whitespace().map(String::from));
+        } else {
+            args.extend(default_subcommand.split_whitespace().map(String::from));
+        }
+        Some((CommandStrategy::Cargo, false))
     }
 }

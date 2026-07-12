@@ -17,10 +17,20 @@ pub struct DryRunOutput {
     pub strategy: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub runnable: Option<Runnable>,
+    /// Human-readable warnings for IDE UI (e.g. Bazel doc-test limitations).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 impl DryRunOutput {
     pub fn from_command(command: &Command, runnable: Option<Runnable>) -> Self {
+        let mut warnings = Vec::new();
+
+        // Promote known internal markers to structured warnings before stripping env.
+        if let Some(msg) = command.env.get("_BAZEL_DOC_TEST_LIMITATION") {
+            warnings.push(msg.clone());
+        }
+
         let mut env: BTreeMap<String, String> = command
             .env
             .iter()
@@ -41,6 +51,7 @@ impl DryRunOutput {
             shell: command.to_shell_command(),
             strategy: strategy_name(command.strategy).to_string(),
             runnable,
+            warnings,
         }
     }
 }

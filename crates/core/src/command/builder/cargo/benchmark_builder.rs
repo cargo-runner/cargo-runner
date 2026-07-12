@@ -26,16 +26,29 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
     ) -> Result<Command> {
         let builder = BenchmarkCommandBuilder;
         let mut args = vec![];
+        let mut strategy = crate::command::CommandStrategy::Cargo;
 
-        // Add channel
-        if let Some(channel) = builder.get_channel(config, file_type) {
-            args.push(format!("+{channel}"));
+        let override_cmd = builder.apply_cargo_override_command(
+            &mut args,
+            runnable,
+            config,
+            file_type,
+            "bench",
+        );
+
+        if let Some((strat, _)) = override_cmd {
+            strategy = strat;
+        } else {
+            // Add channel
+            if let Some(channel) = builder.get_channel(config, file_type) {
+                args.push(format!("+{channel}"));
+            }
+            args.push("bench".to_string());
         }
 
-        args.push("bench".to_string());
-
         // Add package
-        if let Some(pkg) = package
+        if strategy == crate::command::CommandStrategy::Cargo
+            && let Some(pkg) = package
             && !pkg.is_empty()
         {
             args.push("--package".to_string());
@@ -46,12 +59,25 @@ impl CommandBuilderImpl for BenchmarkCommandBuilder {
         builder.apply_args(&mut args, runnable, config, file_type);
 
         // Add benchmark filter
-        if let RunnableKind::Benchmark { bench_name } = &runnable.kind {
+        if strategy == crate::command::CommandStrategy::Cargo
+            && let RunnableKind::Benchmark { bench_name } = &runnable.kind
+        {
             args.push("--".to_string());
             args.push(bench_name.clone());
         }
 
-        let mut command = Command::cargo(args);
+        let mut command = match strategy {
+            crate::command::CommandStrategy::Shell => {
+                let program = args.first().cloned().unwrap_or_else(|| "cargo".into());
+                let rest = if args.len() > 1 {
+                    args[1..].to_vec()
+                } else {
+                    vec![]
+                };
+                Command::shell(program, rest)
+            }
+            _ => Command::cargo(args),
+        };
 
         // Set working directory to cargo root
         if let Some(cargo_root) = builder.find_cargo_root(&runnable.file_path) {

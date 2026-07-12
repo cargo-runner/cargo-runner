@@ -64,6 +64,8 @@ const MANIFEST_NAMES: &[&str] = &[
     "build.gradle",
     "pom.xml",
     "Dioxus.toml",
+    // Tauri config (v1: tauri.conf.json, v2 also uses this name under src-tauri/)
+    "tauri.conf.json",
 ];
 
 fn collect_manifests(start: &Path) -> BTreeMap<String, PathBuf> {

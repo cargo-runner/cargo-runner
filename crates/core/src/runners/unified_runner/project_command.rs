@@ -10,11 +10,14 @@ use crate::{
 use super::UnifiedRunner;
 
 impl UnifiedRunner {
-    /// Get the override configuration for a specific runnable
+    /// Get the override configuration for a specific runnable.
+    ///
+    /// Uses path-scoped config (package `.cargo-runner.json` near the file)
+    /// and returns an owned clone (config is reloaded per call).
     pub fn get_override_for_runnable(
         &self,
         runnable: &Runnable,
-    ) -> Option<&crate::config::Override> {
+    ) -> Option<crate::config::Override> {
         // Determine file type
         let file_type = match &runnable.kind {
             RunnableKind::SingleFileScript { .. } => crate::types::FileType::SingleFileScript,
@@ -22,9 +25,15 @@ impl UnifiedRunner {
             _ => crate::types::FileType::CargoProject,
         };
 
-        // Create a FunctionIdentity from the runnable
+        let package = self
+            .config
+            .cargo
+            .as_ref()
+            .and_then(|c| c.package.clone())
+            .or_else(|| crate::runners::common::get_cargo_package_name(&runnable.file_path));
+
         let identity = crate::types::FunctionIdentity {
-            package: None, // TODO: Get package from runnable
+            package,
             module_path: if runnable.module_path.is_empty() {
                 None
             } else {
@@ -49,7 +58,11 @@ impl UnifiedRunner {
             file_type: Some(file_type),
         };
 
-        self.config.get_override_for(&identity)
+        let config = self.config_for_path(&runnable.file_path);
+        config
+            .get_override_for(&identity)
+            .cloned()
+            .or_else(|| self.config.get_override_for(&identity).cloned())
     }
 
     /// Resolve a file path, handling relative and absolute paths

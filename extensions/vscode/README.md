@@ -18,6 +18,29 @@ Run, test, build, and override Rust targets with the **cargo-runner** CLI — Ca
 - [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
 - [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
 - Rust toolchain (`cargo` / `rustc`) for your projects
+- **cargo-runner CLI** — same version as this extension (e.g. both `1.6.2`)
+
+### CLI install prompt
+
+On first activate, if the CLI is missing you get **Download CLI** / **Later**.
+
+If you press **Cmd+R** or **Cmd+Shift+R** without a CLI:
+
+1. A status-bar toast appears for **5 seconds**
+2. An error notification offers **Download CLI**
+3. Clicking **Download CLI** fetches `cargo-runner-cli-v{extensionVersion}` for your platform, extracts it, runs `chmod +x` (and clears macOS quarantine when possible), then verifies with `--version`
+
+You can also run **Cargo Runner: Download CLI** from the command palette.
+
+### CLI update prompts (extension stays put)
+
+If a **newer CLI** is published on GitHub while the VS Code extension is still an older version, on activate you get:
+
+- Status-bar toast (~5s)
+- Notification: *CLI vX is available (you have vY)* → **Download Update** / **Later** / **Skip this version**
+
+Settings: `cargoRunner.checkCliUpdates` (default on), `cargoRunner.cliUpdateCheckIntervalHours` (default 24).  
+Manual check: **Cargo Runner: Check for CLI Updates**.
 
 ## Override tokens
 

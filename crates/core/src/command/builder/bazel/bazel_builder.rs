@@ -674,10 +674,13 @@ impl BazelCommandBuilder {
     ) -> Option<&'a crate::config::Override> {
         let identity = crate::types::FunctionIdentity {
             package: config
-                .bazel
+                .cargo
                 .as_ref()
-                .and_then(|b| b.workspace.clone())
-                .or_else(|| config.cargo.as_ref().and_then(|c| c.package.clone())),
+                .and_then(|c| c.package.clone())
+                .or_else(|| {
+                    crate::runners::common::get_cargo_package_name(&runnable.file_path)
+                })
+                .or_else(|| config.bazel.as_ref().and_then(|b| b.workspace.clone())),
             module_path: if runnable.module_path.is_empty() {
                 None
             } else {
@@ -713,9 +716,13 @@ impl BazelCommandBuilder {
 
         if let Some(override_) = override_config {
             if let Some(ov) = &override_.bazel {
-                // Note: `ov.command` (e.g. "bazelisk") is stored for tooling/display
-                // but cannot be mutated here — the binary is encoded in CommandStrategy::Bazel.
-                // Future: convert to CommandStrategy::Shell when command != "bazel".
+                // Custom binary (e.g. bazelisk): switch off hard-coded CommandStrategy::Bazel
+                if let Some(cmd) = &ov.command
+                    && cmd != "bazel"
+                {
+                    command.strategy = crate::command::CommandStrategy::Shell;
+                    command.program = cmd.clone();
+                }
 
                 // Override subcommand (first arg is always the subcommand)
                 if let Some(subcmd) = &ov.subcommand

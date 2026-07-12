@@ -49,13 +49,20 @@ pub fn build_sync_command(crate_filter: Option<&str>, dry_run: bool) -> Result<(
             })
             .collect()
     } else {
-        // Default: sync only the crate the user is inside of
+        // Default: sync only the crate the user is inside of.
+        // Canonicalize paths so macOS /var vs /private/var still match.
+        let cwd_canon = cwd.canonicalize().unwrap_or_else(|_| cwd.clone());
         let local = all_crates
             .into_iter()
-            .filter(|c| cwd.starts_with(&c.dir) || c.dir == cwd)
+            .filter(|c| {
+                let dir_canon = c.dir.canonicalize().unwrap_or_else(|_| c.dir.clone());
+                cwd_canon.starts_with(&dir_canon) || dir_canon == cwd_canon || c.dir == cwd
+            })
             .collect::<Vec<_>>();
         if local.is_empty() {
-            anyhow::bail!("Not inside a Bazel crate directory. Use --crate <dir> to specify one.");
+            anyhow::bail!(
+                "Not inside a Bazel crate directory. Use --crate-name <CRATE> to specify one."
+            );
         }
         local
     };

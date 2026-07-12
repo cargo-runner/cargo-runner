@@ -74,11 +74,12 @@ impl CommandRunner for BazelRunner {
             ));
         }
 
-        // Ensure it's a bazel command
+        // Accept native Bazel strategy or Shell (bazelisk / custom binary override)
         match &command.strategy {
             crate::command::CommandStrategy::Bazel => Ok(()),
+            crate::command::CommandStrategy::Shell if !command.program.is_empty() => Ok(()),
             _ => Err(crate::error::Error::Validation(
-                "Expected Bazel command type",
+                "Expected Bazel or Shell (bazelisk) command type",
             )),
         }
     }

@@ -239,9 +239,10 @@ pub fn override_command(
 
     // Drop internal control flags before writing config sections
     parsed_args.remove("remove_override");
-    // Append mode (`@` first token) is recorded for future merge-on-write;
-    // today new override entries still replace via identity match when present.
-    parsed_args.remove("append");
+    let append_mode = parsed_args
+        .remove("append")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     // Add configuration based on file type
     match file_type {
@@ -255,28 +256,35 @@ pub fn override_command(
                 .unwrap_or(false);
 
             if is_bazel {
-                // Create bazel override section
+                // Create bazel override section — use flat BazelOverride field names
+                // (`test_args`, `extra_args`, `exec_args`) so core can deserialize them.
                 let mut bazel_config = Map::new();
 
-                // For Bazel, extra_args becomes extra_test_args for tests
                 if let Some(extra_args) = parsed_args.get("extra_args") {
                     if matches!(
                         &runnable.kind,
                         cargo_runner_core::RunnableKind::Test { .. }
                             | cargo_runner_core::RunnableKind::ModuleTests { .. }
                     ) {
-                        bazel_config.insert("extra_test_args".to_string(), extra_args.clone());
+                        // Cargo-style flags on tests map to bazel --test_arg values
+                        // only when they look like test binary args; otherwise extra_args.
+                        bazel_config.insert("extra_args".to_string(), extra_args.clone());
                     } else {
-                        bazel_config.insert("extra_run_args".to_string(), extra_args.clone());
+                        // Binary/run: append as exec args after `--`
+                        bazel_config.insert("exec_args".to_string(), extra_args.clone());
                     }
                 }
 
-                // Handle extra_test_binary_args as extra_test_args for Bazel
+                // Test binary args → Bazel test_args (--test_arg)
                 if let Some(extra_test_binary_args) = parsed_args.get("extra_test_binary_args") {
-                    bazel_config.insert(
-                        "extra_test_args".to_string(),
-                        extra_test_binary_args.clone(),
-                    );
+                    bazel_config.insert("test_args".to_string(), extra_test_binary_args.clone());
+                }
+
+                if let Some(command) = parsed_args.get("command") {
+                    bazel_config.insert("command".to_string(), command.clone());
+                }
+                if let Some(subcommand) = parsed_args.get("subcommand") {
+                    bazel_config.insert("subcommand".to_string(), subcommand.clone());
                 }
 
                 if let Some(extra_env) = parsed_args.get("extra_env") {
@@ -335,9 +343,6 @@ pub fn override_command(
                 build.insert("command".to_string(), command.clone());
             }
 
-            // Note: channel is not yet supported in rustc configs
-            // TODO: Add channel support to RustcPhaseConfig
-
             // Add parsed arguments to appropriate sections
             if let Some(extra_args) = parsed_args.get("extra_args") {
                 build.insert("extra_args".to_string(), extra_args.clone());
@@ -360,6 +365,10 @@ pub fn override_command(
             }
 
             rustc_config.insert(framework_key.to_string(), Value::Object(framework));
+            // Channel lives at the rustc root (applies via rustup run <channel> rustc)
+            if let Some(channel) = parsed_args.get("channel") {
+                rustc_config.insert("channel".to_string(), channel.clone());
+            }
             override_config.insert("rustc".to_string(), Value::Object(rustc_config));
         }
         cargo_runner_core::FileType::SingleFileScript => {
@@ -536,10 +545,25 @@ pub fn override_command(
             };
 
             if let Some(new_section) = override_config.get(section_key) {
-                existing_obj.insert(section_key.to_string(), new_section.clone());
+                if append_mode {
+                    // Merge fields into the existing section (append mode: bare `@` first)
+                    let existing_section = existing_obj
+                        .entry(section_key.to_string())
+                        .or_insert_with(|| Value::Object(Map::new()));
+                    if let (Some(dst), Some(src)) = (
+                        existing_section.as_object_mut(),
+                        new_section.as_object(),
+                    ) {
+                        merge_json_section(dst, src);
+                    }
+                    println!("✅ Override appended (merged) successfully!");
+                } else {
+                    existing_obj.insert(section_key.to_string(), new_section.clone());
+                    println!("✅ Override updated successfully!");
+                }
+            } else {
+                println!("✅ Override updated successfully!");
             }
-
-            println!("✅ Override updated successfully!");
         }
     } else {
         // Add new override
@@ -813,26 +837,30 @@ fn create_file_level_override(
     if let Some(bazel_config) = override_entry.get("bazel")
         && let Some(obj) = bazel_config.as_object()
     {
-        if let Some(extra_test_args) = obj.get("extra_test_args")
-            && let Some(args) = extra_test_args.as_array()
+        if let Some(test_args) = obj
+            .get("test_args")
+            .or_else(|| obj.get("extra_test_args"))
+            && let Some(args) = test_args.as_array()
         {
             let args_str: Vec<String> = args
                 .iter()
                 .filter_map(|v| v.as_str().map(String::from))
                 .collect();
             if !args_str.is_empty() {
-                println!("   📝 Extra test args (Bazel): {}", args_str.join(" "));
+                println!("   📝 test_args (Bazel): {}", args_str.join(" "));
             }
         }
-        if let Some(extra_run_args) = obj.get("extra_run_args")
-            && let Some(args) = extra_run_args.as_array()
+        if let Some(exec_args) = obj
+            .get("exec_args")
+            .or_else(|| obj.get("extra_run_args"))
+            && let Some(args) = exec_args.as_array()
         {
             let args_str: Vec<String> = args
                 .iter()
                 .filter_map(|v| v.as_str().map(String::from))
                 .collect();
             if !args_str.is_empty() {
-                println!("   📝 Extra run args (Bazel): {}", args_str.join(" "));
+                println!("   📝 exec_args (Bazel): {}", args_str.join(" "));
             }
         }
     }
@@ -1005,6 +1033,32 @@ fn resolve_path(cwd: &Path, filepath: &str) -> PathBuf {
         path.to_path_buf()
     } else {
         cwd.join(path)
+    }
+}
+
+/// Merge override section objects for append mode (`@` first token).
+/// - Scalars / objects: incoming wins for same keys
+/// - Arrays: append unique items
+/// - `extra_env` objects: merge key-by-key (incoming wins)
+fn merge_json_section(dst: &mut Map<String, Value>, src: &Map<String, Value>) {
+    for (key, value) in src {
+        match (dst.get_mut(key), value) {
+            (Some(Value::Array(existing)), Value::Array(incoming)) => {
+                for item in incoming {
+                    if !existing.contains(item) {
+                        existing.push(item.clone());
+                    }
+                }
+            }
+            (Some(Value::Object(existing)), Value::Object(incoming)) => {
+                for (k, v) in incoming {
+                    existing.insert(k.clone(), v.clone());
+                }
+            }
+            _ => {
+                dst.insert(key.clone(), value.clone());
+            }
+        }
     }
 }
 

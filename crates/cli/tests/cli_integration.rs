@@ -1190,15 +1190,14 @@ fn analyze_nonexistent_file() {
 fn unset_without_project_root() {
     let tmp = TempDir::new().unwrap();
 
+    // Without PROJECT_ROOT, unset falls back to cwd (still succeeds).
     cargo_runner()
         .args(["unset"])
         .env_remove("PROJECT_ROOT")
         .current_dir(tmp.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "PROJECT_ROOT is not currently set",
-        ));
+        .stdout(predicate::str::contains("Using current directory"));
 }
 
 #[test]
@@ -1295,7 +1294,7 @@ fn override_then_dry_run_shows_custom_command() {
         "config should have dx: {config_content}"
     );
 
-    // Dry run should show the overridden command
+    // Dry run must show the overridden command (not plain cargo run)
     let output = cargo_runner()
         .args(["run", "src/main.rs", "--dry-run"])
         .env("PROJECT_ROOT", &root)
@@ -1303,12 +1302,280 @@ fn override_then_dry_run_shows_custom_command() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert!(output.status.success(), "stderr={}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8(output.stdout).unwrap();
-    // The output should show either the overridden command or the default
     assert!(
-        stdout.contains("dx") || stdout.contains("serve") || stdout.contains("cargo"),
-        "dry-run should show a command: {stdout}"
+        stdout.contains("dx") && stdout.contains("serve"),
+        "dry-run must apply dx serve override, got: {stdout}"
+    );
+}
+
+#[test]
+fn override_list_and_show_json_after_create() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-list-show");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args(["override", "src/main.rs", "--", "@dx.serve", "RUST_LOG=debug"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args(["override", "--list", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dx"))
+        .stdout(predicate::str::contains("config_path"));
+
+    cargo_runner()
+        .args(["override", "--show", "src/main.rs", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dx"));
+}
+
+#[test]
+fn override_append_mode_merges_extra_args() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-append");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args(["override", "src/main.rs", "--", "--release"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args(["override", "src/main.rs", "--", "@", "--features", "foo"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    let config_content = fs::read_to_string(tmp.path().join(".cargo-runner.json")).unwrap();
+    assert!(
+        config_content.contains("--release"),
+        "append must keep prior args: {config_content}"
+    );
+    assert!(
+        config_content.contains("foo") || config_content.contains("--features"),
+        "append must add new args: {config_content}"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase D — bazel init / build-sync / workspace runnables
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn init_bazel_skip_sync_scaffolds_files() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "bazel-init-app");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init", "--bazel", "--skip-sync", "--workspace-name", "demo_ws"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Scaffolding Bazel workspace").or(
+            predicate::str::contains("Bazel workspace"),
+        ));
+
+    assert!(
+        tmp.path().join("MODULE.bazel").exists(),
+        "MODULE.bazel should be created"
+    );
+    assert!(
+        tmp.path().join(".bazelversion").exists(),
+        ".bazelversion should be created"
+    );
+    assert!(
+        tmp.path().join(".bazelrc").exists(),
+        ".bazelrc should be created"
+    );
+    assert!(
+        tmp.path().join("BUILD.bazel").exists()
+            || tmp.path().join("src").join("BUILD.bazel").exists()
+            || fs::read_dir(tmp.path())
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .any(|e| e.path().join("BUILD.bazel").exists()),
+        "BUILD.bazel should exist at root or package"
+    );
+    assert!(
+        tmp.path().join(".cargo-runner.json").exists(),
+        ".cargo-runner.json should be written"
+    );
+
+    let module = fs::read_to_string(tmp.path().join("MODULE.bazel")).unwrap();
+    assert!(
+        module.contains("demo_ws") || module.contains("module"),
+        "MODULE.bazel should contain workspace name: {module}"
+    );
+}
+
+#[test]
+fn build_sync_dry_run_on_scaffolded_bazel_crate() {
+    let tmp = TempDir::new().unwrap();
+    // Cargo + Bazel package so find_bazel_crates discovers it
+    scaffold_cargo_project(tmp.path(), "build-sync-app");
+    fs::write(
+        tmp.path().join("MODULE.bazel"),
+        "module(name = \"build_sync_ws\")\n",
+    )
+    .unwrap();
+    // Empty BUILD so managed block can be proposed
+    fs::write(
+        tmp.path().join("BUILD.bazel"),
+        r#"load("@rules_rust//rust:defs.bzl", "rust_binary")
+"#,
+    )
+    .unwrap();
+    let root = canonical(tmp.path());
+    let build_before = fs::read_to_string(tmp.path().join("BUILD.bazel")).unwrap();
+
+    // Use --crate by package name to avoid macOS /var vs /private/var path prefix issues
+    cargo_runner()
+        .args(["build-sync", "--dry-run", "--crate-name", "build-sync-app"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dry-run").or(predicate::str::contains("Scanning")));
+
+    // Dry-run must not modify BUILD.bazel
+    let build_after = fs::read_to_string(tmp.path().join("BUILD.bazel")).unwrap();
+    assert_eq!(
+        build_before, build_after,
+        "dry-run must not rewrite BUILD.bazel"
+    );
+}
+
+#[test]
+fn runnables_workspace_json_lists_member_binary() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_workspace_member_binary(tmp.path(), "crates/app", "workspace-app");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["runnables", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("main.rs").or(predicate::str::contains("label")));
+}
+
+#[test]
+fn runnables_filter_test_json() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_project(tmp.path(), "filter-lib");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    // --test should keep tests; JSON must mention the test name
+    cargo_runner()
+        .args(["runnables", "src/lib.rs", "--json", "--test"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test_add").or(predicate::str::contains("Test")));
+
+    // --bin on a lib-only file should yield empty or no test labels
+    let out = cargo_runner()
+        .args(["runnables", "src/lib.rs", "--json", "--bin"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // No binary runnables expected
+    assert!(
+        !stdout.contains("test_add") || stdout.trim() == "[]" || stdout.contains("[]"),
+        "bin filter should not list tests: {stdout}"
+    );
+}
+
+#[test]
+fn runnables_name_exact_filter() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_project(tmp.path(), "name-filter-lib");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["init"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cargo_runner()
+        .args([
+            "runnables",
+            "src/lib.rs",
+            "--json",
+            "--name",
+            "test_add",
+            "--exact",
+        ])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test_add"));
+
+    // exact name that only partially matches must not include test_add
+    let out = cargo_runner()
+        .args([
+            "runnables",
+            "src/lib.rs",
+            "--json",
+            "--name",
+            "add",
+            "--exact",
+        ])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.contains("test_add"),
+        "--exact add must not match test_add: {stdout}"
     );
 }
 

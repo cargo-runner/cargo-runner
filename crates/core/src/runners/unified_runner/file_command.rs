@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use crate::{
     command::builder::rustc::single_file_script_builder::is_single_file_script_file,
@@ -14,7 +13,7 @@ use super::UnifiedRunner;
 impl UnifiedRunner {
     /// Detect all runnables in a file
     pub fn detect_runnables(&self, file_path: &Path) -> Result<Vec<Runnable>> {
-        let ctx = ProjectContext::from_path(file_path, Arc::clone(&self.config));
+        let ctx = ProjectContext::from_path(file_path, self.config_for_path(file_path));
         let targets = self.plugins.discover_targets(&ctx, None)?;
         Ok(targets
             .into_iter()
@@ -24,7 +23,7 @@ impl UnifiedRunner {
 
     /// Get the best runnable at a specific line
     pub fn get_runnable_at_line(&self, file_path: &Path, line: u32) -> Result<Option<Runnable>> {
-        let ctx = ProjectContext::from_path(file_path, Arc::clone(&self.config));
+        let ctx = ProjectContext::from_path(file_path, self.config_for_path(file_path));
         let targets = self.plugins.discover_targets(&ctx, Some(line))?;
         Ok(targets.into_iter().find_map(TargetRef::into_runnable))
     }
@@ -37,7 +36,8 @@ impl UnifiedRunner {
             runnable.file_path
         );
 
-        let ctx = ProjectContext::from_path(&runnable.file_path, Arc::clone(&self.config));
+        let ctx =
+            ProjectContext::from_path(&runnable.file_path, self.config_for_path(&runnable.file_path));
         let target = TargetRef::from_runnable("rust", runnable.clone());
         let command = self.plugins.build_command_for_target(&ctx, &target)?;
 

@@ -190,6 +190,15 @@ impl ConfigMerger {
             }
         }
 
+        // Merge bazel project config (previously dropped — package/workspace bazel never applied)
+        if let Some(override_bazel) = override_config.bazel {
+            if base.bazel.is_none() {
+                base.bazel = Some(override_bazel);
+            } else if let Some(ref mut base_bazel) = base.bazel {
+                base_bazel.merge_with(override_bazel);
+            }
+        }
+
         // Merge overrides - these are function-specific, so we merge the arrays
         self.merge_overrides(&mut base.overrides, override_config.overrides);
 
@@ -283,6 +292,10 @@ impl ConfigMerger {
         override_config: super::RustcConfig,
         force_replace: bool,
     ) {
+        if override_config.channel.is_some() {
+            base.channel = override_config.channel;
+        }
+
         // Merge test_framework
         if let Some(test_framework) = override_config.test_framework {
             if force_replace || base.test_framework.is_none() {
@@ -423,6 +436,14 @@ impl ConfigMerger {
                         self.merge_single_file_script_config(existing_sfs, new_sfs, false);
                     }
                 }
+
+                if let Some(new_bazel) = new_override.bazel {
+                    if existing.bazel.is_none() {
+                        existing.bazel = Some(new_bazel);
+                    } else if let Some(ref mut existing_bazel) = existing.bazel {
+                        merge_bazel_override(existing_bazel, new_bazel);
+                    }
+                }
             } else {
                 // No existing override for this identity, add the new one
                 base_overrides.push(new_override);
@@ -526,6 +547,37 @@ fn merge_env(
         (false, Some(existing)) => {
             existing.extend(new_env);
         }
+    }
+}
+
+/// Field-wise merge of flat per-function Bazel overrides (incoming wins when set).
+fn merge_bazel_override(
+    base: &mut super::BazelOverride,
+    incoming: super::BazelOverride,
+) {
+    if incoming.command.is_some() {
+        base.command = incoming.command;
+    }
+    if incoming.subcommand.is_some() {
+        base.subcommand = incoming.subcommand;
+    }
+    if incoming.target.is_some() {
+        base.target = incoming.target;
+    }
+    if incoming.args.is_some() {
+        base.args = incoming.args;
+    }
+    if incoming.extra_args.is_some() {
+        merge_vec_dedup(&mut base.extra_args, incoming.extra_args, false);
+    }
+    if incoming.test_args.is_some() {
+        merge_vec_dedup(&mut base.test_args, incoming.test_args, false);
+    }
+    if incoming.exec_args.is_some() {
+        merge_vec_dedup(&mut base.exec_args, incoming.exec_args, false);
+    }
+    if incoming.extra_env.is_some() {
+        merge_env(&mut base.extra_env, incoming.extra_env, false);
     }
 }
 

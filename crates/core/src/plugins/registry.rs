@@ -57,6 +57,7 @@ impl PluginRegistry {
         registry.register_primary(crate::plugins::CargoPrimaryPlugin::new());
         registry.register_primary(crate::plugins::RustcPrimaryPlugin::new());
         registry.register_overlay(crate::plugins::DioxusOverlayPlugin::new());
+        registry.register_overlay(crate::plugins::TauriOverlayPlugin::new());
         registry.register_overlay(crate::plugins::LeptosOverlayPlugin::new());
         registry
     }

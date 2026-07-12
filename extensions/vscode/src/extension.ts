@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { BinaryManager } from "./binary/manager";
+import { BinaryManager, CliMissingError } from "./binary/manager";
 import { CliClient } from "./cli/client";
 import { overrideAt, overrideAtCursor } from "./commands/override";
 import { debugFileArg, runAtCursor, runFileArg } from "./commands/run";
@@ -20,13 +20,17 @@ export async function activate(
 ): Promise<void> {
   output = vscode.window.createOutputChannel("Cargo Runner");
   context.subscriptions.push(output);
-  output.appendLine("Cargo Runner extension activating…");
+  output.appendLine(
+    `Cargo Runner extension activating (v${context.extension.packageJSON.version})…`,
+  );
 
   const binaryManager = new BinaryManager(context, output);
   const client = new CliClient(() => binaryManager.ensureBinary(), output);
 
-  binaryManager.ensureBinary().catch((e) => {
-    output.appendLine(`Binary ensure deferred: ${e}`);
+  // Prompt if CLI missing, or if a newer CLI release exists on GitHub
+  // (even when this extension version is unchanged).
+  void binaryManager.promptInstallOnActivate().catch((e) => {
+    output.appendLine(`CLI install/update prompt error: ${e}`);
   });
 
   context.subscriptions.push(registerTaskProvider(context));
@@ -82,6 +86,11 @@ export async function activate(
     try {
       await fn();
     } catch (e) {
+      if (e instanceof CliMissingError) {
+        // ensureBinary already showed the 5s toast + Download action
+        output.appendLine(`CLI missing: ${e.message}`);
+        return;
+      }
       output.appendLine(`error: ${e}`);
       vscode.window.showErrorMessage(`Cargo Runner: ${e}`);
     }
@@ -252,12 +261,13 @@ export async function activate(
       "cargoRunner.setupBinary",
       wrap(async () => {
         const config = vscode.workspace.getConfiguration("cargoRunner");
+        const ver = binaryManager.extensionVersion();
         const choice = await vscode.window.showQuickPick(
           [
             {
-              label: "$(cloud-download) Auto-download",
+              label: "$(cloud-download) Download CLI",
               value: "auto",
-              description: "Download prebuilt binary into extension storage",
+              description: `Download cargo-runner-cli v${ver} into extension storage`,
             },
             {
               label: "$(terminal) Use PATH",
@@ -275,10 +285,11 @@ export async function activate(
           return;
         }
         if (choice.value === "auto") {
-          await config.update("path", "", vscode.ConfigurationTarget.Global);
           try {
-            const p = await binaryManager.updateBinary();
-            vscode.window.showInformationMessage(`Cargo Runner ready: ${p}`);
+            const p = await binaryManager.downloadAndInstall();
+            vscode.window.showInformationMessage(
+              `Cargo Runner CLI v${ver} ready: ${p}`,
+            );
           } catch (e) {
             vscode.window.showErrorMessage(
               `Download failed: ${e}. Try: cargo binstall cargo-runner-cli`,
@@ -290,8 +301,11 @@ export async function activate(
             "cargo-runner",
             vscode.ConfigurationTarget.Global,
           );
+          const ok = await binaryManager.isCliAvailable();
           vscode.window.showInformationMessage(
-            "Using cargo-runner from PATH",
+            ok
+              ? "Using cargo-runner from PATH"
+              : "PATH set, but cargo-runner was not found — install CLI or Download instead",
           );
         } else {
           const custom = await vscode.window.showInputBox({
@@ -311,7 +325,44 @@ export async function activate(
       "cargoRunner.updateBinary",
       wrap(async () => {
         const p = await binaryManager.updateBinary();
-        vscode.window.showInformationMessage(`Updated: ${p}`);
+        vscode.window.showInformationMessage(
+          `Updated CLI to match extension v${binaryManager.extensionVersion()}: ${p}`,
+        );
+      }),
+    ),
+    vscode.commands.registerCommand(
+      "cargoRunner.downloadCli",
+      wrap(async () => {
+        const p = await binaryManager.downloadAndInstall();
+        vscode.window.showInformationMessage(
+          `Cargo Runner CLI installed: ${p}`,
+        );
+      }),
+    ),
+    vscode.commands.registerCommand(
+      "cargoRunner.checkCliUpdates",
+      wrap(async () => {
+        await binaryManager.checkForCliUpdates({ force: true });
+        const installed = await binaryManager.getInstalledCliVersion();
+        if (!(await binaryManager.isCliAvailable())) {
+          vscode.window.showWarningMessage(
+            "No Cargo Runner CLI installed. Use Download CLI first.",
+          );
+          return;
+        }
+        // If checkForCliUpdates showed a prompt, we're done.
+        // If already latest, give feedback (check logs + optional toast).
+        try {
+          const latestTag = await binaryManager.getLatestVersion();
+          const latest = latestTag.replace(/^cargo-runner-cli-v/, "").replace(/^v/, "");
+          if (installed && latest === installed) {
+            vscode.window.showInformationMessage(
+              `Cargo Runner CLI is up to date (v${installed}).`,
+            );
+          }
+        } catch {
+          // network errors already logged
+        }
       }),
     ),
     vscode.commands.registerCommand("cargoRunner.refreshRunnables", () =>

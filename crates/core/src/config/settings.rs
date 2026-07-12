@@ -34,17 +34,25 @@ pub struct Config {
 }
 
 impl Config {
-    /// Load config using the standard merging strategy
+    /// Load config using the standard merging strategy (from cwd).
     pub fn load() -> Result<Self> {
+        if let Ok(cwd) = std::env::current_dir() {
+            Self::load_for_path(&cwd)
+        } else {
+            Ok(Self::default())
+        }
+    }
+
+    /// Load and merge configs for a specific file or directory path.
+    ///
+    /// Prefer this over [`load`] when building commands for a known source
+    /// file so package-level `.cargo-runner.json` (and bazel overrides) apply
+    /// even when the process cwd is elsewhere (IDE / monorepo).
+    pub fn load_for_path(path: &Path) -> Result<Self> {
         use super::merge::ConfigMerger;
 
         let mut merger = ConfigMerger::new();
-
-        // Always load from current directory to get package-specific configs
-        if let Ok(cwd) = std::env::current_dir() {
-            merger.load_configs_for_path(&cwd)?;
-        }
-
+        merger.load_configs_for_path(path)?;
         let mut cfg = merger.get_merged_config();
         cfg.normalize();
         Ok(cfg)

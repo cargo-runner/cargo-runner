@@ -145,3 +145,117 @@ pub fn selector_match_rank(selector: &str, runnable: &Runnable) -> Option<Select
     })
     .or_else(|| check(Some(runnable.label.clone()), SelectorMatchRank::Label))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cargo_runner_core::types::{Position, Scope, ScopeKind};
+    use std::path::PathBuf;
+
+    fn sample_runnable(
+        label: &str,
+        kind: RunnableKind,
+        module_path: &str,
+        file: &str,
+    ) -> Runnable {
+        Runnable {
+            label: label.to_string(),
+            kind,
+            module_path: module_path.to_string(),
+            file_path: PathBuf::from(file),
+            scope: Scope {
+                start: Position::new(0, 0),
+                end: Position::new(5, 0),
+                kind: ScopeKind::Function,
+                name: Some("sample".into()),
+            },
+            extended_scope: None,
+        }
+    }
+
+    #[test]
+    fn normalize_query_collapses_case_and_punctuation() {
+        assert_eq!(normalize_query("Foo_Bar"), "foobar");
+        assert_eq!(normalize_query("foo bar"), "foobar");
+        assert_eq!(normalize_query("FooBar"), "foobar");
+        assert_eq!(normalize_query("foo::bar"), "foobar");
+    }
+
+    #[test]
+    fn runnable_matches_query_substring_and_exact() {
+        let r = sample_runnable(
+            "test tests::test_add",
+            RunnableKind::Test {
+                test_name: "test_add".into(),
+                is_async: false,
+            },
+            "tests",
+            "src/lib.rs",
+        );
+
+        assert!(runnable_matches_query(&r, Some("test_add"), false));
+        assert!(runnable_matches_query(&r, Some("TEST ADD"), false));
+        assert!(runnable_matches_query(&r, Some("testadd"), true));
+        assert!(!runnable_matches_query(&r, Some("add"), true)); // exact: not equal
+        assert!(runnable_matches_query(&r, Some("add"), false)); // substring
+        assert!(runnable_matches_query(&r, None, false));
+    }
+
+    #[test]
+    fn selector_match_rank_prefers_full_selector() {
+        let r = sample_runnable(
+            "test tests::test_add",
+            RunnableKind::Test {
+                test_name: "test_add".into(),
+                is_async: false,
+            },
+            "tests",
+            "src/lib.rs",
+        );
+
+        assert_eq!(
+            selector_match_rank("tests::test_add", &r),
+            Some(SelectorMatchRank::FullSelector)
+        );
+        assert_eq!(
+            selector_match_rank("test_add", &r),
+            Some(SelectorMatchRank::FunctionName)
+        );
+        assert_eq!(
+            selector_match_rank("tests", &r),
+            Some(SelectorMatchRank::ModulePath)
+        );
+        assert!(selector_match_rank("nope", &r).is_none());
+    }
+
+    #[test]
+    fn selector_match_rank_orders_correctly() {
+        assert!(SelectorMatchRank::FullSelector < SelectorMatchRank::FunctionName);
+        assert!(SelectorMatchRank::FunctionName < SelectorMatchRank::SymbolName);
+        assert!(SelectorMatchRank::SymbolName < SelectorMatchRank::ModulePath);
+        assert!(SelectorMatchRank::ModulePath < SelectorMatchRank::Label);
+    }
+
+    #[test]
+    fn runnable_symbol_name_for_binary_and_module() {
+        let bin = sample_runnable(
+            "bin app",
+            RunnableKind::Binary {
+                bin_name: Some("app".into()),
+            },
+            "",
+            "src/main.rs",
+        );
+        assert_eq!(runnable_symbol_name(&bin).as_deref(), Some("app"));
+
+        let mod_tests = sample_runnable(
+            "mod tests",
+            RunnableKind::ModuleTests {
+                module_name: "tests".into(),
+            },
+            "tests",
+            "src/lib.rs",
+        );
+        assert_eq!(runnable_symbol_name(&mod_tests).as_deref(), Some("tests"));
+    }
+}

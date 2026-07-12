@@ -3,7 +3,8 @@
 Machine-readable CLI contracts for the VS Code (and future) adapters.
 
 **Protocol version:** 1  
-**Minimum CLI:** cargo-runner-cli ≥ 1.0.0 (with the flags below)
+**Version parity:** CLI and VS Code extension share the same semver (e.g. both `1.6.2`).  
+Release tags: `cargo-runner-cli-v{version}`. The extension prefers downloading that exact tag.
 
 All JSON modes print **only** JSON on stdout (no emoji banners). Errors still go to stderr and non-zero exit codes.
 
@@ -62,13 +63,15 @@ cargo runner run path/to/file.rs:12 --dry-run --json
   "env": {},
   "shell": "cargo test tests::it_works -- --exact",
   "strategy": "cargo",
-  "runnable": { "...": "optional matched Runnable" }
+  "runnable": { "...": "optional matched Runnable" },
+  "warnings": []
 }
 ```
 
 `strategy` is one of: `cargo`, `cargo_script`, `rustc`, `shell`, `bazel`.
 
-Internal env keys starting with `_` are stripped from `env`.
+Internal env keys starting with `_` are stripped from `env`. Known markers such as
+`_BAZEL_DOC_TEST_LIMITATION` are promoted into `warnings` (string array) for IDE UI.
 
 ---
 
@@ -141,7 +144,9 @@ Parser: `OverrideManager::parse_override_args` in `crates/core/src/config/overri
 
 ## Binary releases (extension download)
 
-Tags: `cargo-runner-cli-v*`
+Tags: `cargo-runner-cli-v*` — **must match** the VS Code extension `package.json` version.
+
+Example: extension `1.6.2` downloads tag `cargo-runner-cli-v1.6.2`.
 
 Asset pattern:
 
@@ -149,7 +154,11 @@ Asset pattern:
 cargo-runner-cli-{rustc-target}-v{version}.tar.gz
 ```
 
-Contains `cargo-runner` (or `cargo-runner.exe`).
+Contains `cargo-runner` (or `cargo-runner.exe`). After extract the extension:
+
+1. `chmod 0o755` (Unix)
+2. Clears macOS `com.apple.quarantine` when present
+3. Runs `cargo-runner --version` to verify executability
 
 | Host | Rust target |
 |------|-------------|
@@ -158,6 +167,8 @@ Contains `cargo-runner` (or `cargo-runner.exe`).
 | linux x64 | `x86_64-unknown-linux-gnu` |
 | linux arm64 | `aarch64-unknown-linux-gnu` |
 | win32 x64 | `x86_64-pc-windows-msvc` |
+
+Multi-platform builds: `.github/workflows/release.yml` (triggered by tag push).
 
 ---
 

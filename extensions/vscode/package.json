@@ -4,7 +4,7 @@
   "description": "Run, test, build, and debug Rust (and Bazel/Dioxus/Leptos) with cargo-runner. Cmd+R to run, Cmd+Shift+R to override.",
   "author": "Uriah Galang <codeitlikemiley@gmail.com>",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "1.6.2",
   "publisher": "cargo-runner",
   "repository": {
     "type": "git",
@@ -109,6 +109,17 @@
       {
         "command": "cargoRunner.setupBinary",
         "title": "Setup Binary",
+        "category": "Cargo Runner"
+      },
+      {
+        "command": "cargoRunner.downloadCli",
+        "title": "Download CLI",
+        "category": "Cargo Runner",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cargoRunner.checkCliUpdates",
+        "title": "Check for CLI Updates",
         "category": "Cargo Runner"
       },
       {
@@ -312,6 +323,17 @@
           "type": "string",
           "default": "1.0.0",
           "description": "Minimum cargo-runner CLI version required by this extension."
+        },
+        "cargoRunner.checkCliUpdates": {
+          "type": "boolean",
+          "default": true,
+          "description": "On activate, check GitHub for a newer cargo-runner CLI and prompt to download it (even if the extension itself was not updated)."
+        },
+        "cargoRunner.cliUpdateCheckIntervalHours": {
+          "type": "number",
+          "default": 24,
+          "minimum": 1,
+          "description": "Minimum hours between CLI update prompts for the same session period."
         },
         "cargoRunner.releaseRepo": {
           "type": "string",

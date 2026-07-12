@@ -185,7 +185,7 @@ cargo runner run src/main.rs
 
 - **Dioxus:** Automatically invokes `dx serve` or `dx build`.
 - **Leptos:** Automatically invokes `cargo leptos watch` or `cargo leptos build`.
-- **Tauri:** Automatically invokes the `cargo tauri` developer environment.
+- **Tauri:** Detects `tauri.conf.json` (or a `tauri` crate dependency) and runs `cargo tauri dev` by default. Override subcommand with e.g. `cargo runner override src/main.rs --subcommand build` → `cargo tauri build`.
 
 ---
 
@@ -301,7 +301,7 @@ Deduplication is name-aware and content-aware:
 | `cargo runner sync [--crate <name>] [--skip-ide]` | Sync Bazel crate-universe after any `Cargo.toml` edit |
 | `cargo runner build-sync [--crate <name>] [--dry-run]` | Update `BUILD.bazel` targets (also runs as part of `init --bazel`) |
 | `cargo runner clean` | Context-aware clean: `bazel clean` (Bazel) or `cargo clean` (Cargo) |
-| `cargo runner watch` | Context-aware file watcher: `ibazel` (Bazel) or `cargo watch` (Cargo) |
+| `cargo runner watch` | Context-aware file watcher: notify + bazel run/test/build (Bazel), or cargo-watch / notify fallback (Cargo) |
 | `cargo runner run <file\|module::path>[:<line>]` | Scope-based execution: detects build system and runs the target at the given line or module path |
 | `cargo runner runnables [file\|module::path[:line]] [--bin] [--test] [--bench] [--doc] [--name QUERY] [--symbol SYMBOL] [--exact]` | List runnable items for a file, module path, or entire workspace |
 | `cargo runner context [file\|module::path[:line]] --json` | Emit machine-readable project/file context for TMP and other tooling |
