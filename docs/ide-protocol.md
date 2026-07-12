@@ -52,6 +52,11 @@ Legacy: `--verbose` still dumps a bare `Runnable[]` JSON array (no command previ
 cargo runner run path/to/file.rs:12 --dry-run --json
 ```
 
+**`--json` requires `--dry-run`.** Using `--json` alone is an error (avoids a silent no-op).
+
+Extra args after a trailing `--` on the CLI are forwarded into the generated command
+(for cargo test/doc: after cargo’s `--` as test-binary args).
+
 ### Output (`DryRunOutput`)
 
 ```json

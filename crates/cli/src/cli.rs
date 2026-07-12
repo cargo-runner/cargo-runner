@@ -101,6 +101,9 @@ pub enum Commands {
     /// or the Bazel equivalent based on the file and project configuration.
     /// Defaults to the best entry point in the cwd, honoring Cargo
     /// `default-run` when present.
+    ///
+    /// Extra args after `--` are forwarded into the generated command
+    /// (for tests: after cargo's `--` as binary args, e.g. `--nocapture`).
     #[command(visible_alias = "r")]
     Run {
         /// Path to the Rust file with optional line number (e.g., src/main.rs:10).
@@ -113,8 +116,17 @@ pub enum Commands {
         dry_run: bool,
 
         /// With `--dry-run`, emit machine-readable JSON only (IDE contract).
+        /// Errors if used without `--dry-run`.
         #[arg(long)]
         json: bool,
+
+        /// Suppress the “Using: …” entrypoint notice on real runs
+        #[arg(short, long)]
+        quiet: bool,
+
+        /// Extra args forwarded into the generated command (place after `--`)
+        #[arg(last = true)]
+        passthrough: Vec<String>,
     },
 
     /// Initialize cargo-runner configuration
@@ -333,6 +345,17 @@ pub enum Commands {
         #[arg(long, default_value = "300", value_name = "MS")]
         debounce: u64,
     },
+
+    /// Generate shell completions (bash, zsh, fish, elvish, powershell)
+    ///
+    /// Examples:
+    ///   cargo runner completions zsh > ~/.zfunc/_cargo-runner
+    ///   cargo runner completions bash > /etc/bash_completion.d/cargo-runner
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 impl Commands {
@@ -376,9 +399,17 @@ impl Commands {
                 filepath,
                 dry_run,
                 json,
+                quiet,
+                passthrough,
             } => {
+                if json && !dry_run {
+                    anyhow::bail!(
+                        "--json requires --dry-run\n\
+                         Example: cargo runner run src/lib.rs:10 --dry-run --json"
+                    );
+                }
                 let fp = crate::utils::path::resolve_filepath_arg(filepath)?;
-                run_command(&fp, dry_run, json)
+                run_command(&fp, dry_run, json, quiet, &passthrough)
             }
             Commands::Init {
                 cwd,
@@ -459,6 +490,13 @@ impl Commands {
                 test,
                 debounce,
             } => watch_command(filepath.as_deref(), run, test, debounce),
+            Commands::Completions { shell } => {
+                use clap::CommandFactory;
+                let mut cmd = Runner::command();
+                let name = cmd.get_name().to_string();
+                clap_complete::generate(shell, &mut cmd, name, &mut std::io::stdout());
+                Ok(())
+            }
         }
     }
 }

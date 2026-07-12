@@ -92,6 +92,14 @@ It uses these exact filesystem layout patterns to automatically detect binaries,
 
 `cargo runner run <path>` detects the surrounding project context and automatically builds the correct compilation and execution command. To preview any command without executing it, simply append `--dry-run`.
 
+```bash
+cargo runner run src/lib.rs:12 --dry-run          # print command
+cargo runner run src/lib.rs:12 --dry-run --json   # IDE JSON (requires --dry-run)
+cargo runner run src/lib.rs:12 -- --nocapture     # forward test binary args
+cargo runner run --quiet                          # real run without “Using: …” notice
+cargo runner completions zsh                      # shell completions
+```
+
 It evaluates the environment in this specific priority:
 
 ### 1. Standalone Rust Files (`rustc`)

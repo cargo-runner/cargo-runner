@@ -234,18 +234,21 @@ edition = "2021"
         ),
     )
     .unwrap();
+    let crate_name = name.replace('-', "_");
     fs::write(
         dir.join("src/lib.rs"),
-        r#"/// A color.
+        format!(
+            r#"/// A color.
 ///
 /// ```
-/// let _ = Color::Red;
+/// let _ = {crate_name}::Color::Red;
 /// ```
-pub enum Color {
+pub enum Color {{
     Red,
     Blue,
-}
-"#,
+}}
+"#
+        ),
     )
     .unwrap();
 }
@@ -1734,6 +1737,77 @@ fn analyze_alias_a_works() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[test]
+fn run_json_without_dry_run_errors() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_cargo_project(tmp.path(), "test-json-footgun");
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["run", "src/main.rs", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--json requires --dry-run"));
+}
+
+#[test]
+fn run_passthrough_args_appear_in_dry_run() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_project(tmp.path(), "test-passthrough");
+    let root = canonical(tmp.path());
+
+    // 1-based line 8 = inside test_add (see scaffold_lib_project)
+    cargo_runner()
+        .args(["run", "src/lib.rs:8", "--dry-run", "--", "--nocapture"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--nocapture"))
+        .stdout(predicate::str::contains("test_add"));
+}
+
+#[test]
+fn run_execute_unit_test_succeeds() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_project(tmp.path(), "test-execute-unit");
+    let root = canonical(tmp.path());
+
+    // Real execute (not dry-run) of the unit test
+    cargo_runner()
+        .args(["run", "src/lib.rs:8", "--quiet"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+}
+
+#[test]
+fn run_execute_doctest_filter_succeeds() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_with_enum_doctest(tmp.path(), "test-execute-doc");
+    let root = canonical(tmp.path());
+
+    // Real execute of Color doctest
+    cargo_runner()
+        .args(["run", "src/lib.rs:4", "--quiet"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+}
+
+#[test]
+fn completions_zsh_emits_script() {
+    cargo_runner()
+        .args(["completions", "zsh"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("cargo-runner"));
+}
+
+#[test]
 fn help_shows_all_commands() {
     cargo_runner()
         .args(["--help"])
@@ -1744,7 +1818,8 @@ fn help_shows_all_commands() {
         .stdout(predicate::str::contains("run"))
         .stdout(predicate::str::contains("override"))
         .stdout(predicate::str::contains("clean"))
-        .stdout(predicate::str::contains("watch"));
+        .stdout(predicate::str::contains("watch"))
+        .stdout(predicate::str::contains("completions"));
 }
 
 #[test]

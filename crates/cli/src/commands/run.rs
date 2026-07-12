@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use cargo_runner_core::{Runnable, RunnableWithScore};
+use cargo_runner_core::{Command, CommandStrategy, Runnable, RunnableWithScore};
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info};
@@ -11,54 +11,90 @@ use crate::config::bazel_workspace::find_cargo_workspace_root;
 use crate::display::ide_json::DryRunOutput;
 use crate::utils::parse_filepath_with_line;
 
-pub fn run_command(filepath_arg: &str, dry_run: bool, json: bool) -> Result<()> {
+/// Options for `cargo runner run`.
+pub struct RunOptions<'a> {
+    pub dry_run: bool,
+    pub json: bool,
+    pub quiet: bool,
+    pub passthrough: &'a [String],
+}
+
+pub fn run_command(
+    filepath_arg: &str,
+    dry_run: bool,
+    json: bool,
+    quiet: bool,
+    passthrough: &[String],
+) -> Result<()> {
+    run_command_with_options(
+        filepath_arg,
+        RunOptions {
+            dry_run,
+            json,
+            quiet,
+            passthrough,
+        },
+    )
+}
+
+fn run_command_with_options(filepath_arg: &str, opts: RunOptions<'_>) -> Result<()> {
     // Parse filepath and line number first
     let (filepath, line) = parse_filepath_with_line(filepath_arg);
     let cwd = std::env::current_dir()?;
 
     let mut runner = cargo_runner_core::UnifiedRunner::new()?;
 
-    let (command, matched_runnable) = match resolve_run_target(&mut runner, &cwd, &filepath)? {
-        RunTarget::File(resolved_path) => {
-            debug!(
-                "Running file: {} at line: {:?}",
-                resolved_path.display(),
-                line
-            );
-            let runnable = if let Some(line_num) = line {
-                runner
-                    .get_best_runnable_at_line(&resolved_path, line_num as u32)
-                    .ok()
-                    .flatten()
-            } else {
-                None
-            };
-            let command = if line.is_none() {
-                // For file-level commands (no line specified), use get_file_command
-                // which has special logic to prefer test commands over doc tests
-                runner
-                    .get_file_command(&resolved_path)?
-                    .ok_or_else(|| anyhow::anyhow!("No runnable found in file"))?
-            } else {
-                // For line-specific commands, use the regular method
-                runner.get_command_at_position_with_dir(&resolved_path, line.map(|l| l as u32))?
-            };
-            (command, runnable)
-        }
-        RunTarget::Runnable(runnable) => {
-            debug!(
-                "Running runnable selector: {:?} -> {:?}",
-                filepath, runnable.label
-            );
-            let command = runner
-                .build_command_for_runnable(&runnable)?
-                .ok_or_else(|| anyhow::anyhow!("No runnable found for selector"))?;
-            (command, Some(*runnable))
-        }
-    };
+    let (mut command, matched_runnable, summary) =
+        match resolve_run_target(&mut runner, &cwd, &filepath)? {
+            RunTarget::File(resolved_path) => {
+                debug!(
+                    "Running file: {} at line: {:?}",
+                    resolved_path.display(),
+                    line
+                );
+                let runnable = if let Some(line_num) = line {
+                    runner
+                        .get_best_runnable_at_line(&resolved_path, line_num as u32)
+                        .ok()
+                        .flatten()
+                } else {
+                    None
+                };
+                let command = if line.is_none() {
+                    // For file-level commands (no line specified), use get_file_command
+                    // which has special logic to prefer test commands over doc tests
+                    runner
+                        .get_file_command(&resolved_path)?
+                        .ok_or_else(|| anyhow::anyhow!("No runnable found in file"))?
+                } else {
+                    // For line-specific commands, use the regular method
+                    runner
+                        .get_command_at_position_with_dir(&resolved_path, line.map(|l| l as u32))?
+                };
+                let summary = if let Some(ref r) = runnable {
+                    format!("{} ({})", r.label, resolved_path.display())
+                } else {
+                    format!("file {}", resolved_path.display())
+                };
+                (command, runnable, summary)
+            }
+            RunTarget::Runnable(runnable) => {
+                debug!(
+                    "Running runnable selector: {:?} -> {:?}",
+                    filepath, runnable.label
+                );
+                let command = runner
+                    .build_command_for_runnable(&runnable)?
+                    .ok_or_else(|| anyhow::anyhow!("No runnable found for selector"))?;
+                let summary = format!("{} ({})", runnable.label, runnable.file_path.display());
+                (command, Some(*runnable), summary)
+            }
+        };
 
-    if dry_run {
-        if json {
+    append_passthrough(&mut command, opts.passthrough);
+
+    if opts.dry_run {
+        if opts.json {
             let output = DryRunOutput::from_command(&command, matched_runnable);
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
@@ -69,16 +105,22 @@ pub fn run_command(filepath_arg: &str, dry_run: bool, json: bool) -> Result<()> 
             if !command.env.is_empty() {
                 println!("Environment variables:");
                 for (key, value) in &command.env {
+                    // Internal markers are still shown on human dry-run for debugging
                     println!("  {key}={value}");
                 }
             }
         }
     } else {
-        // Check for Bazel doc test limitation
+        if !opts.quiet {
+            eprintln!("Using: {summary}");
+        }
+
+        // Surface structured warnings (also promoted into dry-run JSON)
         if let Some((_, msg)) = command
             .env
             .iter()
             .find(|(k, _)| k.as_str() == "_BAZEL_DOC_TEST_LIMITATION")
+            && !opts.quiet
         {
             eprintln!("Note: {msg}");
             eprintln!("Running all doc tests for the crate instead.");
@@ -101,6 +143,40 @@ pub fn run_command(filepath_arg: &str, dry_run: bool, json: bool) -> Result<()> 
     }
 
     Ok(())
+}
+
+/// Forward trailing CLI args into the generated command.
+///
+/// - Cargo/Bazel **test-like** commands: after `--` (test binary args, e.g. `--nocapture`)
+/// - Other strategies / `cargo run`: append as additional program args
+pub fn append_passthrough(command: &mut Command, extra: &[String]) {
+    if extra.is_empty() {
+        return;
+    }
+
+    let is_test_like = command
+        .args
+        .iter()
+        .any(|a| a == "test" || a == "bench" || a == "nextest" || a == "--doc");
+
+    match command.strategy {
+        CommandStrategy::Cargo | CommandStrategy::CargoScript if is_test_like => {
+            if !command.args.iter().any(|a| a == "--") {
+                command.args.push("--".to_string());
+            }
+            command.args.extend(extra.iter().cloned());
+        }
+        CommandStrategy::Bazel if is_test_like => {
+            // Prefer --test_arg for each extra (rules_rust / bazel test)
+            for arg in extra {
+                command.args.push("--test_arg".to_string());
+                command.args.push(arg.clone());
+            }
+        }
+        _ => {
+            command.args.extend(extra.iter().cloned());
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -208,10 +284,11 @@ fn format_selector_matches(matches: &[SelectorMatch]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cargo_runner_core::Command;
 
     #[test]
     fn test_file_not_found() {
-        let result = run_command("nonexistent.rs", true, false);
+        let result = run_command("nonexistent.rs", true, false, true, &[]);
         if let Err(e) = &result {
             println!("Debug err: {:?}", e);
         }
@@ -222,5 +299,45 @@ mod tests {
                 .to_string()
                 .contains("No runnable found for selector")
         );
+    }
+
+    #[test]
+    fn passthrough_appends_after_cargo_test_dashdash() {
+        let mut cmd = Command::cargo(vec![
+            "test".into(),
+            "--package".into(),
+            "pkg".into(),
+            "--".into(),
+            "my_test".into(),
+            "--exact".into(),
+        ]);
+        append_passthrough(&mut cmd, &["--nocapture".into()]);
+        assert_eq!(
+            cmd.args,
+            vec![
+                "test",
+                "--package",
+                "pkg",
+                "--",
+                "my_test",
+                "--exact",
+                "--nocapture"
+            ]
+        );
+    }
+
+    #[test]
+    fn passthrough_inserts_dashdash_for_cargo_test() {
+        let mut cmd = Command::cargo(vec!["test".into(), "--doc".into()]);
+        append_passthrough(&mut cmd, &["Color".into()]);
+        assert!(cmd.args.contains(&"--".to_string()));
+        assert_eq!(cmd.args.last().map(String::as_str), Some("Color"));
+    }
+
+    #[test]
+    fn passthrough_appends_for_cargo_run() {
+        let mut cmd = Command::cargo(vec!["run".into(), "--bin".into(), "app".into()]);
+        append_passthrough(&mut cmd, &["--release".into()]);
+        assert_eq!(cmd.args, vec!["run", "--bin", "app", "--release"]);
     }
 }
