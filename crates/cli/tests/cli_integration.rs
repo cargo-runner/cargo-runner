@@ -1103,6 +1103,31 @@ fn analyze_binary_file() {
 }
 
 #[test]
+fn runnables_json_shape_has_required_fields() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_project(tmp.path(), "test-json-shape");
+    let root = canonical(tmp.path());
+
+    let out = cargo_runner()
+        .args(["runnables", "src/lib.rs", "--json"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
+    let arr = v.as_array().expect("json array");
+    assert!(!arr.is_empty(), "expected at least one runnable");
+    let first = &arr[0];
+    assert!(first.get("label").is_some());
+    assert!(first.get("kind").is_some());
+    assert!(first.get("file_path").is_some());
+    assert!(first.get("scope").is_some());
+}
+
+#[test]
 fn runnables_json_binary_file() {
     let tmp = TempDir::new().unwrap();
     scaffold_cargo_project(tmp.path(), "test-runnables-json");

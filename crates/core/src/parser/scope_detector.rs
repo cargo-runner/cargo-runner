@@ -261,6 +261,9 @@ impl ScopeDetector {
             "impl_item" => {
                 self.handle_impl(node, source, scopes)?;
             }
+            "trait_item" => {
+                self.handle_trait(node, source, scopes)?;
+            }
             _ => {}
         }
 
@@ -489,6 +492,44 @@ impl ScopeDetector {
 
         scopes.push(extended_scope);
 
+        Ok(())
+    }
+
+    fn handle_trait(
+        &self,
+        node: &Node,
+        source: &str,
+        scopes: &mut Vec<ExtendedScope>,
+    ) -> Result<()> {
+        let name_node = node
+            .child_by_field_name("name")
+            .ok_or(Error::MissingEntityName { entity: "Trait" })?;
+
+        let name = name_node
+            .utf8_text(source.as_bytes())
+            .map_err(|e| Error::InvalidUtf8Name {
+                entity: "Trait",
+                err: e,
+            })?
+            .to_string();
+
+        let (extended_start, details) = self.find_extended_info(node, source);
+        let end = node_to_position(node, false);
+
+        let scope = Scope {
+            start: extended_start,
+            end,
+            kind: ScopeKind::Trait,
+            name: Some(name),
+        };
+
+        let mut extended_scope = ExtendedScope::new(scope)
+            .with_extended_start(extended_start)
+            .with_doc_comments(details.doc_comment_lines, details.has_doc_tests)
+            .with_attributes(details.attribute_lines);
+
+        extended_scope.original_start = details.original_start;
+        scopes.push(extended_scope);
         Ok(())
     }
 

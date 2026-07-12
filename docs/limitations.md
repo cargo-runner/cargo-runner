@@ -15,8 +15,8 @@ by design.
 ## Scoped doctests (supported)
 
 Fenced examples in `///`, `//!`, or `/** */` attached to fn / struct / enum /
-mod / union / impl method. Fence tags `ignore`, `no_run`, and `compile_fail`
-do not produce a “Run” action.
+mod / union / **trait** / impl method. Fence tags `ignore`, `no_run`, and
+`compile_fail` do not produce a “Run” action.
 
 ## IDE JSON errors
 

@@ -112,6 +112,7 @@ impl RunnableDetector {
                                 | ScopeKind::Enum
                                 | ScopeKind::Module
                                 | ScopeKind::Union
+                                | ScopeKind::Trait
                         )
                     })
                     .filter(|es| {
@@ -137,14 +138,20 @@ impl RunnableDetector {
                         let priority_a = match a.scope.kind {
                             ScopeKind::Function => 0,
                             ScopeKind::Impl => 1,
-                            ScopeKind::Struct | ScopeKind::Enum | ScopeKind::Union => 2,
+                            ScopeKind::Struct
+                            | ScopeKind::Enum
+                            | ScopeKind::Union
+                            | ScopeKind::Trait => 2,
                             ScopeKind::Module => 3,
                             _ => 4,
                         };
                         let priority_b = match b.scope.kind {
                             ScopeKind::Function => 0,
                             ScopeKind::Impl => 1,
-                            ScopeKind::Struct | ScopeKind::Enum | ScopeKind::Union => 2,
+                            ScopeKind::Struct
+                            | ScopeKind::Enum
+                            | ScopeKind::Union
+                            | ScopeKind::Trait => 2,
                             ScopeKind::Module => 3,
                             _ => 4,
                         };
@@ -537,6 +544,38 @@ pub mod util {
                 struct_or_module_name,
                 method_name: None
             } if struct_or_module_name == "util"
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn detect_doctest_on_trait() -> Result<()> {
+        let source = r#"
+/// A drawable surface
+///
+/// ```
+/// fn assert_drawable<T: Drawable>() {}
+/// ```
+pub trait Drawable {
+    fn draw(&self);
+}
+"#;
+        let mut temp_file = NamedTempFile::new()?;
+        write!(temp_file, "{source}")?;
+
+        let mut detector = RunnableDetector::new()?;
+        let runnables = detector.detect_runnables(temp_file.path(), None)?;
+        let docs: Vec<_> = runnables
+            .iter()
+            .filter(|r| matches!(r.kind, RunnableKind::DocTest { .. }))
+            .collect();
+        assert_eq!(docs.len(), 1, "runnables={runnables:?}");
+        assert!(matches!(
+            &docs[0].kind,
+            RunnableKind::DocTest {
+                struct_or_module_name,
+                method_name: None
+            } if struct_or_module_name == "Drawable"
         ));
         Ok(())
     }

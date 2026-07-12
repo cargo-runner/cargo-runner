@@ -29,6 +29,8 @@ pub enum ScopeKind {
     Struct,
     Enum,
     Union,
+    /// Trait definition (`trait Foo { ... }`)
+    Trait,
     Impl,
     Function,
     Test,
