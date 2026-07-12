@@ -8,7 +8,7 @@ pub mod target_ref;
 pub use analyzer::{RustSourceAnalyzer, SourceAnalyzer};
 pub use builtins::{
     BazelPrimaryPlugin, CargoPrimaryPlugin, DioxusOverlayPlugin, LeptosOverlayPlugin,
-    RustcPrimaryPlugin,
+    RustcPrimaryPlugin, TauriOverlayPlugin,
 };
 pub use command_spec::{CommandSpec, CommandStrategy};
 pub use context::ProjectContext;

@@ -10,6 +10,7 @@ use crate::commands::workspace::{
 use crate::config::bazel_workspace::find_cargo_workspace_root;
 use crate::display::command_breakdown::print_command_breakdown;
 use crate::display::formatter::{determine_file_type, print_runnable_type};
+use crate::display::ide_json::{CommandPreview, RunnableEntry};
 use crate::utils::parser::parse_filepath_with_line;
 
 pub fn runnables_command(
@@ -17,12 +18,21 @@ pub fn runnables_command(
     filters: RunnableFilters,
     verbose: bool,
     show_config: bool,
+    json: bool,
+    with_commands: bool,
 ) -> Result<()> {
     if let Some(filepath_arg) = filepath_arg {
-        return analyze_file_command(filepath_arg, filters, verbose, show_config);
+        return analyze_file_command(
+            filepath_arg,
+            filters,
+            verbose,
+            show_config,
+            json,
+            with_commands,
+        );
     }
 
-    analyze_workspace_command(filters, verbose, show_config)
+    analyze_workspace_command(filters, verbose, show_config, json, with_commands)
 }
 
 pub fn analyze_command(filepath_arg: &str, verbose: bool, show_config: bool) -> Result<()> {
@@ -31,6 +41,8 @@ pub fn analyze_command(filepath_arg: &str, verbose: bool, show_config: bool) -> 
         RunnableFilters::default(),
         verbose,
         show_config,
+        false,
+        false,
     )
 }
 
@@ -71,6 +83,8 @@ fn analyze_file_command(
     filters: RunnableFilters,
     verbose: bool,
     show_config: bool,
+    json: bool,
+    with_commands: bool,
 ) -> Result<()> {
     debug!("Analyzing file: {}", filepath_arg);
 
@@ -87,7 +101,14 @@ fn analyze_file_command(
 
     if !absolute_path.exists() {
         if filepath.contains("::") {
-            return analyze_module_path_command(&filepath, filters, verbose, show_config);
+            return analyze_module_path_command(
+                &filepath,
+                filters,
+                verbose,
+                show_config,
+                json,
+                with_commands,
+            );
         }
         return Err(anyhow::anyhow!(
             "File not found: {}",
@@ -97,15 +118,14 @@ fn analyze_file_command(
 
     let mut runner = cargo_runner_core::UnifiedRunner::new()?;
 
-    if verbose {
-        // Show JSON output for verbose mode
+    if json || verbose {
         let mut runnables = if let Some(line_num) = line {
             runner.detect_runnables_at_line(&absolute_path, line_num as u32)?
         } else {
             runner.detect_all_runnables(&absolute_path)?
         };
         runnables.retain(|r| filters.matches(r));
-        println!("{}", serde_json::to_string_pretty(&runnables)?);
+        emit_runnables_json(&mut runner, runnables, json || with_commands, with_commands)?;
     } else {
         // Show formatted output
         print_formatted_analysis(&mut runner, &filepath, line, filters, show_config)?;
@@ -119,6 +139,8 @@ fn analyze_module_path_command(
     filters: RunnableFilters,
     verbose: bool,
     show_config: bool,
+    json: bool,
+    with_commands: bool,
 ) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let mut runner = cargo_runner_core::UnifiedRunner::new()?;
@@ -130,15 +152,18 @@ fn analyze_module_path_command(
         )),
         1 => {
             let path = matches.into_iter().next().expect("Checked len == 1");
-            print_formatted_analysis(
-                &mut runner,
-                path.to_str().unwrap_or_default(),
-                None,
-                filters,
-                show_config,
-            )?;
-            if verbose {
-                println!();
+            if json || verbose {
+                let mut runnables = runner.detect_all_runnables(&path)?;
+                runnables.retain(|r| filters.matches(r));
+                emit_runnables_json(&mut runner, runnables, json || with_commands, with_commands)?;
+            } else {
+                print_formatted_analysis(
+                    &mut runner,
+                    path.to_str().unwrap_or_default(),
+                    None,
+                    filters,
+                    show_config,
+                )?;
             }
             Ok(())
         }
@@ -159,17 +184,31 @@ fn analyze_workspace_command(
     filters: RunnableFilters,
     verbose: bool,
     show_config: bool,
+    json: bool,
+    with_commands: bool,
 ) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let workspace_root = find_cargo_workspace_root(&cwd).unwrap_or(cwd.clone());
     let scan_roots = workspace_scan_roots(&workspace_root)?;
 
-    println!("🔍 Scanning workspace: {}", workspace_root.display());
-    println!("{}", "=".repeat(80));
-
-    let runner = cargo_runner_core::UnifiedRunner::new()?;
+    let mut runner = cargo_runner_core::UnifiedRunner::new()?;
     let mut files = workspace_rs_files(&scan_roots);
     files.sort();
+
+    if json {
+        let mut all = Vec::new();
+        for path in files {
+            let Ok(mut runnables) = runner.detect_runnables(&path) else {
+                continue;
+            };
+            runnables.retain(|r| filters.matches(r));
+            all.extend(runnables);
+        }
+        return emit_runnables_json(&mut runner, all, true, with_commands);
+    }
+
+    println!("🔍 Scanning workspace: {}", workspace_root.display());
+    println!("{}", "=".repeat(80));
 
     if files.is_empty() {
         println!("No Rust files found under {}", workspace_root.display());
@@ -229,6 +268,40 @@ fn analyze_workspace_command(
         }
     }
 
+    Ok(())
+}
+
+/// Emit runnables as pure JSON for IDE consumption.
+///
+/// When `as_entries` is true (typically `--json`), each item is a
+/// [`RunnableEntry`] that may include a command preview.
+/// When false (legacy `--verbose` only), emit a bare `Vec<Runnable>`.
+fn emit_runnables_json(
+    runner: &mut cargo_runner_core::UnifiedRunner,
+    runnables: Vec<Runnable>,
+    as_entries: bool,
+    with_commands: bool,
+) -> Result<()> {
+    if as_entries {
+        let entries: Vec<RunnableEntry> = runnables
+            .into_iter()
+            .map(|runnable| {
+                let command = if with_commands {
+                    runner
+                        .build_command_for_runnable(&runnable)
+                        .ok()
+                        .flatten()
+                        .map(|cmd| CommandPreview::from_command(&cmd))
+                } else {
+                    None
+                };
+                RunnableEntry { runnable, command }
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&entries)?);
+    } else {
+        println!("{}", serde_json::to_string_pretty(&runnables)?);
+    }
     Ok(())
 }
 

@@ -26,18 +26,23 @@ else
 fi
 
 if [ "$FORCE" -eq 0 ]; then
-    echo "Updating Cargo.toml versions to $TARGET_VERSION..."
+    echo "Updating Cargo.toml + VS Code extension versions to $TARGET_VERSION..."
     # Update root Cargo.toml (works securely on macOS/Linux with .bak)
     sed -i.bak "s/^version = \".*\"/version = \"$TARGET_VERSION\"/" Cargo.toml
     # Update CLI Cargo.toml version requirement
     sed -i.bak "s/cargo-runner-core = { version = \".*\"/cargo-runner-core = { version = \"$TARGET_VERSION\"/" crates/cli/Cargo.toml
+    # Keep VS Code extension in version parity with the CLI
+    if [ -f extensions/vscode/package.json ]; then
+        sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$TARGET_VERSION\"/" extensions/vscode/package.json
+        rm -f extensions/vscode/package.json.bak
+    fi
     
     # Cleanup backups
     rm -f Cargo.toml.bak crates/cli/Cargo.toml.bak
     
     # Commit changes
-    git add Cargo.toml crates/cli/Cargo.toml
-    git commit -m "Bump version to $TARGET_VERSION for stable release"
+    git add Cargo.toml crates/cli/Cargo.toml extensions/vscode/package.json 2>/dev/null || git add Cargo.toml crates/cli/Cargo.toml
+    git commit -m "Bump version to $TARGET_VERSION for stable release (CLI + VS Code extension parity)"
     git push origin main
 fi
 

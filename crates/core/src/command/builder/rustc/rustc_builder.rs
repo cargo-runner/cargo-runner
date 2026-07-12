@@ -112,6 +112,8 @@ impl RustcCommandBuilder {
         // Apply environment variables
         self.apply_env(&mut command, runnable, config, file_type);
 
+        self.apply_rustc_channel(&mut command, runnable, config, file_type);
+
         Ok(command)
     }
 
@@ -146,6 +148,8 @@ impl RustcCommandBuilder {
 
         // Apply environment variables
         self.apply_env(&mut command, runnable, config, file_type);
+
+        self.apply_rustc_channel(&mut command, runnable, config, file_type);
 
         Ok(command)
     }
@@ -184,6 +188,8 @@ impl RustcCommandBuilder {
 
         // Apply environment variables
         self.apply_env(&mut command, runnable, config, file_type);
+
+        self.apply_rustc_channel(&mut command, runnable, config, file_type);
 
         Ok(command)
     }
@@ -243,7 +249,44 @@ impl RustcCommandBuilder {
         // Apply environment variables
         self.apply_env(&mut command, runnable, config, file_type);
 
+        self.apply_rustc_channel(&mut command, runnable, config, file_type);
+
         Ok(command)
+    }
+
+    /// Wrap `rustc …` as `rustup run <channel> rustc …` when a channel is set
+    /// on rustc config or a matching per-function override (`+nightly`).
+    fn apply_rustc_channel(
+        &self,
+        command: &mut Command,
+        runnable: &Runnable,
+        config: &Config,
+        file_type: FileType,
+    ) {
+        let channel = self
+            .get_override(runnable, config, file_type)
+            .and_then(|o| o.rustc.as_ref())
+            .and_then(|r| r.channel.clone())
+            .or_else(|| config.rustc.as_ref().and_then(|r| r.channel.clone()));
+
+        let Some(channel) = channel else {
+            return;
+        };
+
+        // Already wrapped
+        if command.program == "rustup" {
+            return;
+        }
+
+        let mut new_args = vec![
+            "run".to_string(),
+            channel,
+            command.program.clone(),
+        ];
+        new_args.extend(command.args.iter().cloned());
+        command.strategy = crate::command::CommandStrategy::Shell;
+        command.program = "rustup".to_string();
+        command.args = new_args;
     }
 
     fn get_test_framework(&self, config: &Config) -> RustcFramework {

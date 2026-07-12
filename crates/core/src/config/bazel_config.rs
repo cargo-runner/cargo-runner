@@ -80,11 +80,21 @@ pub struct BazelOverride {
     pub args: Option<Vec<String>>,
 
     /// Extra args appended after base args (no expansion).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Alias `extra_run_args` for older CLI write paths.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "extra_run_args"
+    )]
     pub extra_args: Option<Vec<String>>,
 
     /// Override test args (passed via `--test_arg`).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Alias `extra_test_args` for older CLI write paths.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "extra_test_args"
+    )]
     pub test_args: Option<Vec<String>>,
 
     /// Override exec args (passed after `--` for `bazel run`).

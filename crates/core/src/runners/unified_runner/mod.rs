@@ -67,6 +67,21 @@ impl UnifiedRunner {
     pub fn set_config(&mut self, config: Config) {
         self.config = Arc::new(config);
     }
+
+    /// Config merged for a specific path (package + workspace + root).
+    /// Falls back to the runner's cwd-scoped config on error.
+    pub(crate) fn config_for_path(&self, path: &std::path::Path) -> Arc<Config> {
+        match Config::load_for_path(path) {
+            Ok(cfg) => Arc::new(cfg),
+            Err(e) => {
+                tracing::debug!(
+                    "config_for_path({:?}) failed: {e}; using runner cwd config",
+                    path
+                );
+                Arc::clone(&self.config)
+            }
+        }
+    }
 }
 
 // Convenience methods that mirror the old CargoRunner API for backward compatibility

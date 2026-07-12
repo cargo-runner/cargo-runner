@@ -75,6 +75,14 @@ pub enum Commands {
         /// Show current configuration
         #[arg(short, long)]
         config: bool,
+
+        /// Emit machine-readable JSON only (IDE contract).
+        #[arg(long)]
+        json: bool,
+
+        /// With `--json`, include resolved command previews per runnable.
+        #[arg(long)]
+        with_commands: bool,
     },
 
     /// Emit machine-readable context for a Rust file or the current project.
@@ -103,6 +111,10 @@ pub enum Commands {
         /// Print the command without executing it
         #[arg(short, long)]
         dry_run: bool,
+
+        /// With `--dry-run`, emit machine-readable JSON only (IDE contract).
+        #[arg(long)]
+        json: bool,
     },
 
     /// Initialize cargo-runner configuration
@@ -157,17 +169,23 @@ pub enum Commands {
     ///
     /// Override tokens (passed after `--`):
     /// - `@cmd.sub` — Set command and subcommand (e.g., `@dx.run`)
+    /// - `@` alone first — Append/merge mode (legacy UX)
     /// - `+channel` — Set Rust toolchain channel (e.g., `+nightly`)
     /// - `KEY=value` — Set environment variable (e.g., `RUST_LOG=debug`)
-    /// - `/args...` — Test binary args (like `--` in cargo test)
-    /// - `-command` — Remove command override
-    /// - `-` — Remove the entire override
+    /// - `/args...` or `# args...` — Test binary args (like `--` in cargo test)
+    /// - `-command` / `!env` / `!#` — Remove field overrides
+    /// - `-` or `!!` — Remove the entire override
     ///
     /// Named flags: `--command`, `--subcommand`, `--channel`
+    ///
+    /// Listing (IDE):
+    ///   cargo runner override --list [--file path] [--json]
+    ///   cargo runner override --show <filepath> [--json]
     #[command(visible_alias = "o")]
     Override {
-        /// File path with optional line number (e.g., src/main.rs:10)
-        filepath: String,
+        /// File path with optional line number (e.g., src/main.rs:10).
+        /// Optional when using `--list`.
+        filepath: Option<String>,
 
         /// Create override at project root level
         #[arg(short, long)]
@@ -184,6 +202,22 @@ pub enum Commands {
         /// Set the Rust toolchain channel (e.g., nightly, stable)
         #[arg(long)]
         channel: Option<String>,
+
+        /// List overrides from `.cargo-runner.json` configs
+        #[arg(long)]
+        list: bool,
+
+        /// Show the override matching a file/line (requires filepath)
+        #[arg(long)]
+        show: bool,
+
+        /// When listing, filter overrides whose match.file_path equals this path
+        #[arg(long, value_name = "PATH")]
+        file: Option<String>,
+
+        /// Emit machine-readable JSON only (IDE contract)
+        #[arg(long)]
+        json: bool,
 
         /// Override tokens and extra arguments (see help above)
         #[arg(last = true)]
@@ -316,6 +350,8 @@ impl Commands {
                 exact,
                 verbose,
                 config,
+                json,
+                with_commands,
             } => {
                 let filters = crate::commands::analyze::RunnableFilters {
                     bin,
@@ -326,16 +362,23 @@ impl Commands {
                     symbol,
                     exact,
                 };
-                if let Some(fp) = filepath {
-                    runnables_command(Some(&fp), filters, verbose, config)
-                } else {
-                    runnables_command(None, filters, verbose, config)
-                }
+                runnables_command(
+                    filepath.as_deref(),
+                    filters,
+                    verbose,
+                    config,
+                    json,
+                    with_commands,
+                )
             }
             Commands::Context { filepath, json } => context_command(filepath.as_deref(), json),
-            Commands::Run { filepath, dry_run } => {
+            Commands::Run {
+                filepath,
+                dry_run,
+                json,
+            } => {
                 let fp = crate::utils::path::resolve_filepath_arg(filepath)?;
-                run_command(&fp, dry_run)
+                run_command(&fp, dry_run, json)
             }
             Commands::Init {
                 cwd,
@@ -361,8 +404,31 @@ impl Commands {
                 command,
                 subcommand,
                 channel,
+                list,
+                show,
+                file,
+                json,
                 override_args,
-            } => override_command(&filepath, root, command, subcommand, channel, override_args),
+            } => {
+                if list {
+                    crate::commands::override_cmd::list_overrides_command(
+                        file.as_deref().or(filepath.as_deref()),
+                        json,
+                    )
+                } else if show {
+                    let fp = filepath.ok_or_else(|| {
+                        anyhow::anyhow!("override --show requires a filepath argument")
+                    })?;
+                    crate::commands::override_cmd::show_override_command(&fp, json)
+                } else {
+                    let fp = filepath.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "override requires a filepath (or use --list / --show)"
+                        )
+                    })?;
+                    override_command(&fp, root, command, subcommand, channel, override_args)
+                }
+            }
 
             // Bazel transparent-proxy commands
             Commands::Sync {

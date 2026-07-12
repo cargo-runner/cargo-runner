@@ -3,7 +3,8 @@ members = ["crates/core", "crates/cli"]
 resolver = "2"
 
 [workspace.package]
-version = "1.0.0"
+# Keep in lockstep with extensions/vscode/package.json (VS Code extension version).
+version = "1.6.2"
 edition = "2024"
 authors = ["Uriah Galang <codeitlikemiley@gmail.com>"]
 license = "MIT"

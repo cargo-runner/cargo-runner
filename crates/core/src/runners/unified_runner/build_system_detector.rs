@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use crate::{build_system::BuildSystem, error::Result, plugins::ProjectContext};
 
@@ -80,7 +79,7 @@ impl UnifiedRunner {
 
             tracing::debug!("detect_build_system: checking directory {:?}", check_path);
 
-            let ctx = ProjectContext::from_path(check_path, Arc::clone(&self.config));
+            let ctx = ProjectContext::from_path(check_path, self.config_for_path(check_path));
             if let Ok(build_system) = self.plugins.detect_primary_build_system(&ctx) {
                 tracing::info!(
                     "detect_build_system: found {:?} at {:?}",

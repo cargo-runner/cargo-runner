@@ -4,6 +4,11 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RustcConfig {
+    /// Optional rustup toolchain channel (e.g. `nightly`).
+    /// Applied as `rustup run <channel> rustc …` when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_framework: Option<RustcFramework>,
     #[serde(skip_serializing_if = "Option::is_none")]

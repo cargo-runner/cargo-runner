@@ -28,6 +28,7 @@ pub struct RustcPrimaryPlugin {
 
 pub struct DioxusOverlayPlugin;
 pub struct LeptosOverlayPlugin;
+pub struct TauriOverlayPlugin;
 
 impl Default for BazelPrimaryPlugin {
     fn default() -> Self {
@@ -98,6 +99,104 @@ impl LeptosOverlayPlugin {
     }
 }
 
+impl Default for TauriOverlayPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TauriOverlayPlugin {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+/// Returns true when the nearest crate `Cargo.toml` declares `crate_name` as a
+/// direct dependency (or dependency feature table).
+///
+/// Avoids false positives from comments / unrelated strings like `"my-leptos-notes"`.
+fn cargo_depends_on(cargo_toml: &std::path::Path, crate_name: &str) -> bool {
+    let Ok(content) = std::fs::read_to_string(cargo_toml) else {
+        return false;
+    };
+    // Prefer structured parse when possible
+    if let Ok(manifest) = cargo_toml::Manifest::from_str(&content) {
+        let has = |deps: &cargo_toml::DepsSet| deps.contains_key(crate_name);
+        if has(&manifest.dependencies)
+            || has(&manifest.dev_dependencies)
+            || has(&manifest.build_dependencies)
+        {
+            return true;
+        }
+        // workspace.dependencies (Cargo workspaces)
+        if let Some(ws) = &manifest.workspace
+            && has(&ws.dependencies)
+        {
+            return true;
+        }
+    }
+
+    // Fallback: line-oriented match for `name =` under a dependency-like section
+    let mut in_deps = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_deps = trimmed == "[dependencies]"
+                || trimmed == "[dev-dependencies]"
+                || trimmed == "[build-dependencies]"
+                || trimmed.starts_with("[dependencies.")
+                || trimmed == "[workspace.dependencies]";
+            continue;
+        }
+        if !in_deps || trimmed.starts_with('#') {
+            continue;
+        }
+        // `leptos = "…"` or `leptos = { … }` or `"leptos" = …`
+        if let Some(rest) = trimmed.strip_prefix(crate_name)
+            && (rest.starts_with('=') || rest.starts_with(' ') || rest.starts_with('\t'))
+        {
+            return true;
+        }
+        let quoted = format!("\"{crate_name}\"");
+        if let Some(rest) = trimmed.strip_prefix(&quoted)
+            && (rest.starts_with('=') || rest.trim_start().starts_with('='))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// True when this path is a Tauri app: `tauri.conf.json` nearby, or a `tauri` crate dep.
+fn is_tauri_project(ctx: &ProjectContext) -> bool {
+    if ctx.has_manifest("tauri.conf.json") {
+        return true;
+    }
+    // Common layout: src-tauri/tauri.conf.json while editing src/
+    let start = if ctx.file_path.is_file() {
+        ctx.file_path.parent().unwrap_or(&ctx.file_path)
+    } else {
+        &ctx.file_path
+    };
+    for ancestor in start.ancestors() {
+        if ancestor.join("tauri.conf.json").exists()
+            || ancestor.join("src-tauri/tauri.conf.json").exists()
+        {
+            return true;
+        }
+        if let Some(cargo) = ancestor.join("Cargo.toml").exists().then(|| ancestor.join("Cargo.toml"))
+            && cargo_depends_on(&cargo, "tauri")
+        {
+            return true;
+        }
+        if ancestor.join("MODULE.bazel").exists() || ancestor.join("WORKSPACE").exists() {
+            break;
+        }
+    }
+    ctx.manifest("Cargo.toml")
+        .is_some_and(|p| cargo_depends_on(p, "tauri"))
+}
+
 /// Returns true when `file_path` is inside a Cargo *crate* (a directory that has
 /// its own `Cargo.toml` with a `[package]` section), as opposed to being a loose
 /// `.rs` file inside a workspace root whose `Cargo.toml` only has `[workspace]`.
@@ -151,8 +250,16 @@ fn identity_for_override(
     runnable: &Runnable,
     ctx: &ProjectContext,
 ) -> crate::types::FunctionIdentity {
+    let package = ctx
+        .config
+        .cargo
+        .as_ref()
+        .and_then(|c| c.package.clone())
+        .or_else(|| {
+            crate::runners::common::get_cargo_package_name(&runnable.file_path)
+        });
     crate::types::FunctionIdentity {
-        package: ctx.config.cargo.as_ref().and_then(|c| c.package.clone()),
+        package,
         module_path: if runnable.module_path.is_empty() {
             None
         } else {
@@ -375,9 +482,7 @@ impl crate::plugins::registry::OverlayPlugin for LeptosOverlayPlugin {
         primary_id == "cargo"
             && ctx
                 .manifest("Cargo.toml")
-                .and_then(|cargo_toml| std::fs::read_to_string(cargo_toml).ok())
-                .map(|content| content.contains("leptos"))
-                .unwrap_or(false)
+                .is_some_and(|cargo_toml| cargo_depends_on(cargo_toml, "leptos"))
             && target
                 .runnable
                 .as_ref()
@@ -434,5 +539,147 @@ impl crate::plugins::registry::OverlayPlugin for LeptosOverlayPlugin {
             pipe_command: command.pipe_command,
             test_binary_args: command.test_binary_args,
         })
+    }
+}
+
+impl crate::plugins::registry::OverlayPlugin for TauriOverlayPlugin {
+    fn id(&self) -> &'static str {
+        "tauri"
+    }
+
+    fn default_priority(&self) -> i32 {
+        // Between Dioxus (200) and Leptos (150)
+        175
+    }
+
+    fn matches(&self, primary_id: &str, ctx: &ProjectContext, target: &TargetRef) -> bool {
+        primary_id == "cargo"
+            && is_tauri_project(ctx)
+            && target
+                .runnable
+                .as_ref()
+                .is_some_and(|r| matches!(r.kind, RunnableKind::Binary { .. }))
+    }
+
+    fn augment_command(
+        &self,
+        command: CommandSpec,
+        target: &TargetRef,
+        ctx: &ProjectContext,
+    ) -> Result<CommandSpec> {
+        let runnable = runnable_from_target(target)?;
+        if !matches!(runnable.kind, RunnableKind::Binary { .. }) {
+            return Ok(command);
+        }
+
+        // Default: cargo tauri dev (hot reload). Override with e.g. @cargo.tauri build
+        let mut subcommand = "dev".to_string();
+        let mut extra_args = Vec::new();
+        let mut env = command.env.clone();
+        let mut channel: Option<String> = None;
+
+        if let Some(ov) = ctx
+            .config
+            .get_override_for(&identity_for_override(runnable, ctx))
+            .and_then(|o| o.cargo.as_ref())
+        {
+            if let Some(sub) = &ov.subcommand {
+                // Accept "tauri dev", "tauri build", or bare "dev"/"build"
+                subcommand = if let Some(stripped) = sub.strip_prefix("tauri ") {
+                    stripped.to_string()
+                } else {
+                    sub.clone()
+                };
+            }
+            if let Some(args) = &ov.extra_args {
+                extra_args.extend(args.clone());
+            }
+            if let Some(extra_env) = &ov.extra_env {
+                env.extend(extra_env.iter().map(|(k, v)| (k.clone(), v.clone())));
+            }
+            if let Some(ch) = &ov.channel {
+                channel = Some(ch.clone());
+            }
+        }
+
+        let mut args = Vec::new();
+        if let Some(ch) = channel {
+            args.push(format!("+{ch}"));
+        }
+        args.push("tauri".to_string());
+        args.extend(subcommand.split_whitespace().map(String::from));
+        args.extend(extra_args);
+
+        Ok(CommandSpec {
+            strategy: CommandStrategy::Cargo,
+            program: "cargo".to_string(),
+            args,
+            working_dir: command.working_dir,
+            env,
+            test_filter: command.test_filter,
+            exec_args: command.exec_args,
+            pipe_command: command.pipe_command,
+            test_binary_args: command.test_binary_args,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn cargo_depends_on_detects_table_and_simple_dep() {
+        let tmp = TempDir::new().unwrap();
+        let cargo = tmp.path().join("Cargo.toml");
+        fs::write(
+            &cargo,
+            r#"[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+leptos = "0.6"
+serde = { version = "1", features = ["derive"] }
+"#,
+        )
+        .unwrap();
+        assert!(cargo_depends_on(&cargo, "leptos"));
+        assert!(cargo_depends_on(&cargo, "serde"));
+        assert!(!cargo_depends_on(&cargo, "tauri"));
+    }
+
+    #[test]
+    fn cargo_depends_on_ignores_comment_mentions() {
+        let tmp = TempDir::new().unwrap();
+        let cargo = tmp.path().join("Cargo.toml");
+        fs::write(
+            &cargo,
+            r#"[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+# we used to use leptos here
+serde = "1"
+"#,
+        )
+        .unwrap();
+        assert!(!cargo_depends_on(&cargo, "leptos"));
+    }
+
+    #[test]
+    fn is_tauri_project_finds_conf_json() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]\nname=\"a\"\nversion=\"0.1.0\"\n").unwrap();
+        fs::write(tmp.path().join("tauri.conf.json"), "{}\n").unwrap();
+        let rs = tmp.path().join("src/main.rs");
+        fs::create_dir_all(rs.parent().unwrap()).unwrap();
+        fs::write(&rs, "fn main() {}\n").unwrap();
+
+        let ctx = ProjectContext::from_path(&rs, std::sync::Arc::new(crate::config::Config::default()));
+        assert!(is_tauri_project(&ctx));
     }
 }

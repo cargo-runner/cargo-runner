@@ -8,23 +8,32 @@ use crate::commands::matching::selector_match_rank;
 use crate::commands::workspace::resolve_module_path_to_file;
 use crate::commands::workspace::{workspace_rs_files, workspace_scan_roots};
 use crate::config::bazel_workspace::find_cargo_workspace_root;
+use crate::display::ide_json::DryRunOutput;
 use crate::utils::parse_filepath_with_line;
 
-pub fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
+pub fn run_command(filepath_arg: &str, dry_run: bool, json: bool) -> Result<()> {
     // Parse filepath and line number first
     let (filepath, line) = parse_filepath_with_line(filepath_arg);
     let cwd = std::env::current_dir()?;
 
     let mut runner = cargo_runner_core::UnifiedRunner::new()?;
 
-    let command = match resolve_run_target(&mut runner, &cwd, &filepath)? {
+    let (command, matched_runnable) = match resolve_run_target(&mut runner, &cwd, &filepath)? {
         RunTarget::File(resolved_path) => {
             debug!(
                 "Running file: {} at line: {:?}",
                 resolved_path.display(),
                 line
             );
-            if line.is_none() {
+            let runnable = if let Some(line_num) = line {
+                runner
+                    .get_best_runnable_at_line(&resolved_path, line_num as u32)
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            };
+            let command = if line.is_none() {
                 // For file-level commands (no line specified), use get_file_command
                 // which has special logic to prefer test commands over doc tests
                 runner
@@ -33,28 +42,35 @@ pub fn run_command(filepath_arg: &str, dry_run: bool) -> Result<()> {
             } else {
                 // For line-specific commands, use the regular method
                 runner.get_command_at_position_with_dir(&resolved_path, line.map(|l| l as u32))?
-            }
+            };
+            (command, runnable)
         }
         RunTarget::Runnable(runnable) => {
             debug!(
                 "Running runnable selector: {:?} -> {:?}",
                 filepath, runnable.label
             );
-            runner
+            let command = runner
                 .build_command_for_runnable(&runnable)?
-                .ok_or_else(|| anyhow::anyhow!("No runnable found for selector"))?
+                .ok_or_else(|| anyhow::anyhow!("No runnable found for selector"))?;
+            (command, Some(*runnable))
         }
     };
 
     if dry_run {
-        println!("{}", command.to_shell_command());
-        if let Some(ref dir) = command.working_dir {
-            println!("Working directory: {}", dir.display());
-        }
-        if !command.env.is_empty() {
-            println!("Environment variables:");
-            for (key, value) in &command.env {
-                println!("  {key}={value}");
+        if json {
+            let output = DryRunOutput::from_command(&command, matched_runnable);
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            println!("{}", command.to_shell_command());
+            if let Some(ref dir) = command.working_dir {
+                println!("Working directory: {}", dir.display());
+            }
+            if !command.env.is_empty() {
+                println!("Environment variables:");
+                for (key, value) in &command.env {
+                    println!("  {key}={value}");
+                }
             }
         }
     } else {
@@ -195,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_file_not_found() {
-        let result = run_command("nonexistent.rs", true);
+        let result = run_command("nonexistent.rs", true, false);
         if let Err(e) = &result {
             println!("Debug err: {:?}", e);
         }
