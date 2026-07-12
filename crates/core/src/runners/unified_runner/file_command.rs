@@ -36,8 +36,10 @@ impl UnifiedRunner {
             runnable.file_path
         );
 
-        let ctx =
-            ProjectContext::from_path(&runnable.file_path, self.config_for_path(&runnable.file_path));
+        let ctx = ProjectContext::from_path(
+            &runnable.file_path,
+            self.config_for_path(&runnable.file_path),
+        );
         let target = TargetRef::from_runnable("rust", runnable.clone());
         let command = self.plugins.build_command_for_target(&ctx, &target)?;
 

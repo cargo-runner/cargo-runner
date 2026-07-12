@@ -35,13 +35,8 @@ impl CommandBuilderImpl for TestCommandBuilder {
         let mut strategy = crate::command::CommandStrategy::Cargo;
 
         // Per-function override command/subcommand/channel takes precedence
-        let override_cmd = builder.apply_cargo_override_command(
-            &mut args,
-            runnable,
-            config,
-            file_type,
-            "test",
-        );
+        let override_cmd =
+            builder.apply_cargo_override_command(&mut args, runnable, config, file_type, "test");
 
         if let Some((strat, is_custom)) = override_cmd {
             strategy = strat;

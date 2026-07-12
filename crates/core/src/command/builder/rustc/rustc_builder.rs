@@ -278,11 +278,7 @@ impl RustcCommandBuilder {
             return;
         }
 
-        let mut new_args = vec![
-            "run".to_string(),
-            channel,
-            command.program.clone(),
-        ];
+        let mut new_args = vec!["run".to_string(), channel, command.program.clone()];
         new_args.extend(command.args.iter().cloned());
         command.strategy = crate::command::CommandStrategy::Shell;
         command.program = "rustup".to_string();

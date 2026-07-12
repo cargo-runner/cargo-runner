@@ -598,7 +598,7 @@ impl ScopeDetector {
             match sibling.kind() {
                 "line_comment" => {
                     if let Ok(text) = sibling.utf8_text(source.as_bytes())
-                        && text.starts_with("///")
+                        && is_doc_line_comment(text)
                     {
                         siblings_to_process.push((sibling, "doc_comment"));
                         if text.contains("```") {
@@ -607,6 +607,18 @@ impl ScopeDetector {
                     }
                     // Don't break on regular comments - just skip them
                     // This allows us to find doc comments that come before regular comments
+                }
+                "block_comment" => {
+                    if let Ok(text) = sibling.utf8_text(source.as_bytes())
+                        && is_doc_block_comment(text)
+                    {
+                        siblings_to_process.push((sibling, "doc_comment"));
+                        if text.contains("```") {
+                            has_doc_tests = true;
+                        }
+                    } else {
+                        // Non-doc block comment: skip without stopping (same as //)
+                    }
                 }
                 "attribute_item" => {
                     siblings_to_process.push((sibling, "attribute"));
@@ -629,11 +641,17 @@ impl ScopeDetector {
 
             match *kind {
                 "doc_comment" => {
-                    doc_comment_lines += 1;
+                    // Line comments: one node per source line. Block docs may span many lines.
+                    if sibling.kind() == "block_comment" {
+                        let end_pos = node_to_position(sibling, false);
+                        doc_comment_lines += end_pos.line.saturating_sub(pos.line) + 1;
+                    } else {
+                        doc_comment_lines += 1;
+                    }
                 }
                 "attribute" => {
                     let end_pos = node_to_position(sibling, false);
-                    attribute_lines += end_pos.line - pos.line + 1;
+                    attribute_lines += end_pos.line.saturating_sub(pos.line) + 1;
                 }
                 _ => {}
             }
@@ -650,42 +668,203 @@ impl ScopeDetector {
         (extended_start, details)
     }
 
-    pub fn find_doc_tests(&self, node: &Node, source: &str) -> Vec<(Position, Position, String)> {
+    pub fn find_doc_tests(&self, node: &Node, source: &str) -> Vec<DocTestSpan> {
         find_doc_tests_recursive(node, source)
     }
 }
 
-fn find_doc_tests_recursive(node: &Node, source: &str) -> Vec<(Position, Position, String)> {
+/// A fenced doc example found in source comments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocTestSpan {
+    pub start: Position,
+    pub end: Position,
+    pub text: String,
+    /// False when the opening fence uses `ignore`, `no_run`, or `compile_fail`.
+    pub executable: bool,
+}
+
+/// Outer (`///`) or inner (`//!`) line doc comment (not `////…`).
+fn is_doc_line_comment(text: &str) -> bool {
+    let t = text.trim_start();
+    (t.starts_with("///") && !t.starts_with("////")) || t.starts_with("//!")
+}
+
+/// Block doc comment (`/**` or `/*!`).
+fn is_doc_block_comment(text: &str) -> bool {
+    let t = text.trim_start();
+    t.starts_with("/**") || t.starts_with("/*!")
+}
+
+fn strip_line_doc_prefix(text: &str) -> Option<&str> {
+    let t = text.trim_start();
+    if t.starts_with("///") && !t.starts_with("////") {
+        Some(t[3..].trim_start())
+    } else if let Some(rest) = t.strip_prefix("//!") {
+        Some(rest.trim_start())
+    } else {
+        None
+    }
+}
+
+/// Strip `/**` / `/*!` / `*/` and leading `*` on each content line.
+fn strip_block_doc_body(text: &str) -> String {
+    let mut body = text.trim_start();
+    if let Some(rest) = body.strip_prefix("/**") {
+        body = rest;
+    } else if let Some(rest) = body.strip_prefix("/*!") {
+        body = rest;
+    }
+    if let Some(rest) = body.strip_suffix("*/") {
+        body = rest;
+    }
+
+    let mut out = String::new();
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        let content = if let Some(rest) = trimmed.strip_prefix('*') {
+            rest.strip_prefix(' ').unwrap_or(rest)
+        } else {
+            line
+        };
+        out.push_str(content);
+        out.push('\n');
+    }
+    out
+}
+
+/// Whether the first markdown fence in `text` is an executable rustdoc example.
+pub fn fence_is_executable(text: &str) -> bool {
+    let Some(idx) = text.find("```") else {
+        return false;
+    };
+    let after = &text[idx + 3..];
+    let tag_line = after.lines().next().unwrap_or("").trim();
+    // Split on commas and whitespace: ```rust,ignore / ```ignore / ```no_run
+    for part in tag_line.split(|c: char| c == ',' || c.is_whitespace()) {
+        let tag = part.trim();
+        if tag.is_empty() {
+            continue;
+        }
+        if matches!(tag, "ignore" | "no_run" | "compile_fail") {
+            return false;
+        }
+    }
+    true
+}
+
+/// Extract fenced examples from a contiguous body of doc text spanning `start_line..=end_line`.
+fn spans_from_doc_body(body: &str, start_line: u32, start_char: u32) -> Vec<DocTestSpan> {
+    let mut spans = Vec::new();
+    let lines: Vec<&str> = body.lines().collect();
+    let mut i = 0usize;
+    while i < lines.len() {
+        if !lines[i].contains("```") {
+            i += 1;
+            continue;
+        }
+        // Opening fence at line i
+        let open_i = i;
+        let mut full = String::new();
+        full.push_str(lines[i]);
+        full.push('\n');
+        i += 1;
+        let mut closed = false;
+        while i < lines.len() {
+            full.push_str(lines[i]);
+            full.push('\n');
+            if lines[i].contains("```") {
+                closed = true;
+                break;
+            }
+            i += 1;
+        }
+        if closed {
+            let end_i = i;
+            spans.push(DocTestSpan {
+                start: Position {
+                    line: start_line + open_i as u32,
+                    character: if open_i == 0 { start_char } else { 0 },
+                },
+                end: Position {
+                    line: start_line + end_i as u32,
+                    character: lines[end_i].len() as u32,
+                },
+                text: full.clone(),
+                executable: fence_is_executable(&full),
+            });
+            i += 1;
+        } else {
+            // Unclosed fence — stop scanning this body
+            break;
+        }
+    }
+    spans
+}
+
+fn find_doc_tests_recursive(node: &Node, source: &str) -> Vec<DocTestSpan> {
     let mut doc_tests = Vec::new();
 
+    // Contiguous run of outer/inner line doc comments: only start at the first
+    // line of a run so multi-example blocks are scanned once.
     if node.kind() == "line_comment"
         && let Ok(comment_text) = node.utf8_text(source.as_bytes())
-        && comment_text.starts_with("///")
+        && is_doc_line_comment(comment_text)
+    {
+        let prev_is_doc = node
+            .prev_sibling()
+            .and_then(|p| {
+                if p.kind() == "line_comment" {
+                    p.utf8_text(source.as_bytes()).ok().map(is_doc_line_comment)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(false);
+
+        if !prev_is_doc {
+            let start = node_to_position(node, true);
+            let mut body = String::new();
+            let mut end_line = start.line;
+            let mut current = Some(*node);
+
+            while let Some(n) = current {
+                if n.kind() != "line_comment" {
+                    break;
+                }
+                let Ok(text) = n.utf8_text(source.as_bytes()) else {
+                    break;
+                };
+                let Some(stripped) = strip_line_doc_prefix(text) else {
+                    break;
+                };
+                body.push_str(stripped);
+                body.push('\n');
+                end_line = node_to_position(&n, false).line;
+                current = n.next_sibling();
+            }
+
+            if body.contains("```") {
+                let mut spans = spans_from_doc_body(&body, start.line, start.character);
+                // Clamp end lines if spans_from_doc_body overshoots
+                for s in &mut spans {
+                    if s.end.line > end_line {
+                        s.end.line = end_line;
+                    }
+                }
+                doc_tests.extend(spans);
+            }
+        }
+    }
+
+    // Block doc comments are a single AST node (may contain multiple fences).
+    if node.kind() == "block_comment"
+        && let Ok(comment_text) = node.utf8_text(source.as_bytes())
+        && is_doc_block_comment(comment_text)
         && comment_text.contains("```")
     {
         let start = node_to_position(node, true);
-
-        let mut current = Some(*node);
-        let mut _end = node_to_position(node, false);
-        let mut full_text = String::new();
-
-        while let Some(n) = current {
-            if let Ok(text) = n.utf8_text(source.as_bytes()) {
-                if let Some(stripped) = text.strip_prefix("///") {
-                    full_text.push_str(stripped.trim_start());
-                    full_text.push('\n');
-                    _end = node_to_position(&n, false);
-
-                    if text.contains("```") && full_text.matches("```").count() >= 2 {
-                        doc_tests.push((start, _end, full_text.clone()));
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-            current = n.next_sibling();
-        }
+        let body = strip_block_doc_body(comment_text);
+        doc_tests.extend(spans_from_doc_body(&body, start.line, start.character));
     }
 
     for child in node.children(&mut node.walk()) {
@@ -741,5 +920,104 @@ fn test_addition() {
             .unwrap();
 
         assert_eq!(test_scope.kind, ScopeKind::Test);
+    }
+
+    #[test]
+    fn fence_is_executable_honors_rustdoc_tags() {
+        assert!(fence_is_executable("```\nassert!(true);\n```\n"));
+        assert!(fence_is_executable("```rust\nassert!(true);\n```\n"));
+        assert!(fence_is_executable("```should_panic\npanic!();\n```\n"));
+        assert!(!fence_is_executable("```ignore\nassert!(true);\n```\n"));
+        assert!(!fence_is_executable("```rust,ignore\nx\n```\n"));
+        assert!(!fence_is_executable("```no_run\nmain();\n```\n"));
+        assert!(!fence_is_executable("```compile_fail\nbroken\n```\n"));
+    }
+
+    #[test]
+    fn find_doc_tests_outer_line_docs() {
+        let source = r#"
+/// Adds numbers
+///
+/// ```
+/// assert_eq!(1 + 1, 2);
+/// ```
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+"#;
+        let mut parser = RustParser::new().unwrap();
+        let spans = parser.find_doc_tests(source).unwrap();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].executable);
+        assert!(spans[0].text.contains("assert_eq!"));
+    }
+
+    #[test]
+    fn find_doc_tests_inner_line_docs() {
+        let source = r#"
+mod sample {
+    //! Inner docs with a fence
+    //!
+    //! ```
+    //! assert!(true);
+    //! ```
+}
+"#;
+        let mut parser = RustParser::new().unwrap();
+        let spans = parser.find_doc_tests(source).unwrap();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].executable);
+    }
+
+    #[test]
+    fn find_doc_tests_block_docs() {
+        let source = r#"
+/**
+ * Block docs
+ *
+ * ```
+ * assert_eq!(2 + 2, 4);
+ * ```
+ */
+pub struct Blocked;
+"#;
+        let mut parser = RustParser::new().unwrap();
+        let spans = parser.find_doc_tests(source).unwrap();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].executable);
+        assert!(spans[0].text.contains("assert_eq!"));
+    }
+
+    #[test]
+    fn find_doc_tests_skips_ignore_fence() {
+        let source = r#"
+/// ```ignore
+/// not_run();
+/// ```
+pub fn skipped() {}
+"#;
+        let mut parser = RustParser::new().unwrap();
+        let spans = parser.find_doc_tests(source).unwrap();
+        assert_eq!(spans.len(), 1);
+        assert!(!spans[0].executable);
+    }
+
+    #[test]
+    fn find_doc_tests_multi_example_in_one_block() {
+        let source = r#"
+/// First
+/// ```
+/// assert_eq!(1, 1);
+/// ```
+/// Second
+/// ```
+/// assert_eq!(2, 2);
+/// ```
+pub fn multi() {}
+"#;
+        let mut parser = RustParser::new().unwrap();
+        let spans = parser.find_doc_tests(source).unwrap();
+        assert_eq!(spans.len(), 2);
+        assert!(spans.iter().all(|s| s.executable));
     }
 }

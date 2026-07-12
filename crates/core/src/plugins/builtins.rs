@@ -184,7 +184,10 @@ fn is_tauri_project(ctx: &ProjectContext) -> bool {
         {
             return true;
         }
-        if let Some(cargo) = ancestor.join("Cargo.toml").exists().then(|| ancestor.join("Cargo.toml"))
+        if let Some(cargo) = ancestor
+            .join("Cargo.toml")
+            .exists()
+            .then(|| ancestor.join("Cargo.toml"))
             && cargo_depends_on(&cargo, "tauri")
         {
             return true;
@@ -255,9 +258,7 @@ fn identity_for_override(
         .cargo
         .as_ref()
         .and_then(|c| c.package.clone())
-        .or_else(|| {
-            crate::runners::common::get_cargo_package_name(&runnable.file_path)
-        });
+        .or_else(|| crate::runners::common::get_cargo_package_name(&runnable.file_path));
     crate::types::FunctionIdentity {
         package,
         module_path: if runnable.module_path.is_empty() {
@@ -673,13 +674,18 @@ serde = "1"
     #[test]
     fn is_tauri_project_finds_conf_json() {
         let tmp = TempDir::new().unwrap();
-        fs::write(tmp.path().join("Cargo.toml"), "[package]\nname=\"a\"\nversion=\"0.1.0\"\n").unwrap();
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[package]\nname=\"a\"\nversion=\"0.1.0\"\n",
+        )
+        .unwrap();
         fs::write(tmp.path().join("tauri.conf.json"), "{}\n").unwrap();
         let rs = tmp.path().join("src/main.rs");
         fs::create_dir_all(rs.parent().unwrap()).unwrap();
         fs::write(&rs, "fn main() {}\n").unwrap();
 
-        let ctx = ProjectContext::from_path(&rs, std::sync::Arc::new(crate::config::Config::default()));
+        let ctx =
+            ProjectContext::from_path(&rs, std::sync::Arc::new(crate::config::Config::default()));
         assert!(is_tauri_project(&ctx));
     }
 }

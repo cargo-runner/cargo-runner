@@ -422,9 +422,7 @@ impl Commands {
                     crate::commands::override_cmd::show_override_command(&fp, json)
                 } else {
                     let fp = filepath.ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "override requires a filepath (or use --list / --show)"
-                        )
+                        anyhow::anyhow!("override requires a filepath (or use --list / --show)")
                     })?;
                     override_command(&fp, root, command, subcommand, channel, override_args)
                 }

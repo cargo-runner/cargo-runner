@@ -152,12 +152,7 @@ mod tests {
     use cargo_runner_core::types::{Position, Scope, ScopeKind};
     use std::path::PathBuf;
 
-    fn sample_runnable(
-        label: &str,
-        kind: RunnableKind,
-        module_path: &str,
-        file: &str,
-    ) -> Runnable {
+    fn sample_runnable(label: &str, kind: RunnableKind, module_path: &str, file: &str) -> Runnable {
         Runnable {
             label: label.to_string(),
             kind,

@@ -551,10 +551,7 @@ fn merge_env(
 }
 
 /// Field-wise merge of flat per-function Bazel overrides (incoming wins when set).
-fn merge_bazel_override(
-    base: &mut super::BazelOverride,
-    incoming: super::BazelOverride,
-) {
+fn merge_bazel_override(base: &mut super::BazelOverride, incoming: super::BazelOverride) {
     if incoming.command.is_some() {
         base.command = incoming.command;
     }

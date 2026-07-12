@@ -33,13 +33,8 @@ impl CommandBuilderImpl for ModuleTestCommandBuilder {
         let mut args = vec![];
         let mut strategy = crate::command::CommandStrategy::Cargo;
 
-        let override_cmd = builder.apply_cargo_override_command(
-            &mut args,
-            runnable,
-            config,
-            file_type,
-            "test",
-        );
+        let override_cmd =
+            builder.apply_cargo_override_command(&mut args, runnable, config, file_type, "test");
 
         if let Some((strat, _)) = override_cmd {
             strategy = strat;

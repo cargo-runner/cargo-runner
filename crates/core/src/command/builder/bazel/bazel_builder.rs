@@ -677,9 +677,7 @@ impl BazelCommandBuilder {
                 .cargo
                 .as_ref()
                 .and_then(|c| c.package.clone())
-                .or_else(|| {
-                    crate::runners::common::get_cargo_package_name(&runnable.file_path)
-                })
+                .or_else(|| crate::runners::common::get_cargo_package_name(&runnable.file_path))
                 .or_else(|| config.bazel.as_ref().and_then(|b| b.workspace.clone())),
             module_path: if runnable.module_path.is_empty() {
                 None

@@ -78,10 +78,7 @@ mod tests {
 
     fn scope_for(name: &str, line: u32) -> Scope {
         Scope {
-            start: Position {
-                line,
-                character: 0,
-            },
+            start: Position { line, character: 0 },
             end: Position {
                 line: line + 5,
                 character: 0,

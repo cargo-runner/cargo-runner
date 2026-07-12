@@ -26,7 +26,9 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
     ) -> Result<Command> {
         let builder = DocTestCommandBuilder;
 
-        // Get the test_id from the runnable
+        // Rustdoc test names look like `src/lib.rs - nested::Item (line N)`.
+        // Filters must be crate-relative (e.g. `Item`, `nested::Item`, `Type::method`)
+        // and must NOT include the Cargo package name (that matches zero tests).
         let test_id = match &runnable.kind {
             RunnableKind::DocTest {
                 struct_or_module_name,
@@ -37,10 +39,19 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
                     .strip_prefix("impl ")
                     .unwrap_or(struct_or_module_name);
 
-                if let Some(method) = method_name {
+                let item = if let Some(method) = method_name {
                     format!("{clean_name}::{method}")
                 } else {
                     clean_name.to_string()
+                };
+
+                let module_prefix = rustdoc_module_prefix(&runnable.module_path, package, &item);
+                if module_prefix.is_empty() {
+                    item
+                } else if module_prefix == item || module_prefix.ends_with(&format!("::{item}")) {
+                    module_prefix
+                } else {
+                    format!("{module_prefix}::{item}")
                 }
             }
             _ => {
@@ -53,18 +64,14 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
         let mut args = vec![];
         let mut strategy = crate::command::CommandStrategy::Cargo;
 
-        let override_cmd = builder.apply_cargo_override_command(
-            &mut args,
-            runnable,
-            config,
-            file_type,
-            "test",
-        );
+        let override_cmd =
+            builder.apply_cargo_override_command(&mut args, runnable, config, file_type, "test");
 
         if let Some((strat, _)) = override_cmd {
             strategy = strat;
             // Ensure --doc is present for cargo doctests unless a fully custom command
-            if strategy == crate::command::CommandStrategy::Cargo && !args.iter().any(|a| a == "--doc")
+            if strategy == crate::command::CommandStrategy::Cargo
+                && !args.iter().any(|a| a == "--doc")
             {
                 args.push("--doc".to_string());
             }
@@ -125,6 +132,43 @@ impl CommandBuilderImpl for DocTestCommandBuilder {
 
         Ok(command)
     }
+}
+
+/// Strip Cargo package / rustc crate name from a resolved module path so the
+/// remaining path matches rustdoc filter names (`nested::Item`, not `pkg::nested::Item`).
+fn rustdoc_module_prefix(module_path: &str, package: Option<&str>, item: &str) -> String {
+    if module_path.is_empty() {
+        return String::new();
+    }
+
+    let mut path = module_path.to_string();
+
+    let strip_prefixes: Vec<String> = {
+        let mut v = Vec::new();
+        if let Some(pkg) = package {
+            v.push(pkg.to_string());
+            v.push(pkg.replace('-', "_"));
+        }
+        v
+    };
+
+    for prefix in &strip_prefixes {
+        if path == *prefix {
+            return String::new();
+        }
+        let with_sep = format!("{prefix}::");
+        if let Some(rest) = path.strip_prefix(&with_sep) {
+            path = rest.to_string();
+            break;
+        }
+    }
+
+    // If path is only the item (or ends with it), still useful as prefix empty case
+    if path == item {
+        return String::new();
+    }
+
+    path
 }
 
 impl DocTestCommandBuilder {

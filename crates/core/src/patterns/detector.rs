@@ -75,8 +75,19 @@ impl RunnableDetector {
 
             let mut runnables = Vec::new();
 
-            // Detect doc tests
-            for (start, end, _text) in doc_tests {
+            // Detect doc tests (fenced examples only; skip ignore/no_run/compile_fail)
+            for span in doc_tests {
+                if !span.executable {
+                    tracing::debug!(
+                        "Skipping non-executable doc fence at lines {}-{}",
+                        span.start.line + 1,
+                        span.end.line + 1
+                    );
+                    continue;
+                }
+
+                let start = span.start;
+                let end = span.end;
                 tracing::debug!(
                     "Found doc test at lines {}-{}",
                     start.line + 1,
@@ -89,51 +100,57 @@ impl RunnableDetector {
                     name: Some(format!("doc test at line {}", start.line + 1)),
                 };
 
-                // Find the parent struct/impl/function for this doc test
-                // Strategy: Find the scope whose extended range starts with this doc test
+                // Find the parent item for this doc test (struct/enum/mod/impl/fn/…)
                 let parent_extended = extended_scopes
                     .iter()
                     .filter(|es| {
                         matches!(
                             es.scope.kind,
-                            ScopeKind::Struct | ScopeKind::Impl | ScopeKind::Function
+                            ScopeKind::Struct
+                                | ScopeKind::Impl
+                                | ScopeKind::Function
+                                | ScopeKind::Enum
+                                | ScopeKind::Module
+                                | ScopeKind::Union
                         )
                     })
-                    // Check if this doc test is at the beginning of the extended scope
                     .filter(|es| {
-                        // The doc test should be within the extended scope
                         let contains = es.scope.contains_line(start.line);
-                        // And the doc test should start near the beginning of the extended scope
+                        // Doc should sit near the top of the extended scope (outer docs)
+                        // or the first body lines (e.g. //! inside a module).
+                        let base_margin = es.doc_comment_lines + es.attribute_lines;
+                        let margin = if matches!(es.scope.kind, ScopeKind::Module) {
+                            // Modules often put `//!` immediately inside `{`
+                            base_margin + 12
+                        } else {
+                            base_margin + 4
+                        };
                         let at_start = start.line >= es.scope.start.line
-                            && start.line
-                                < es.scope.start.line
-                                    + es.doc_comment_lines
-                                    + es.attribute_lines
-                                    + 2;
+                            && start.line < es.scope.start.line.saturating_add(margin);
 
                         contains && at_start
                     })
-                    // Prioritize by scope type first (Function > Impl > Struct), then by size
+                    // Function > Impl > type-like > Module; then smaller range
                     .min_by(|a, b| {
                         use std::cmp::Ordering;
 
-                        // First, prioritize by scope kind
                         let priority_a = match a.scope.kind {
-                            ScopeKind::Function => 0, // Highest priority
-                            ScopeKind::Impl => 1,     // Medium priority
-                            ScopeKind::Struct => 2,   // Lower priority
-                            _ => 3,
+                            ScopeKind::Function => 0,
+                            ScopeKind::Impl => 1,
+                            ScopeKind::Struct | ScopeKind::Enum | ScopeKind::Union => 2,
+                            ScopeKind::Module => 3,
+                            _ => 4,
                         };
                         let priority_b = match b.scope.kind {
                             ScopeKind::Function => 0,
                             ScopeKind::Impl => 1,
-                            ScopeKind::Struct => 2,
-                            _ => 3,
+                            ScopeKind::Struct | ScopeKind::Enum | ScopeKind::Union => 2,
+                            ScopeKind::Module => 3,
+                            _ => 4,
                         };
 
                         match priority_a.cmp(&priority_b) {
                             Ordering::Equal => {
-                                // If same priority, prefer smaller scope (more specific)
                                 let size_a = a.scope.end.line - a.scope.start.line;
                                 let size_b = b.scope.end.line - b.scope.start.line;
                                 size_a.cmp(&size_b)
@@ -155,7 +172,6 @@ impl RunnableDetector {
                                 .map(|es| &es.scope);
 
                             if let Some(impl_scope) = impl_scope {
-                                // Extract the type name from "impl Type" or "impl Trait for Type"
                                 let impl_name = impl_scope.name.as_deref().unwrap_or("impl");
                                 let type_name = if impl_name.starts_with("impl ") {
                                     impl_name
@@ -169,11 +185,9 @@ impl RunnableDetector {
                                 };
                                 (type_name.to_string(), parent.name.clone())
                             } else {
-                                // Standalone function
                                 (parent.name.clone().unwrap_or_default(), None)
                             }
                         } else if matches!(parent.kind, ScopeKind::Impl) {
-                            // For impl blocks, extract the type name
                             let impl_name = parent.name.as_deref().unwrap_or("impl");
                             let type_name = if impl_name.starts_with("impl ") {
                                 let stripped = impl_name.strip_prefix("impl ").unwrap_or(impl_name);
@@ -182,14 +196,12 @@ impl RunnableDetector {
                             } else {
                                 impl_name
                             };
-                            // Return with "impl" marker to differentiate from struct doc tests
                             (format!("impl {type_name}"), None)
                         } else {
-                            // Struct
+                            // Struct / Enum / Union / Module
                             (parent.name.clone().unwrap_or_default(), None)
                         };
 
-                    // Create a proper label based on whether it's a method or type
                     let label = if let Some(ref method) = method_name {
                         format!("Run doc test for '{struct_or_module_name}::{method}'")
                     } else {
@@ -198,7 +210,7 @@ impl RunnableDetector {
 
                     let runnable = Runnable {
                         label: label.clone(),
-                        scope: scope.clone(), // Use the doc test's own scope, not the parent's
+                        scope: scope.clone(),
                         kind: RunnableKind::DocTest {
                             struct_or_module_name: struct_or_module_name.clone(),
                             method_name: method_name.clone(),
@@ -429,6 +441,124 @@ fn test_two() {
             RunnableKind::Test { test_name, .. } if test_name == "test_two"
         ));
 
+        Ok(())
+    }
+
+    #[test]
+    fn detect_doctest_on_enum() -> Result<()> {
+        let source = r#"
+/// Color
+///
+/// ```
+/// let _ = Color::Red;
+/// ```
+pub enum Color {
+    Red,
+}
+"#;
+        let mut temp_file = NamedTempFile::new()?;
+        write!(temp_file, "{source}")?;
+
+        let mut detector = RunnableDetector::new()?;
+        let runnables = detector.detect_runnables(temp_file.path(), None)?;
+        let docs: Vec<_> = runnables
+            .iter()
+            .filter(|r| matches!(r.kind, RunnableKind::DocTest { .. }))
+            .collect();
+        assert_eq!(docs.len(), 1);
+        assert!(matches!(
+            &docs[0].kind,
+            RunnableKind::DocTest {
+                struct_or_module_name,
+                method_name: None
+            } if struct_or_module_name == "Color"
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn detect_doctest_on_module_with_inner_docs() -> Result<()> {
+        // Outer docs on the module (prev siblings) — reliable parent attach.
+        // Inner `//!` body docs are still detected as spans; attachment uses the
+        // module when the fence sits near the extended start (outer or first body lines).
+        let source = r#"
+/// Module helpers
+///
+/// ```
+/// assert!(true);
+/// ```
+pub mod util {
+    pub fn f() {}
+}
+"#;
+        let mut temp_file = NamedTempFile::new()?;
+        write!(temp_file, "{source}")?;
+
+        let mut detector = RunnableDetector::new()?;
+        let runnables = detector.detect_runnables(temp_file.path(), None)?;
+        let docs: Vec<_> = runnables
+            .iter()
+            .filter(|r| matches!(r.kind, RunnableKind::DocTest { .. }))
+            .collect();
+        assert_eq!(docs.len(), 1, "runnables={runnables:?}");
+        assert!(matches!(
+            &docs[0].kind,
+            RunnableKind::DocTest {
+                struct_or_module_name,
+                method_name: None
+            } if struct_or_module_name == "util"
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn detect_doctest_inner_docs_near_module_body_start() -> Result<()> {
+        let source = r#"
+pub mod util {
+//! ```
+//! assert!(true);
+//! ```
+}
+"#;
+        let mut temp_file = NamedTempFile::new()?;
+        write!(temp_file, "{source}")?;
+
+        let mut detector = RunnableDetector::new()?;
+        let runnables = detector.detect_runnables(temp_file.path(), None)?;
+        let docs: Vec<_> = runnables
+            .iter()
+            .filter(|r| matches!(r.kind, RunnableKind::DocTest { .. }))
+            .collect();
+        // Inner docs immediately after `{` should attach to the module
+        assert_eq!(docs.len(), 1, "runnables={runnables:?}");
+        assert!(matches!(
+            &docs[0].kind,
+            RunnableKind::DocTest {
+                struct_or_module_name,
+                method_name: None
+            } if struct_or_module_name == "util"
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn ignore_fence_does_not_create_doctest_runnable() -> Result<()> {
+        let source = r#"
+/// ```ignore
+/// broken();
+/// ```
+pub struct Ignored;
+"#;
+        let mut temp_file = NamedTempFile::new()?;
+        write!(temp_file, "{source}")?;
+
+        let mut detector = RunnableDetector::new()?;
+        let runnables = detector.detect_runnables(temp_file.path(), None)?;
+        assert!(
+            !runnables
+                .iter()
+                .any(|r| matches!(r.kind, RunnableKind::DocTest { .. }))
+        );
         Ok(())
     }
 }

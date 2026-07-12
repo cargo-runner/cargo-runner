@@ -190,7 +190,7 @@ mod tests {
     .unwrap();
 }
 
-/// Scaffold a library crate with a doc-tested struct symbol.
+/// Scaffold a library crate with a module that has unit tests (symbol filter target).
 fn scaffold_lib_project_with_doc_symbol(dir: &std::path::Path, name: &str) {
     fs::create_dir_all(dir.join("src")).unwrap();
     fs::write(
@@ -214,6 +214,36 @@ edition = "2021"
             assert_eq!(2 + 2, 4);
         }
     }
+}
+"#,
+    )
+    .unwrap();
+}
+
+/// Library with a real fenced doctest on an enum (scoped `--doc` dry-run).
+fn scaffold_lib_with_enum_doctest(dir: &std::path::Path, name: &str) {
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(
+        dir.join("Cargo.toml"),
+        format!(
+            r#"[package]
+name = "{name}"
+version = "0.1.0"
+edition = "2021"
+"#
+        ),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("src/lib.rs"),
+        r#"/// A color.
+///
+/// ```
+/// let _ = Color::Red;
+/// ```
+pub enum Color {
+    Red,
+    Blue,
 }
 "#,
     )
@@ -952,6 +982,82 @@ fn runnables_symbol_filter_matches_module_name() {
 }
 
 #[test]
+fn dry_run_enum_doctest_uses_cargo_test_doc() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_with_enum_doctest(tmp.path(), "test-enum-doc");
+    let root = canonical(tmp.path());
+
+    // Line 4 is inside the fenced doctest (1-based: line 4 ≈ ``` body)
+    // Filter must be crate-relative (`Color`), NOT `test-enum-doc::Color`
+    // (rustdoc names never include the Cargo package name).
+    cargo_runner()
+        .args(["run", "src/lib.rs:4", "--dry-run"])
+        .env("PROJECT_ROOT", &root)
+        .env_remove("PROJECT_DIR")
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--doc"))
+        .stdout(predicate::str::contains(" -- Color").or(predicate::str::contains("-- Color")))
+        .stdout(predicate::str::contains("test-enum-doc::Color").not());
+}
+
+#[test]
+fn dry_run_nested_doctest_filter_is_crate_relative() {
+    let tmp = TempDir::new().unwrap();
+    fs::create_dir_all(tmp.path().join("src")).unwrap();
+    fs::write(
+        tmp.path().join("Cargo.toml"),
+        r#"[package]
+name = "nested-doc"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        tmp.path().join("src/lib.rs"),
+        r#"pub mod inner {
+    /// Nested
+    ///
+    /// ```
+    /// assert!(true);
+    /// ```
+    pub struct Nested;
+}
+"#,
+    )
+    .unwrap();
+    let root = canonical(tmp.path());
+
+    cargo_runner()
+        .args(["run", "src/lib.rs:5", "--dry-run"])
+        .env("PROJECT_ROOT", &root)
+        .env_remove("PROJECT_DIR")
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--doc"))
+        .stdout(predicate::str::contains("inner::Nested"))
+        .stdout(predicate::str::contains("nested-doc::inner").not());
+}
+
+#[test]
+fn runnables_lists_enum_doctest() {
+    let tmp = TempDir::new().unwrap();
+    scaffold_lib_with_enum_doctest(tmp.path(), "test-enum-doc-list");
+
+    cargo_runner()
+        .args(["runnables", "src/lib.rs", "--doc"])
+        .env_remove("PROJECT_ROOT")
+        .env_remove("PROJECT_DIR")
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Run doc test for 'Color'"));
+}
+
+#[test]
 fn run_nonexistent_file() {
     let tmp = TempDir::new().unwrap();
     scaffold_cargo_project(tmp.path(), "test-nofile");
@@ -1302,7 +1408,11 @@ fn override_then_dry_run_shows_custom_command() {
         .output()
         .unwrap();
 
-    assert!(output.status.success(), "stderr={}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
         stdout.contains("dx") && stdout.contains("serve"),
@@ -1324,7 +1434,13 @@ fn override_list_and_show_json_after_create() {
         .success();
 
     cargo_runner()
-        .args(["override", "src/main.rs", "--", "@dx.serve", "RUST_LOG=debug"])
+        .args([
+            "override",
+            "src/main.rs",
+            "--",
+            "@dx.serve",
+            "RUST_LOG=debug",
+        ])
         .env("PROJECT_ROOT", &root)
         .current_dir(tmp.path())
         .assert()
@@ -1397,14 +1513,21 @@ fn init_bazel_skip_sync_scaffolds_files() {
     let root = canonical(tmp.path());
 
     cargo_runner()
-        .args(["init", "--bazel", "--skip-sync", "--workspace-name", "demo_ws"])
+        .args([
+            "init",
+            "--bazel",
+            "--skip-sync",
+            "--workspace-name",
+            "demo_ws",
+        ])
         .env("PROJECT_ROOT", &root)
         .current_dir(tmp.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("Scaffolding Bazel workspace").or(
-            predicate::str::contains("Bazel workspace"),
-        ));
+        .stdout(
+            predicate::str::contains("Scaffolding Bazel workspace")
+                .or(predicate::str::contains("Bazel workspace")),
+        );
 
     assert!(
         tmp.path().join("MODULE.bazel").exists(),

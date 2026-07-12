@@ -550,10 +550,9 @@ pub fn override_command(
                     let existing_section = existing_obj
                         .entry(section_key.to_string())
                         .or_insert_with(|| Value::Object(Map::new()));
-                    if let (Some(dst), Some(src)) = (
-                        existing_section.as_object_mut(),
-                        new_section.as_object(),
-                    ) {
+                    if let (Some(dst), Some(src)) =
+                        (existing_section.as_object_mut(), new_section.as_object())
+                    {
                         merge_json_section(dst, src);
                     }
                     println!("✅ Override appended (merged) successfully!");
@@ -837,9 +836,7 @@ fn create_file_level_override(
     if let Some(bazel_config) = override_entry.get("bazel")
         && let Some(obj) = bazel_config.as_object()
     {
-        if let Some(test_args) = obj
-            .get("test_args")
-            .or_else(|| obj.get("extra_test_args"))
+        if let Some(test_args) = obj.get("test_args").or_else(|| obj.get("extra_test_args"))
             && let Some(args) = test_args.as_array()
         {
             let args_str: Vec<String> = args
@@ -850,9 +847,7 @@ fn create_file_level_override(
                 println!("   📝 test_args (Bazel): {}", args_str.join(" "));
             }
         }
-        if let Some(exec_args) = obj
-            .get("exec_args")
-            .or_else(|| obj.get("extra_run_args"))
+        if let Some(exec_args) = obj.get("exec_args").or_else(|| obj.get("extra_run_args"))
             && let Some(args) = exec_args.as_array()
         {
             let args_str: Vec<String> = args
@@ -880,12 +875,10 @@ pub fn list_overrides_command(file_filter: Option<&str>, json: bool) -> Result<(
     let mut entries = Vec::new();
 
     for config_path in configs {
-        let content = fs::read_to_string(&config_path).with_context(|| {
-            format!("failed to read config {}", config_path.display())
-        })?;
-        let config: Value = serde_json::from_str(&content).with_context(|| {
-            format!("failed to parse config {}", config_path.display())
-        })?;
+        let content = fs::read_to_string(&config_path)
+            .with_context(|| format!("failed to read config {}", config_path.display()))?;
+        let config: Value = serde_json::from_str(&content)
+            .with_context(|| format!("failed to parse config {}", config_path.display()))?;
         let Some(overrides) = config.get("overrides").and_then(|v| v.as_array()) else {
             continue;
         };

@@ -151,9 +151,11 @@ cargo runner run tests/integration.rs
 |---------------------|-----------------|
 | `#[test] fn test_add()` | `cargo test test_add --exact` |
 | `mod tests { }` block | `cargo test tests::` |
-| `/// ``` doctest` | `cargo test --doc add` |
+| fenced doctest on item | `cargo test --doc <Item>` |
 | `fn main()` binary | `cargo run --bin name` |
 | Benchmark function | `cargo bench name` |
+
+**Scoped doctests** run when the cursor is on a markdown-fenced example in `///`, `//!`, or `/** */` docs attached to a named item (fn, struct, enum, mod, union, impl method). Fence tags `ignore`, `no_run`, and `compile_fail` are not offered as scoped runs. Macro-generated or `#[doc = include_str!(…)]` docs are not source-scanned — use crate-level `cargo test --doc` for those.
 
 ### 4. Bazel Projects
 
@@ -171,7 +173,7 @@ cargo runner run src/lib.rs:25
 |---------------------|-----------------|
 | `#[test] fn test_add()` | `bazel test //:unit_tests --test_arg="test_add"` |
 | `mod tests { }` block | `bazel test //:unit_tests --test_arg="tests::"` |
-| `/// ``` doctest` | `bazel test //:doc_tests` |
+| fenced doctest on item | `bazel test //:doc_tests` (all crate docs) |
 | `fn main()` binary | `bazel run //:name` |
 | Benchmark function | `bazel run //:bench_name -c opt` |
 

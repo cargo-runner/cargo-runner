@@ -1,10 +1,7 @@
 //! Common functionality for cargo builders
 
 use crate::{
-    command::{
-        CommandStrategy,
-        builder::ConfigAccess,
-    },
+    command::{CommandStrategy, builder::ConfigAccess},
     config::{Config, Features},
     types::{FileType, FunctionIdentity, Runnable},
 };
@@ -145,9 +142,7 @@ pub trait CargoBuilderHelper: ConfigAccess {
             .cargo
             .as_ref()
             .and_then(|c| c.package.clone())
-            .or_else(|| {
-                crate::runners::common::get_cargo_package_name(&runnable.file_path)
-            });
+            .or_else(|| crate::runners::common::get_cargo_package_name(&runnable.file_path));
 
         FunctionIdentity {
             package,
