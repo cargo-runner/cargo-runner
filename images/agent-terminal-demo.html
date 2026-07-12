@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cargo Runner — Agent terminal</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(249, 115, 22, 0.18), transparent 50%),
+        radial-gradient(ellipse 70% 50% at 90% 80%, rgba(56, 189, 248, 0.12), transparent 45%),
+        #0b0f14;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      padding: 48px;
+    }
+    .frame {
+      width: 920px;
+      max-width: 100%;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .badge .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 10px #22c55e;
+    }
+    .window {
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.4),
+        0 24px 80px rgba(0,0,0,0.55),
+        0 0 60px rgba(249, 115, 22, 0.08);
+      background: #0f1419;
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: linear-gradient(180deg, #1a222c 0%, #141a22 100%);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .traffic { display: flex; gap: 7px; }
+    .traffic span {
+      width: 12px; height: 12px; border-radius: 50%;
+    }
+    .r { background: #ff5f57; }
+    .y { background: #febc2e; }
+    .g { background: #28c840; }
+    .title {
+      flex: 1;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .agent-pill {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #0b0f14;
+      background: linear-gradient(90deg, #fb923c, #f97316);
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+    .term {
+      padding: 22px 24px 28px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: #e2e8f0;
+      min-height: 420px;
+    }
+    .line { white-space: pre-wrap; word-break: break-word; }
+    .prompt { color: #38bdf8; }
+    .path { color: #a78bfa; }
+    .cmd { color: #f8fafc; }
+    .comment { color: #64748b; font-style: italic; }
+    .ok { color: #4ade80; }
+    .dim { color: #64748b; }
+    .warn { color: #fbbf24; }
+    .hl { color: #fb923c; font-weight: 600; }
+    .agent {
+      color: #c4b5fd;
+      border-left: 2px solid #8b5cf6;
+      padding-left: 12px;
+      margin: 10px 0 12px;
+      background: rgba(139, 92, 246, 0.08);
+      padding-top: 8px;
+      padding-bottom: 8px;
+      border-radius: 0 8px 8px 0;
+    }
+    .agent .label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #a78bfa;
+      margin-bottom: 4px;
+    }
+    .block { margin-bottom: 14px; }
+    .pass {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 2px 10px;
+      border-radius: 6px;
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+      font-weight: 600;
+      border: 1px solid rgba(34, 197, 94, 0.35);
+    }
+    .footer {
+      margin-top: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .footer strong { color: #fb923c; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="badge"><span class="dot"></span> Coding agent · no rust-analyzer wait</div>
+    <div class="window">
+      <div class="titlebar">
+        <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="title">agent@workspace — cargo-runner</div>
+        <div class="agent-pill">AI agent</div>
+      </div>
+      <div class="term">
+        <div class="block">
+          <div class="line"><span class="prompt">$</span> <span class="cmd">cd ~/Code/my-crate</span></div>
+        </div>
+
+        <div class="agent">
+          <div class="label">Agent plan</div>
+          <div class="line">1. Scan runnables  ·  2. Preview command  ·  3. Run the test</div>
+          <div class="line dim">Do not invent <span class="cmd">cargo test foo::bar -- --exact</span></div>
+        </div>
+
+        <div class="block">
+          <div class="line"><span class="prompt">$</span> <span class="cmd">cargo runner runnables src/lib.rs --test --json --with-commands</span></div>
+          <div class="line dim">[</div>
+          <div class="line dim">  {</div>
+          <div class="line dim">    "label": "test payments::tests::charges_ok",</div>
+          <div class="line dim">    "file_path": "src/lib.rs",</div>
+          <div class="line">    "command": { "shell": <span class="hl">"cargo test payments::tests::charges_ok -- --exact"</span> }</div>
+          <div class="line dim">  }</div>
+          <div class="line dim">]</div>
+        </div>
+
+        <div class="block">
+          <div class="line"><span class="prompt">$</span> <span class="cmd">cargo runner run src/lib.rs:42 --dry-run</span></div>
+          <div class="line"><span class="ok">→</span> <span class="hl">cargo test payments::tests::charges_ok -- --exact</span></div>
+        </div>
+
+        <div class="block">
+          <div class="line"><span class="prompt">$</span> <span class="cmd">cargo runner run src/lib.rs:42</span></div>
+          <div class="line dim">    Finished test [unoptimized + debuginfo] target(s)</div>
+          <div class="line dim">     Running unittests src/lib.rs</div>
+          <div class="line">test payments::tests::charges_ok <span class="ok">... ok</span></div>
+          <div class="line"></div>
+          <div class="line">test result: <span class="ok">ok</span>. 1 passed; 0 failed; 0 ignored</div>
+          <div class="pass">✓ correct test · zero tokens wasted guessing</div>
+        </div>
+
+        <div class="footer">
+          <span><strong>cargo-runner</strong> · scope execution</span>
+          <span>masterustacean.cargo-runner · crates.io</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

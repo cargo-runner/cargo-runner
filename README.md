@@ -1,5 +1,15 @@
 # Cargo Runner
 
+<p align="center">
+  <img
+    src="https://raw.githubusercontent.com/cargo-runner/cargo-runner/main/images/agent-terminal-cargo-runner.png"
+    alt="Coding agent using cargo-runner: scan runnables, dry-run, then run the correct cargo test"
+    width="920"
+  />
+</p>
+
+<p align="center"><em>Agent terminal: scan → dry-run → run the right test — no rust-analyzer wait, no guessed <code>cargo test</code>.</em></p>
+
 **Run Rust without waiting for rust-analyzer** — and stop AI agents from inventing the wrong `cargo test` every chat.
 
 Cargo Runner has its own **scope / runnables engine**. Point it at a file or `file:line` and it builds the right command for:
