@@ -255,7 +255,7 @@ for real_s in sorted(by_real.keys()):
     names = []
     link_bits = []
     for a in aliases:
-        names.append(rel(a) if str(a).startswith(str(ROOT)) else str(a))
+        names.append(rel(a))
         if a.is_symlink():
             try:
                 link_bits.append(f"{a.name}→{os.readlink(a)}")
