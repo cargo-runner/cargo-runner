@@ -24,24 +24,33 @@ See **[CHANGELOG.md](CHANGELOG.md)** for release history and **[docs/release.md]
 
 ### AI / coding agents
 
-Point your project’s `AGENTS.md` (Cursor, Claude Code, Gemini, etc.) at cargo-runner so models **run tests without guessing Cargo commands**:
+Point your project’s `AGENTS.md` (Cursor, Claude Code, Gemini, etc.) at cargo-runner so models **run tests without guessing Cargo commands**.
+
+**VS Code (recommended):** Command Palette → **Cargo Runner: Agent Init**  
+(uses the extension CLI; no shell script).
+
+**CLI:**
+
+```bash
+cargo runner agent-init --root /path/to/your-rust-app
+cargo runner agent-init --root /path/to/app AGENTS.md CLAUDE.md
+cargo runner agent-init --root /path/to/app --dry-run
+```
+
+**Script (same behavior):**
 
 ```bash
 # From a cargo-runner checkout — scan a project and update common agent files
 ./scripts/install-agent-instructions.sh --root /path/to/your-rust-app
-
-# Only specific files (relative or absolute)
 ./scripts/install-agent-instructions.sh --root /path/to/app AGENTS.md CLAUDE.md
-
-# Preview
 ./scripts/install-agent-instructions.sh --root /path/to/app --dry-run
 ```
 
-The script:
+Installers:
 
-- Finds `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.cursor/rules/*`, Copilot instructions, etc.
-- **Follows symlinks** and **dedupes** (if `AGENTS.md` → `CLAUDE.md`, only the real file is updated once)
-- Upserts a managed block between HTML comments (safe to re-run)
+- Find `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.cursor/rules/*`, Copilot instructions, etc.
+- **Follow symlinks** and **dedupe** (if `AGENTS.md` → `CLAUDE.md`, only the real file is updated once)
+- Upsert a managed block between HTML comments (safe to re-run)
 
 Source text: [docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md). Override source with `--source` or `CARGO_RUNNER_AGENT_DOC`.
 

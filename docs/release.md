@@ -113,16 +113,19 @@ make release VERSION=1.7.0
 Install LLM / agent rules into a consumer project:
 
 ```bash
-# From a cargo-runner checkout, targeting another repo:
-./scripts/install-agent-instructions.sh --root ~/Code/my-app
+# VS Code: Command Palette → "Cargo Runner: Agent Init"
 
-# Or inside my-app after copying the script + source doc:
-./install-agent-instructions.sh
-./install-agent-instructions.sh AGENTS.md CLAUDE.md
-./install-agent-instructions.sh --dry-run
+# CLI (preferred when not using VS Code):
+cargo runner agent-init --root ~/Code/my-app
+cargo runner agent-init --dry-run
+cargo runner agent-init AGENTS.md CLAUDE.md
+
+# From a cargo-runner checkout (script, same behavior):
+./scripts/install-agent-instructions.sh --root ~/Code/my-app
+./scripts/install-agent-instructions.sh --dry-run
 ```
 
-See [AGENTS.cargo-runner.md](./AGENTS.cargo-runner.md) and the script header for details.
+See [AGENTS.cargo-runner.md](./AGENTS.cargo-runner.md).  
 Symlinks are followed and **deduped** (only the real file is written).
 
 ---

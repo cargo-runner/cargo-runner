@@ -1,3 +1,4 @@
+pub mod agent_init;
 pub mod analyze;
 pub mod bazel_add;
 pub mod bazel_sync;
@@ -12,6 +13,8 @@ pub mod run;
 pub mod unset;
 pub mod watch;
 pub mod workspace;
+
+pub use agent_init::agent_init_command;
 
 pub use analyze::{analyze_command, runnables_command};
 pub use bazel_add::bazel_add_command;

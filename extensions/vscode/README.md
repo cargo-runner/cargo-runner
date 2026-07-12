@@ -11,7 +11,8 @@ Run, test, build, and override Rust targets with the **cargo-runner** CLI — Ca
 - **Auto binary** — downloads a prebuilt `cargo-runner` from GitHub Releases (or uses PATH)
 - **Task runner** — long-running commands (`dx serve`, `cargo leptos watch`) as VS Code tasks
 - **Breakpoint awareness** — Cmd+R uses rust-analyzer Debug CodeLens when BPs are in the current function
-- **Palette commands** — init, clean, watch, context dump, select runnable
+- **Palette commands** — init, **Agent Init**, clean, watch, context dump, select runnable
+- **Agent Init** — install cargo-runner instructions into `AGENTS.md` / `CLAUDE.md` / Cursor / Copilot files so coding agents use `cargo runner` (no shell script required)
 
 ## Requirements
 

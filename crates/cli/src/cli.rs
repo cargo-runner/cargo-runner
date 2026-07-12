@@ -1,9 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 use crate::commands::{
-    bazel_add_command, bazel_sync_command, build_sync_command, clean_command, context_command,
-    init_command, override_command, run_command, runnables_command, unset_command, watch_command,
+    agent_init_command, bazel_add_command, bazel_sync_command, build_sync_command, clean_command,
+    context_command, init_command, override_command, run_command, runnables_command, unset_command,
+    watch_command,
 };
 
 #[derive(Parser)]
@@ -397,6 +399,42 @@ pub enum Commands {
         json: bool,
     },
 
+    /// Install cargo-runner instructions into AGENTS.md / CLAUDE.md / Cursor rules / etc.
+    ///
+    /// With no paths: scans the repo for common agent files, follows symlinks,
+    /// dedupes real targets, and upserts a managed instruction block.
+    ///
+    /// Examples:
+    ///   cargo runner agent-init
+    ///   cargo runner agent-init AGENTS.md CLAUDE.md
+    ///   cargo runner agent-init --dry-run
+    #[command(name = "agent-init", alias = "agents-init")]
+    AgentInit {
+        /// Project root (default: git toplevel or cwd)
+        #[arg(long, value_name = "DIR")]
+        root: Option<String>,
+
+        /// Files to update (relative or absolute). If empty, scan common names.
+        #[arg(value_name = "PATH")]
+        paths: Vec<String>,
+
+        /// Show what would change without writing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Create AGENTS.md when scan finds nothing (default: true for scan)
+        #[arg(long, default_value_t = true)]
+        create_agents: bool,
+
+        /// Do not create missing files
+        #[arg(long)]
+        no_create: bool,
+
+        /// Override instruction source markdown
+        #[arg(long, value_name = "FILE")]
+        source: Option<String>,
+    },
+
     /// Generate shell completions (bash, zsh, fish, elvish, powershell)
     ///
     /// Examples:
@@ -578,6 +616,20 @@ impl Commands {
                 debounce,
             } => watch_command(filepath.as_deref(), run, test, debounce),
             Commands::Doctor { json } => crate::commands::doctor::doctor_command(json),
+            Commands::AgentInit {
+                root,
+                paths,
+                dry_run,
+                create_agents,
+                no_create,
+                source,
+            } => agent_init_command(crate::commands::agent_init::AgentInitOptions {
+                root: root.map(PathBuf::from),
+                paths: paths.into_iter().map(PathBuf::from).collect(),
+                dry_run,
+                create_agents: create_agents && !no_create,
+                source: source.map(PathBuf::from),
+            }),
             Commands::Completions { shell } => {
                 use clap::CommandFactory;
                 let mut cmd = Runner::command();

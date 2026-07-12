@@ -10,6 +10,8 @@ bazel-cargo-runner
 !CHANGELOG.md
 !AGENTS.md
 !docs/**/*.md
+# Embedded agent doc for crates.io / agent-init (must ship with CLI)
+!crates/cli/src/assets/**/*.md
 *.py
 !test_builder.rs
 !test_*.rs

@@ -10,6 +10,16 @@ published on GitHub as tag `cargo-runner-cli-v{VERSION}`.
 
 ---
 
+## [2.1.0] — 2026-07-13
+
+### Added
+
+- **`cargo runner agent-init`** — install managed agent instructions into `AGENTS.md` / `CLAUDE.md` / Cursor / Copilot paths (symlink-safe, deduped).
+- **VS Code: Cargo Runner: Agent Init** — command palette entry that runs `agent-init` via the extension CLI (no shell scripts).
+- Agent instruction doc rewritten around **scan → supported run → override once → plain run forever** (entry binding for `main`/`lib`/custom tools).
+
+---
+
 ## [2.0.0] — 2026-07-13
 
 ### Changed

@@ -151,6 +151,12 @@
         "category": "Cargo Runner"
       },
       {
+        "command": "cargoRunner.agentInit",
+        "title": "Agent Init",
+        "category": "Cargo Runner",
+        "icon": "$(robot)"
+      },
+      {
         "command": "cargoRunner.clean",
         "title": "Clean",
         "category": "Cargo Runner"

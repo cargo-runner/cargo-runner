@@ -405,6 +405,56 @@ export async function activate(
       }),
     ),
     vscode.commands.registerCommand(
+      "cargoRunner.agentInit",
+      wrap(async () => {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) {
+          vscode.window.showErrorMessage(
+            "Cargo Runner: open a folder or workspace first",
+          );
+          return;
+        }
+        const binary = await binaryManager.ensureBinary();
+        const cwd = folder.uri.fsPath;
+        const mode = await vscode.window.showQuickPick(
+          [
+            {
+              label: "$(robot) Install agent instructions",
+              description: "Scan AGENTS.md / CLAUDE.md / Cursor / Copilot and upsert",
+              args: ["agent-init", "--root", cwd],
+            },
+            {
+              label: "$(eye) Dry run",
+              description: "Show what would change without writing",
+              args: ["agent-init", "--root", cwd, "--dry-run"],
+            },
+            {
+              label: "$(file-add) Create AGENTS.md only",
+              description: "Write AGENTS.md if missing (no multi-file scan create)",
+              args: [
+                "agent-init",
+                "--root",
+                cwd,
+                "AGENTS.md",
+              ],
+            },
+          ],
+          {
+            title: "Cargo Runner: Agent Init",
+            placeHolder:
+              "Install cargo-runner instructions for coding agents (no shell scripts)",
+          },
+        );
+        if (!mode) {
+          return;
+        }
+        await executeAsTask(binary, mode.args, {
+          cwd,
+          label: "Cargo Runner: Agent Init",
+        });
+      }),
+    ),
+    vscode.commands.registerCommand(
       "cargoRunner.clean",
       wrap(async () => {
         const binary = await binaryManager.ensureBinary();
