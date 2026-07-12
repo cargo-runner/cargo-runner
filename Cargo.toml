@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 # Keep in lockstep with extensions/vscode/package.json (VS Code extension version).
-version = "1.6.2"
+version = "1.6.3"
 edition = "2024"
 authors = ["Uriah Galang <codeitlikemiley@gmail.com>"]
 license = "MIT"
