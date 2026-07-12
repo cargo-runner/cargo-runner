@@ -161,13 +161,32 @@ def dbg(*a):
         print("  ·", *a, file=sys.stderr)
 
 def rel(p: Path) -> str:
+    """Pretty path relative to ROOT; handle macOS /var vs /private/var."""
     try:
-        return str(p.resolve().relative_to(ROOT))
-    except Exception:
+        pr = p if p.is_absolute() else (ROOT / p)
+        pr = pr.resolve()
+        root = ROOT.resolve()
         try:
-            return str(p.relative_to(ROOT))
-        except Exception:
-            return str(p)
+            return str(pr.relative_to(root))
+        except ValueError:
+            # /var/folders vs /private/var/folders
+            pr_s, root_s = str(pr), str(root)
+            for a, b in (("/private", ""),):
+                if pr_s.startswith(a) and not root_s.startswith(a):
+                    try:
+                        return str(Path(pr_s[len(a) :]).relative_to(root))
+                    except Exception:
+                        pass
+                if root_s.startswith(a) and not pr_s.startswith(a):
+                    try:
+                        return str(pr.relative_to(Path(root_s[len(a) :])))
+                    except Exception:
+                        pass
+            if pr_s.startswith(root_s + os.sep):
+                return pr_s[len(root_s) + 1 :]
+            return pr.name
+    except Exception:
+        return p.name
 
 raw = SOURCE.read_text(encoding="utf-8")
 if "## Golden rule" in raw:
