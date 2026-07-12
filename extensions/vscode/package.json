@@ -4,7 +4,7 @@
   "description": "Run Rust without waiting for rust-analyzer. Cargo, Bazel, Dioxus/Leptos/Tauri, custom tools (Spin/make). Cmd+R, overrides, Agent Init for AI.",
   "author": "Uriah Galang <codeitlikemiley@gmail.com>",
   "license": "MIT",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "publisher": "masterustacean",
   "icon": "images/icon.png",
   "galleryBanner": {
