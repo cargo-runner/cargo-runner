@@ -10,11 +10,15 @@ published on GitHub as tag `cargo-runner-cli-v{VERSION}`.
 
 ---
 
-## [2.1.3] — 2026-07-12
+## [2.1.3] — 2026-07-13
 
 ### Changed
 
-- Release (Explicit version).## [2.1.2] — 2026-07-13
+- **VS Code icon:** Ferris-style crab holding a cargo crate with play-triangle backdrop (option D).
+
+---
+
+## [2.1.2] — 2026-07-13
 
 ### Added
 
