@@ -8,6 +8,7 @@ bazel-cargo-runner
 *.md
 !README.md
 !CHANGELOG.md
+!AGENTS.md
 !docs/**/*.md
 *.py
 !test_builder.rs

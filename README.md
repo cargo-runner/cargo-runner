@@ -22,6 +22,15 @@ cargo install cargo-runner-cli
 
 See **[CHANGELOG.md](CHANGELOG.md)** for release history and **[docs/release.md](docs/release.md)** for how we version and ship (CLI patch vs VS Code minor).
 
+### AI / coding agents
+
+Point your project’s `AGENTS.md` (Cursor, Claude Code, etc.) at cargo-runner so models **run tests without guessing Cargo commands**:
+
+- Copy **[docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md)** into the repo (or paste its rules).  
+- Repo root **[AGENTS.md](AGENTS.md)** links the same workflow for this project.
+
+Overrides (e.g. `spin build --up`) are saved in `.cargo-runner.json` — set once with `cargo runner override`, then plain `cargo runner run` / VS Code **Cmd+R** reuses them.
+
 ### VS Code extension (dev)
 
 A VS Code adapter lives in [`extensions/vscode`](extensions/vscode). It auto-downloads the CLI, binds **Cmd+R** / **Cmd+Shift+R**, and shows runnables/overrides in the sidebar.
