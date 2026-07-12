@@ -10,7 +10,11 @@ published on GitHub as tag `cargo-runner-cli-v{VERSION}`.
 
 ---
 
-## [2.1.2] — 2026-07-13
+## [2.1.3] — 2026-07-12
+
+### Changed
+
+- Release (Explicit version).## [2.1.2] — 2026-07-13
 
 ### Added
 
