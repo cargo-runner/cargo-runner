@@ -146,8 +146,9 @@ python3 <<'PY'
 import os, sys, re
 from pathlib import Path
 
-ROOT = Path(os.environ["CR_ROOT"]).resolve()
-SOURCE = Path(os.environ["CR_SOURCE"]).resolve()
+# realpath so macOS /var vs /private/var stays consistent with Path.resolve()
+ROOT = Path(os.path.realpath(os.environ["CR_ROOT"]))
+SOURCE = Path(os.path.realpath(os.environ["CR_SOURCE"]))
 DRY = os.environ.get("CR_DRY_RUN") == "1"
 CREATE = os.environ.get("CR_CREATE_AGENTS") == "1"
 EXPLICIT = os.environ.get("CR_EXPLICIT") == "1"
