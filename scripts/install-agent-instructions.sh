@@ -162,32 +162,23 @@ def dbg(*a):
         print("  ·", *a, file=sys.stderr)
 
 def rel(p: Path) -> str:
-    """Pretty path relative to ROOT; handle macOS /var vs /private/var."""
+    """Pretty path relative to ROOT. Do not resolve symlinks (keep alias names)."""
     try:
         pr = p if p.is_absolute() else (ROOT / p)
-        pr = pr.resolve()
-        root = ROOT.resolve()
-        try:
-            return str(pr.relative_to(root))
-        except ValueError:
-            # /var/folders vs /private/var/folders
-            pr_s, root_s = str(pr), str(root)
-            for a, b in (("/private", ""),):
-                if pr_s.startswith(a) and not root_s.startswith(a):
-                    try:
-                        return str(Path(pr_s[len(a) :]).relative_to(root))
-                    except Exception:
-                        pass
-                if root_s.startswith(a) and not pr_s.startswith(a):
-                    try:
-                        return str(pr.relative_to(Path(root_s[len(a) :])))
-                    except Exception:
-                        pass
-            if pr_s.startswith(root_s + os.sep):
-                return pr_s[len(root_s) + 1 :]
-            return pr.name
+        pr_s = str(pr)
+        root_s = str(ROOT)
+        # Normalize macOS /var vs /private/var for prefix match only
+        def norm(s: str) -> str:
+            return s[8:] if s.startswith("/private/") else s
+
+        npr, nroot = norm(pr_s), norm(root_s)
+        if npr == nroot:
+            return "."
+        if npr.startswith(nroot + os.sep):
+            return npr[len(nroot) + 1 :]
+        return pr.name
     except Exception:
-        return p.name
+        return Path(p).name
 
 raw = SOURCE.read_text(encoding="utf-8")
 if "## Golden rule" in raw:
