@@ -2,6 +2,16 @@
 
 Copy this file (or the section below) into your project’s `AGENTS.md` / `CLAUDE.md` / Cursor rules so coding agents **resolve and run** the correct commands via **cargo-runner** instead of inventing `cargo test` / `cargo run` / Bazel labels.
 
+**Installer (recommended):** from a cargo-runner checkout:
+
+```bash
+./scripts/install-agent-instructions.sh --root /path/to/your-project
+# or specific files:
+./scripts/install-agent-instructions.sh --root /path/to/your-project AGENTS.md CLAUDE.md
+```
+
+The installer follows symlinks and updates each real file only once.
+
 **Requires:** `cargo-runner` (or `cargo runner`) on PATH.  
 Install: `cargo binstall cargo-runner-cli` or `cargo install cargo-runner-cli`  
 Version: 2.x recommended.

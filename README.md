@@ -24,12 +24,28 @@ See **[CHANGELOG.md](CHANGELOG.md)** for release history and **[docs/release.md]
 
 ### AI / coding agents
 
-Point your project’s `AGENTS.md` (Cursor, Claude Code, etc.) at cargo-runner so models **run tests without guessing Cargo commands**:
+Point your project’s `AGENTS.md` (Cursor, Claude Code, Gemini, etc.) at cargo-runner so models **run tests without guessing Cargo commands**:
 
-- Copy **[docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md)** into the repo (or paste its rules).  
-- Repo root **[AGENTS.md](AGENTS.md)** links the same workflow for this project.
+```bash
+# From a cargo-runner checkout — scan a project and update common agent files
+./scripts/install-agent-instructions.sh --root /path/to/your-rust-app
 
-Overrides (e.g. `spin build --up`) are saved in `.cargo-runner.json` — set once with `cargo runner override`, then plain `cargo runner run` / VS Code **Cmd+R** reuses them.
+# Only specific files (relative or absolute)
+./scripts/install-agent-instructions.sh --root /path/to/app AGENTS.md CLAUDE.md
+
+# Preview
+./scripts/install-agent-instructions.sh --root /path/to/app --dry-run
+```
+
+The script:
+
+- Finds `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.cursor/rules/*`, Copilot instructions, etc.
+- **Follows symlinks** and **dedupes** (if `AGENTS.md` → `CLAUDE.md`, only the real file is updated once)
+- Upserts a managed block between HTML comments (safe to re-run)
+
+Source text: [docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md). Override source with `--source` or `CARGO_RUNNER_AGENT_DOC`.
+
+Overrides (e.g. `spin build --up`) live in `.cargo-runner.json` — set once with `cargo runner override`, then plain `cargo runner run` / VS Code **Cmd+R** reuses them.
 
 ### VS Code extension (dev)
 

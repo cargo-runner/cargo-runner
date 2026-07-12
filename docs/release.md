@@ -108,6 +108,25 @@ make release VERSION=1.7.0
 
 ---
 
+## Agent instructions installer
+
+Install LLM / agent rules into a consumer project:
+
+```bash
+# From a cargo-runner checkout, targeting another repo:
+./scripts/install-agent-instructions.sh --root ~/Code/my-app
+
+# Or inside my-app after copying the script + source doc:
+./install-agent-instructions.sh
+./install-agent-instructions.sh AGENTS.md CLAUDE.md
+./install-agent-instructions.sh --dry-run
+```
+
+See [AGENTS.cargo-runner.md](./AGENTS.cargo-runner.md) and the script header for details.
+Symlinks are followed and **deduped** (only the real file is written).
+
+---
+
 ## Version sources of truth
 
 ```text

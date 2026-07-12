@@ -1,4 +1,14 @@
-.PHONY: publish release-cli release-vscode release-major release vscode vscode-package
+.PHONY: publish release-cli release-vscode release-major release vscode vscode-package install-agent-docs
+
+# Install cargo-runner agent instructions into a project:
+#   make install-agent-docs ROOT=~/Code/my-app
+#   make install-agent-docs ROOT=. DRY_RUN=1
+install-agent-docs:
+	@bash scripts/install-agent-instructions.sh \
+		$(if $(ROOT),--root $(ROOT),) \
+		$(if $(DRY_RUN),--dry-run,) \
+		$(if $(SOURCE),--source $(SOURCE),) \
+		$(ARGS)
 
 # Legacy alias → new release script (patch / CLI-only)
 publish:
