@@ -5,6 +5,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library
 rust_library(
     name = "cargo-runner_lib",
     srcs = glob(["src/**/*.rs"]),
+    # include_str! for agent-init embedded instructions
+    compile_data = glob(["src/assets/**"]),
     deps = ["//crates/core:cargo-runner-core_lib"] + all_crate_deps(),
     visibility = ["//visibility:public"],
     crate_name = "cargo_runner",

@@ -348,7 +348,6 @@ fn symlink_note(aliases: &[PathBuf]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::symlink;
     use tempfile::TempDir;
 
     #[test]
@@ -363,7 +362,43 @@ mod tests {
     }
 
     #[test]
+    fn agent_init_creates_agents_md() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        agent_init_command(AgentInitOptions {
+            root: Some(root.to_path_buf()),
+            paths: vec![],
+            dry_run: false,
+            create_agents: true,
+            source: None,
+        })
+        .unwrap();
+
+        let agents = fs::read_to_string(root.join("AGENTS.md")).unwrap();
+        assert!(agents.contains(BEGIN));
+        assert!(agents.contains("Golden rule"));
+        assert_eq!(agents.matches(BEGIN).count(), 1);
+
+        // idempotent
+        agent_init_command(AgentInitOptions {
+            root: Some(root.to_path_buf()),
+            paths: vec![],
+            dry_run: false,
+            create_agents: true,
+            source: None,
+        })
+        .unwrap();
+        let agents2 = fs::read_to_string(root.join("AGENTS.md")).unwrap();
+        assert_eq!(agents2.matches(BEGIN).count(), 1);
+    }
+
+    /// Symlink dedupe is Unix-only (Windows junctions need different APIs).
+    #[cfg(unix)]
+    #[test]
     fn agent_init_dedupes_symlinks() {
+        use std::os::unix::fs::symlink;
+
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         fs::write(root.join("CLAUDE.md"), "# Project\n").unwrap();
