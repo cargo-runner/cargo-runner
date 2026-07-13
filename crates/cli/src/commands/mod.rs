@@ -6,6 +6,7 @@ pub mod build_sync;
 pub mod clean;
 pub mod context;
 pub mod doctor;
+pub mod editor_install;
 pub mod init;
 pub mod matching;
 pub mod override_cmd;
@@ -15,6 +16,7 @@ pub mod watch;
 pub mod workspace;
 
 pub use agent_init::agent_init_command;
+pub use editor_install::editor_install_command;
 
 pub use analyze::{analyze_command, runnables_command};
 pub use bazel_add::bazel_add_command;

@@ -10,9 +10,18 @@ published on GitHub as tag `cargo-runner-cli-v{VERSION}`.
 
 ---
 
+## [2.1.4] — 2026-07-13
+
+### Added
+
+- **Neovim plugin** (`extensions/nvim/`): async multi-job run/override, unified fixed-width status panel (jobs + notices), peek/kill UX.
+- **CLI:** `cargo runner nvim|vim|editor install|uninstall|status` — packpath install, shell-alias detection (`alias vim=nvim`), path flags `--config-dir`, `--data-home`, `--app-name`, `--pack-dir`, `--vim-dir`.
+- **Docs:** [docs/nvim.md](docs/nvim.md), [docs/nvim-status-panel.md](docs/nvim-status-panel.md).
+
 ## [2.1.3] — 2026-07-13
 
 ### Changed
+
 
 - **VS Code icon:** Ferris-style crab holding a cargo crate with play-triangle backdrop (option D).
 

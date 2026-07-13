@@ -1,6 +1,6 @@
 # IDE Protocol
 
-Machine-readable CLI contracts for the VS Code (and future) adapters.
+Machine-readable CLI contracts for the VS Code and Neovim adapters.
 
 **Protocol version:** 1  
 **Version parity:** CLI and VS Code extension share the same semver (e.g. both `2.1.x`).  
@@ -159,6 +159,19 @@ cargo runner override src/lib.rs:12 -- !!
 | `-` or `!!` | Remove entire matching override |
 
 Parser: `OverrideManager::parse_override_args` in `crates/core/src/config/override_manager.rs`.
+
+---
+
+## Adapters
+
+| Adapter | Location | Install |
+|---------|----------|---------|
+| VS Code | `extensions/vscode/` | Marketplace / VSIX |
+| Neovim | `extensions/nvim/` | `cargo runner nvim install` (path flags: `--config-dir`, `--app-name`, `--pack-dir`, …) |
+
+Both call the same JSON endpoints below. Real runs use `cargo-runner run path:line` (not `--json`).
+
+Neovim install, status panel, and custom config locations: **[docs/nvim.md](nvim.md)**.
 
 ---
 

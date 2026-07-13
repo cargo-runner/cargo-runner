@@ -1,0 +1,83 @@
+*cargo-runner.txt*  Run Rust at cursor via cargo-runner CLI
+
+Author:  cargo-runner contributors
+License: MIT
+
+==============================================================================
+INTRODUCTION                                              *cargo-runner*
+
+Thin Neovim adapter for the cargo-runner CLI. Does not reimplement Cargo/Bazel
+resolution — it shells out to `cargo-runner` using the IDE protocol.
+
+Requires: Neovim 0.9+ (uses |vim.system|), `cargo-runner` on PATH.
+
+Install via CLI: >
+    cargo runner nvim install
+    cargo runner vim install --follow-shell-alias
+<
+
+==============================================================================
+COMMANDS                                           *cargo-runner-commands*
+
+:CargoRunnerRun                 Run at cursor (`path:line`)
+:CargoRunnerOverride            Override tokens modal, then save/run
+:CargoRunnerDryRun              Preview resolved shell command
+:CargoRunnerShowOutput          Reopen last run output
+:CargoRunnerCopyLastOutput      Copy last output to clipboard
+:CargoRunnerStatus              Binary + path diagnostics
+
+==============================================================================
+MAPPINGS                                           *cargo-runner-mappings*
+
+Default (always): >
+    <leader>r    Run at cursor
+    <leader>R    Override at cursor
+<
+
+Optional Super/Cmd (Neovide / GUI / map_super=true): >
+    <D-r>        Run (Cmd+R on macOS GUIs)
+    <D-S-r>      Override (Cmd+Shift+R)
+<
+
+Terminal Neovim usually does NOT receive Cmd keys. Prefer leader maps, or
+configure your terminal to forward Super, or use Neovide.
+
+Error float keys: `q` close · `y`/`c` copy full output · `r` re-run
+
+==============================================================================
+CONFIGURATION                                        *cargo-runner-config*
+
+In init.lua: >
+    require("cargo_runner").setup({
+      binary = "cargo-runner",
+      keymaps = true,
+      map_super = "auto",   -- "auto" | true | false
+      leader_run = "<leader>r",
+      leader_override = "<leader>R",
+      open_error_on_fail = true,
+      save_before_run = false,
+      prefer_terminal_for_long_running = true,
+    })
+<
+
+Globals (optional): >
+    let g:cargo_runner_binary = 'cargo-runner'
+    let g:cargo_runner_map_super = 1
+<
+
+==============================================================================
+OVERRIDE TOKENS                                    *cargo-runner-override*
+
+Examples: >
+    @dx.serve --release
+    @spin.build --up
+    @make.test
+    RUST_LOG=debug /--nocapture
+    -          " remove override
+    !!         " remove override
+<
+
+Empty input runs without changing overrides (same as VS Code).
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:

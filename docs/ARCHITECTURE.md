@@ -22,6 +22,7 @@ cargo-runner/
 | **CLI Modules** | `crates/cli/src/{commands,config,display,utils}/` | Fully decoupled CLI routing. Each subcommand lives in its own module. |
 | **Agent init** | `crates/cli/src/commands/agent_init.rs` + `assets/AGENTS.cargo-runner.md` | Upserts managed agent instructions into consumer projects (symlink-safe). |
 | **VS Code adapter** | `extensions/vscode/` | Cmd+R / overrides / CodeLens / Agent Init; downloads matching CLI tag. |
+| **Neovim adapter** | `extensions/nvim/` + `cargo runner nvim|vim|editor` | Async multi-job run/override, unified status panel; packpath install with custom `--config-dir` / `--app-name` / `--pack-dir`. |
 
 ### Stability & Idiomatic Rust
 The Cargo Runner codebase is designed with strict resilience:

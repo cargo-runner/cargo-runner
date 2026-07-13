@@ -4,8 +4,11 @@ use std::path::PathBuf;
 
 use crate::commands::{
     agent_init_command, bazel_add_command, bazel_sync_command, build_sync_command, clean_command,
-    context_command, init_command, override_command, run_command, runnables_command, unset_command,
-    watch_command,
+    context_command, editor_install_command, init_command, override_command, run_command,
+    runnables_command, unset_command, watch_command,
+};
+use crate::commands::editor_install::{
+    EditorAction, EditorInstallOptions, InstallMethod,
 };
 
 #[derive(Parser)]
@@ -445,6 +448,259 @@ pub enum Commands {
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
+
+    /// Install / uninstall / status for the Neovim (or Vim) cargo-runner plugin
+    ///
+    /// Packpath install (default): no init.lua edit required.
+    /// Custom config / data layouts via --config-dir, --data-home, --app-name, --pack-dir.
+    ///
+    /// Examples:
+    ///   cargo runner nvim install
+    ///   cargo runner vim install --follow-shell-alias
+    ///   cargo runner nvim install --app-name nvim-lazy
+    ///   cargo runner nvim install --config-dir ~/.config/nvim-custom --data-home ~/.local/share
+    ///   cargo runner nvim install --pack-dir ~/dotfiles/nvim/pack/cargo-runner/start/cargo-runner
+    ///   cargo runner editor status --editor auto
+    ///   cargo runner nvim uninstall
+    #[command(name = "nvim", alias = "neovim")]
+    Nvim {
+        #[command(subcommand)]
+        action: EditorCmd,
+    },
+
+    /// Same as `nvim` but resolves whether `vim` is really Neovim (alias / binary)
+    #[command(name = "vim")]
+    Vim {
+        #[command(subcommand)]
+        action: EditorCmd,
+    },
+
+    /// Generic editor plugin install (nvim / vim / auto)
+    Editor {
+        #[command(subcommand)]
+        action: EditorCmd,
+
+        /// Target editor: nvim | vim | auto (default: auto)
+        #[arg(long, default_value = "auto", global = true)]
+        editor: String,
+    },
+}
+
+/// Shared install/uninstall/status for editor adapters
+#[derive(Subcommand, Debug)]
+pub enum EditorCmd {
+    /// Install the cargo-runner packpath plugin
+    Install {
+        /// pack (default) writes packpath; print shows plugin-manager snippets
+        #[arg(long, default_value = "pack", value_parser = ["pack", "print"])]
+        method: String,
+
+        /// Show what would be installed without writing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Honor interactive shell aliases (e.g. `alias vim=nvim`)
+        #[arg(long)]
+        follow_shell_alias: bool,
+
+        /// When invoked as `vim`, never redirect install to Neovim
+        #[arg(long)]
+        strict_vim: bool,
+
+        /// Prefer symlink to monorepo extensions/nvim when available (default: true)
+        #[arg(long, default_value_t = true)]
+        symlink: bool,
+
+        /// Force copy even if monorepo source is available
+        #[arg(long)]
+        no_symlink: bool,
+
+        /// Exact plugin directory (…/start/cargo-runner). Overrides --data-home / --app-name / --vim-dir
+        #[arg(long, value_name = "DIR")]
+        pack_dir: Option<String>,
+
+        /// Override XDG_DATA_HOME for Neovim packpath (default: $XDG_DATA_HOME or ~/.local/share)
+        #[arg(long, value_name = "DIR")]
+        data_home: Option<String>,
+
+        /// Neovim app name / $NVIM_APPNAME (default: nvim). Example: nvim-lazy, astronvim
+        #[arg(long, value_name = "NAME")]
+        app_name: Option<String>,
+
+        /// User config dir for setup hints (default: ~/.config/nvim or $XDG_CONFIG_HOME/{app})
+        #[arg(long, value_name = "DIR")]
+        config_dir: Option<String>,
+
+        /// Classic Vim runtime root (default: ~/.vim)
+        #[arg(long, value_name = "DIR")]
+        vim_dir: Option<String>,
+    },
+    /// Remove a previous cargo-runner packpath install
+    Uninstall {
+        #[arg(long)]
+        dry_run: bool,
+
+        #[arg(long)]
+        follow_shell_alias: bool,
+
+        #[arg(long)]
+        strict_vim: bool,
+
+        #[arg(long, value_name = "DIR")]
+        pack_dir: Option<String>,
+
+        #[arg(long, value_name = "DIR")]
+        data_home: Option<String>,
+
+        #[arg(long, value_name = "NAME")]
+        app_name: Option<String>,
+
+        #[arg(long, value_name = "DIR")]
+        config_dir: Option<String>,
+
+        #[arg(long, value_name = "DIR")]
+        vim_dir: Option<String>,
+    },
+    /// Show editor binary, plugin path, and cargo-runner CLI status
+    Status {
+        #[arg(long)]
+        follow_shell_alias: bool,
+
+        #[arg(long)]
+        strict_vim: bool,
+
+        #[arg(long, value_name = "DIR")]
+        pack_dir: Option<String>,
+
+        #[arg(long, value_name = "DIR")]
+        data_home: Option<String>,
+
+        #[arg(long, value_name = "NAME")]
+        app_name: Option<String>,
+
+        #[arg(long, value_name = "DIR")]
+        config_dir: Option<String>,
+
+        #[arg(long, value_name = "DIR")]
+        vim_dir: Option<String>,
+    },
+}
+
+fn editor_path_opts(
+    pack_dir: Option<String>,
+    data_home: Option<String>,
+    app_name: Option<String>,
+    config_dir: Option<String>,
+    vim_dir: Option<String>,
+) -> (
+    Option<PathBuf>,
+    Option<PathBuf>,
+    Option<String>,
+    Option<PathBuf>,
+    Option<PathBuf>,
+) {
+    (
+        pack_dir.map(PathBuf::from),
+        data_home.map(PathBuf::from),
+        app_name,
+        config_dir.map(PathBuf::from),
+        vim_dir.map(PathBuf::from),
+    )
+}
+
+fn editor_cmd_to_options(
+    action: EditorCmd,
+    requested: String,
+) -> EditorInstallOptions {
+    match action {
+        EditorCmd::Install {
+            method,
+            dry_run,
+            follow_shell_alias,
+            strict_vim,
+            symlink,
+            no_symlink,
+            pack_dir,
+            data_home,
+            app_name,
+            config_dir,
+            vim_dir,
+        } => {
+            let (pack_dir, data_home, app_name, config_dir, vim_dir) =
+                editor_path_opts(pack_dir, data_home, app_name, config_dir, vim_dir);
+            EditorInstallOptions {
+                action: EditorAction::Install,
+                requested,
+                method: if method == "print" {
+                    InstallMethod::Print
+                } else {
+                    InstallMethod::Pack
+                },
+                dry_run,
+                follow_shell_alias,
+                strict_vim,
+                prefer_symlink: symlink && !no_symlink,
+                pack_dir,
+                data_home,
+                app_name,
+                config_dir,
+                vim_dir,
+            }
+        }
+        EditorCmd::Uninstall {
+            dry_run,
+            follow_shell_alias,
+            strict_vim,
+            pack_dir,
+            data_home,
+            app_name,
+            config_dir,
+            vim_dir,
+        } => {
+            let (pack_dir, data_home, app_name, config_dir, vim_dir) =
+                editor_path_opts(pack_dir, data_home, app_name, config_dir, vim_dir);
+            EditorInstallOptions {
+                action: EditorAction::Uninstall,
+                requested,
+                method: InstallMethod::Pack,
+                dry_run,
+                follow_shell_alias,
+                strict_vim,
+                prefer_symlink: false,
+                pack_dir,
+                data_home,
+                app_name,
+                config_dir,
+                vim_dir,
+            }
+        }
+        EditorCmd::Status {
+            follow_shell_alias,
+            strict_vim,
+            pack_dir,
+            data_home,
+            app_name,
+            config_dir,
+            vim_dir,
+        } => {
+            let (pack_dir, data_home, app_name, config_dir, vim_dir) =
+                editor_path_opts(pack_dir, data_home, app_name, config_dir, vim_dir);
+            EditorInstallOptions {
+                action: EditorAction::Status,
+                requested,
+                method: InstallMethod::Pack,
+                dry_run: false,
+                follow_shell_alias,
+                strict_vim,
+                prefer_symlink: false,
+                pack_dir,
+                data_home,
+                app_name,
+                config_dir,
+                vim_dir,
+            }
+        }
+    }
 }
 
 impl Commands {
@@ -636,6 +892,15 @@ impl Commands {
                 let name = cmd.get_name().to_string();
                 clap_complete::generate(shell, &mut cmd, name, &mut std::io::stdout());
                 Ok(())
+            }
+            Commands::Nvim { action } => {
+                editor_install_command(editor_cmd_to_options(action, "nvim".into()))
+            }
+            Commands::Vim { action } => {
+                editor_install_command(editor_cmd_to_options(action, "vim".into()))
+            }
+            Commands::Editor { action, editor } => {
+                editor_install_command(editor_cmd_to_options(action, editor))
             }
         }
     }

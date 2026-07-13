@@ -29,6 +29,7 @@ CLI and VS Code extension share one version. Config lives in **`.cargo-runner.js
 |--|--|
 | **CLI** | `cargo binstall cargo-runner-cli` / `cargo install cargo-runner-cli` |
 | **VS Code** | [masterustacean.cargo-runner](https://marketplace.visualstudio.com/items?itemName=masterustacean.cargo-runner) |
+| **Neovim** | `cargo runner nvim install` · [extensions/nvim](extensions/nvim/) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) · release process [docs/release.md](docs/release.md) |
 | **Agent playbook** | [docs/AGENTS.cargo-runner.md](docs/AGENTS.cargo-runner.md) |
 | **IDE JSON** | [docs/ide-protocol.md](docs/ide-protocol.md) |
@@ -48,6 +49,8 @@ cargo runner run src/main.rs             # binary / app entry
 ```
 
 **VS Code:** install the extension → **Cmd+R** / **Ctrl+R** run at cursor · **Cmd+Shift+R** override.
+
+**Neovim:** `cargo runner nvim install` → **`<leader>r`** run · **`<leader>R`** override (optional **Cmd+R** in Neovide/GUI).
 
 ### Custom tools (Spin, make, …)
 
@@ -98,12 +101,40 @@ cargo install cargo-runner-cli
 
 **VS Code** auto-downloads CLI tag `cargo-runner-cli-v{extensionVersion}` from GitHub Releases (or use PATH / `cargoRunner.path`).
 
+**Neovim / Vim plugin** (packpath — no `init.lua` edit required):
+
+```bash
+cargo runner nvim install
+cargo runner nvim status
+cargo runner nvim uninstall
+
+# if `vim` is aliased to nvim in your shell:
+cargo runner vim install --follow-shell-alias
+
+# custom config / data (NVIM_APPNAME, LazyVim, dotfiles, …)
+cargo runner nvim install --app-name nvim-lazy
+cargo runner nvim install --config-dir ~/dotfiles/nvim --data-home ~/dotfiles/.local/share
+cargo runner nvim install --pack-dir ~/dotfiles/nvim/pack/cargo-runner/start/cargo-runner
+```
+
+| Flag | Use when |
+|------|----------|
+| `--config-dir` | Your `init.lua` is not `~/.config/nvim` (hints for optional `setup()`) |
+| `--data-home` / `--app-name` | Non-default Neovim data / `$NVIM_APPNAME` |
+| `--pack-dir` | Exact packpath directory |
+| `--vim-dir` | Classic Vim root ≠ `~/.vim` |
+
+Docs: **[docs/nvim.md](docs/nvim.md)** · status panel UX **[docs/nvim-status-panel.md](docs/nvim-status-panel.md)** · plugin sources [`extensions/nvim/`](extensions/nvim/).
+
 ### Extension development
 
 ```bash
 make vscode
 # F5 with extensions/vscode open, or:
 make vscode-package
+
+# Neovim plugin (packpath symlink for live edit)
+cargo runner nvim install   # symlinks extensions/nvim when run from this repo
 ```
 
 ---
@@ -412,6 +443,7 @@ Deduplication is name-aware and content-aware:
 | `cargo runner runnables [file\|module::path[:line]] [--bin] [--test] [--bench] [--doc] [--name QUERY] [--symbol SYMBOL] [--exact]` | List runnable items for a file, module path, or entire workspace |
 | `cargo runner context [file\|module::path[:line]] --json` | Emit machine-readable project/file context for IDEs and agents |
 | `cargo runner agent-init [PATH...]` | Install agent instructions into AGENTS.md / CLAUDE.md / Cursor / Copilot |
+| `cargo runner nvim install` / `uninstall` / `status` | Neovim packpath plugin; path flags `--config-dir`, `--app-name`, `--pack-dir`, … |
 | `cargo runner doctor [--json]` | Project + toolchain health checks |
 | `cargo runner override …` | Persist custom commands (spin, make, env, …) in `.cargo-runner.json` |
 
