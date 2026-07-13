@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 # Shared semver: CLI, core, and VS Code extension (see docs/release.md).
 # vscode/product changes → minor; CLI-only → patch.
-version = "2.1.3"
+version = "2.1.4"
 edition = "2024"
 authors = ["Uriah Galang <codeitlikemiley@gmail.com>"]
 license = "MIT"
