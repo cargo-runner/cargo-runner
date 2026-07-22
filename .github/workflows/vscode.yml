@@ -10,8 +10,10 @@ on:
     paths:
       - "extensions/vscode/**"
       - ".github/workflows/vscode.yml"
-  release:
-    types: [published]
+
+# Publishing lives in release.yml (job: publish-extension). A `release:` trigger
+# would never fire here: release.yml creates the release with GITHUB_TOKEN, and
+# GITHUB_TOKEN-triggered events cannot start new workflow runs.
 
 jobs:
   build:
@@ -42,20 +44,3 @@ jobs:
         with:
           name: cargo-runner-vscode
           path: extensions/vscode/*.vsix
-
-  attach-release:
-    if: github.event_name == 'release'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: cargo-runner-vscode
-          path: vsix
-
-      - name: Attach VSIX to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: vsix/*

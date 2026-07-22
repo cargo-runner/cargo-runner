@@ -6,9 +6,13 @@
 |----------|----------------|
 | `cargo-runner-core` / `cargo-runner-cli` (crates.io) | `Cargo.toml` workspace `version` |
 | GitHub CLI binaries | tag `cargo-runner-cli-v{VERSION}` |
-| VS Code extension | `extensions/vscode/package.json` → `version` |
+| VS Code extension — Marketplace **and** Open VSX | `extensions/vscode/package.json` → `version` |
 
 The extension downloads **`cargo-runner-cli-v{extensionVersion}`**, so the numbers must stay aligned when you ship both.
+
+The extension ships to **two** registries under publisher/namespace `masterustacean`:
+Marketplace (`masterustacean.cargo-runner`) and [Open VSX](https://open-vsx.org/extension/masterustacean/cargo-runner)
+(namespace is **verified**). Open VSX is what Cursor, VSCodium, Windsurf, and Gitpod install from.
 
 ---
 
@@ -28,9 +32,41 @@ The extension downloads **`cargo-runner-cli-v{extensionVersion}`**, so the numbe
 
 ### CLI-only vs Marketplace
 
-- **CLI-only patch:** ship GitHub tag + crates.io. Marketplace optional if extension code did not change.
-- **Docs / README visibility on Marketplace:** bump shared version and publish with `--marketplace` so the VSIX embeds the new README.
-- Marketplace users download `cargo-runner-cli-v{extensionVersion}` — keep tag and extension version in lockstep when shipping both.
+- **CLI-only patch:** ship GitHub tag + crates.io. The extension publish step self-skips
+  when the version is already live on a registry, so a CLI-only release is a clean no-op there.
+- **Docs / README visibility on the registries:** bump the shared version — the VSIX embeds the new README.
+- Users download `cargo-runner-cli-v{extensionVersion}` — keep tag and extension version in lockstep when shipping both.
+
+---
+
+## Automated publishing
+
+Pushing a `cargo-runner-cli-v*` tag runs [`release.yml`](../.github/workflows/release.yml):
+
+```text
+build (5 targets) → create-release (attaches CLI binaries)
+                  → publish-extension  (Marketplace + Open VSX + attach VSIX)
+```
+
+`publish-extension` needs `create-release`, so the CLI binaries are always on the release
+**before** the extension goes live — otherwise a fresh install's first "Download CLI" would 404.
+
+It also:
+
+- fails fast if the tag version and `package.json` version disagree;
+- queries both registries first and skips whichever already has that version.
+
+**Required repo secrets** — Settings → Secrets and variables → Actions:
+
+| Secret | Where it comes from |
+|--------|---------------------|
+| `VSCE_PAT` | [dev.azure.com](https://dev.azure.com) → User settings → Personal access tokens. Organization **must** be *All accessible organizations*; scope **Custom defined → Marketplace → Manage**. |
+| `OVSX_PAT` | [open-vsx.org](https://open-vsx.org) → user settings → Access Tokens (requires a signed Eclipse Publisher Agreement). |
+
+> ⚠️ **Azure DevOps global PATs retire 2026-12-01.** The replacement is Entra ID workload
+> identity federation (`vsce publish --azure-credential`), but it currently errors with
+> "corporate credentials required" for personally-owned publishers. Revisit before December.
+> Open VSX has no equivalent deadline.
 
 ---
 
@@ -64,7 +100,8 @@ What the script does (unless dry-run):
 3. Commits + pushes `main` (unless `--no-push`)
 4. Creates annotated tag `cargo-runner-cli-v{VERSION}` and pushes it
 5. Publishes `cargo-runner-core` then `cargo-runner-cli` to crates.io
-6. Optionally `vsce publish` (`--marketplace`)
+6. Optionally `vsce publish` (`--marketplace`) — **normally unnecessary**: pushing the tag
+   already publishes to both registries via CI. Keep this as a manual escape hatch only.
 
 **Makefile:** `make release-cli` · `make release-vscode` · `make release VERSION=2.1.1`
 
@@ -79,15 +116,15 @@ What the script does (unless dry-run):
 - [ ] Tag + GitHub Actions release green
 - [ ] crates.io shows new version
 - [ ] Smoke: `cargo binstall cargo-runner-cli` or Download CLI
-- [ ] If README should appear on Marketplace: pass `--marketplace`
 
 ### Minor (`release.sh vscode`)
 
 - [ ] CHANGELOG entry
 - [ ] Extension builds: `make vscode-package`
 - [ ] CLI tag + crates.io
-- [ ] `vsce publish` / `--marketplace`
+- [ ] `publish-extension` job green
 - [ ] Marketplace shows version; id `masterustacean.cargo-runner`
+- [ ] Open VSX shows version: `curl -s https://open-vsx.org/api/masterustacean/cargo-runner | grep -o '"version":"[^"]*"' | head -1`
 
 ### Never
 
