@@ -5,7 +5,8 @@ import type { CliClient } from "../cli/client";
 import { tryDebugAtCursor } from "../debug/breakpoint";
 import { executeAsTask, isLongRunning } from "../providers/taskProvider";
 
-let terminal: vscode.Terminal | undefined;
+/** Live run terminals; exited ones are disposed on the next run. */
+const terminals: vscode.Terminal[] = [];
 
 export async function runAtCursor(
   binaryManager: BinaryManager,
@@ -151,17 +152,24 @@ async function runInTerminal(
   cwd: string,
   show: boolean,
 ): Promise<void> {
-  // Only reap a terminal whose process already exited — never kill a run the
-  // user may still be watching.
-  if (terminal && terminal.exitStatus !== undefined) {
-    terminal.dispose();
+  // Reap every terminal whose process already exited, but never kill a run the
+  // user may still be watching. Tracking the whole set matters because a
+  // terminal bound to a process cannot be reused, so each run makes a new one —
+  // holding only the most recent handle would strand the earlier ones.
+  for (let i = terminals.length - 1; i >= 0; i--) {
+    if (terminals[i].exitStatus !== undefined) {
+      terminals[i].dispose();
+      terminals.splice(i, 1);
+    }
   }
-  terminal = vscode.window.createTerminal({
+
+  const terminal = vscode.window.createTerminal({
     name: "Cargo Runner",
     cwd,
     shellPath: binary,
     shellArgs: args,
   });
+  terminals.push(terminal);
   if (show) {
     terminal.show();
   }

@@ -257,15 +257,18 @@ impl Command {
             return Ok(());
         }
         let program = self.resolved_program();
+        let pipe = self.pipe_command.as_deref();
         let crate::trust::Verdict::NeedsConsent(reasons) =
-            crate::trust::evaluate(program, &self.env)
+            crate::trust::evaluate(program, &self.env, pipe)
         else {
             return Ok(());
         };
 
         let approval =
-            crate::trust::approval_for(self.working_dir.as_deref(), program, &self.env);
-        if crate::trust::TrustStore::load().contains(&approval) {
+            crate::trust::approval_for(self.working_dir.as_deref(), program, &self.env, pipe);
+        if crate::trust::approved_in_process(&approval)
+            || crate::trust::TrustStore::load().contains(&approval)
+        {
             return Ok(());
         }
 

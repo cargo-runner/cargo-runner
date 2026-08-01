@@ -21,13 +21,15 @@ pub fn ensure_trusted(command: &Command, assume_yes: bool) -> Result<()> {
     }
 
     let program = command.resolved_program();
-    let Verdict::NeedsConsent(reasons) = trust::evaluate(program, &command.env) else {
+    let pipe = command.pipe_command.as_deref();
+    let Verdict::NeedsConsent(reasons) = trust::evaluate(program, &command.env, pipe) else {
         return Ok(());
     };
 
-    let approval = trust::approval_for(command.working_dir.as_deref(), program, &command.env);
+    let approval =
+        trust::approval_for(command.working_dir.as_deref(), program, &command.env, pipe);
     let mut store = TrustStore::load();
-    if store.contains(&approval) {
+    if trust::approved_in_process(&approval) || store.contains(&approval) {
         return Ok(());
     }
 
@@ -54,10 +56,9 @@ pub fn ensure_trusted(command: &Command, assume_yes: bool) -> Result<()> {
 
     match answer.trim().to_ascii_lowercase().as_str() {
         "y" | "yes" => {
-            // Allowed for this invocation only. `execute` re-checks the store,
-            // so the bypass has to be made visible to this process.
-            // SAFETY: single-threaded CLI startup path, before any threads spawn.
-            unsafe { std::env::set_var("CARGO_RUNNER_TRUST", "1") };
+            // Scoped to this exact command for the life of the process — not a
+            // blanket bypass, and nothing is written to disk.
+            trust::allow_for_process(approval);
             Ok(())
         }
         "a" | "always" => remember(&mut store, approval),
@@ -88,8 +89,13 @@ fn describe(approval: &Approval, reasons: &[String]) {
     );
 }
 
-/// `cargo runner trust [--list|--revoke]` — manage stored approvals.
-pub fn trust_command(list: bool, revoke: bool) -> Result<()> {
+/// `cargo runner trust [selector] [--list|--revoke]` — manage stored approvals.
+///
+/// With no flags it resolves the command for `selector` (defaulting to the same
+/// entry point bare `run` picks) and records an approval for it, so the gate's
+/// error message has a working escape hatch and `watch` users can approve ahead
+/// of time.
+pub fn trust_command(selector: Option<String>, list: bool, revoke: bool) -> Result<()> {
     let mut store = TrustStore::load();
     let path = trust::store_path();
 
@@ -100,6 +106,9 @@ pub fn trust_command(list: bool, revoke: bool) -> Result<()> {
             for a in &store.approvals {
                 println!("{}", a.root);
                 println!("   program: {}", a.program);
+                if let Some(p) = &a.pipe {
+                    println!("   pipe:    {p}");
+                }
                 for (k, v) in &a.env {
                     println!("   env:     {k}={v}");
                 }
@@ -125,8 +134,39 @@ pub fn trust_command(list: bool, revoke: bool) -> Result<()> {
         return Ok(());
     }
 
-    println!("Approvals are recorded when you run something that needs them.");
-    println!("Use --list to see them, or --revoke to drop the ones for this project.");
-    println!("Current project: {root}");
-    Ok(())
+    // Approve: resolve exactly what `run` would execute, then record it.
+    let filepath = crate::utils::path::resolve_filepath_arg(selector)?;
+    let command = crate::commands::run::resolve_command_for_selector(
+        &filepath,
+        Default::default(),
+        &[],
+    )?;
+
+    let program = command.resolved_program();
+    let pipe = command.pipe_command.as_deref();
+    let approval =
+        trust::approval_for(command.working_dir.as_deref(), program, &command.env, pipe);
+
+    match trust::evaluate(program, &command.env, pipe) {
+        Verdict::Allowed => {
+            println!("Nothing to approve for {filepath}.");
+            println!("It resolves to `{program}`, an ordinary build command.");
+            Ok(())
+        }
+        Verdict::NeedsConsent(reasons) => {
+            if store.contains(&approval) {
+                println!("Already approved for {root}:");
+            } else {
+                describe(&approval, &reasons);
+                store.insert(approval);
+                store.save().context("failed to save the trust store")?;
+                println!("Approved for {root}:");
+            }
+            println!("   program: {program}");
+            if let Some(p) = pipe {
+                println!("   pipe:    {p}");
+            }
+            Ok(())
+        }
+    }
 }

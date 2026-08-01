@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "node:path";
+import type { BinaryManager } from "../binary/manager";
 
 export interface CargoRunnerTaskDefinition extends vscode.TaskDefinition {
   type: "cargo-runner";
@@ -24,15 +25,21 @@ export function isLongRunning(shell: string): boolean {
 
 export function registerTaskProvider(
   _context: vscode.ExtensionContext,
+  binaryManager: Pick<BinaryManager, "resolveExisting">,
 ): vscode.Disposable {
   return vscode.tasks.registerTaskProvider("cargo-runner", {
     provideTasks: () => [],
-    resolveTask: (task: vscode.Task) => {
+    // `resolveTask` accepts a Thenable, so the binary can be resolved here
+    // rather than assuming a bare name on PATH. `resolveExisting` is used
+    // instead of `ensureBinary` because the latter can raise a download prompt,
+    // which has no place in task resolution.
+    resolveTask: async (task: vscode.Task) => {
       const def = task.definition as CargoRunnerTaskDefinition;
+      const binary = (await binaryManager.resolveExisting()) ?? "cargo-runner";
       return buildTask(def.args, {
         cwd: def.cwd,
         label: task.name,
-        binary: "cargo-runner",
+        binary,
       });
     },
   });

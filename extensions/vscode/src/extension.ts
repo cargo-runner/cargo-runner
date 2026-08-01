@@ -33,7 +33,7 @@ export async function activate(
     output.appendLine(`CLI install/update prompt error: ${e}`);
   });
 
-  context.subscriptions.push(registerTaskProvider(context));
+  context.subscriptions.push(registerTaskProvider(context, binaryManager));
 
   const runnablesTree = new RunnablesTreeProvider(client);
   const overridesTree = new OverridesTreeProvider(client);

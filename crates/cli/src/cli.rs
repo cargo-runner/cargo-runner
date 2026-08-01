@@ -233,6 +233,10 @@ pub enum Commands {
     /// something other than an ordinary Rust build. Those need a one-time
     /// approval per project, recorded in the trust store.
     Trust {
+        /// What to approve (e.g. src/main.rs:10). Defaults to the same entry
+        /// point `run` picks with no path.
+        selector: Option<String>,
+
         /// List every recorded approval
         #[arg(long)]
         list: bool,
@@ -413,6 +417,10 @@ pub enum Commands {
         /// Debounce delay in milliseconds before re-triggering (default: 300)
         #[arg(long, default_value = "300", value_name = "MS")]
         debounce: u64,
+
+        /// Approve this project's custom command / environment without prompting
+        #[arg(long)]
+        trust_config: bool,
     },
 
     /// Diagnose project + toolchain health (Cargo, Bazel, frameworks)
@@ -837,9 +845,11 @@ impl Commands {
                 skip_sync,
             ),
             Commands::Unset { clean } => unset_command(clean),
-            Commands::Trust { list, revoke } => {
-                crate::commands::trust::trust_command(list, revoke)
-            }
+            Commands::Trust {
+                selector,
+                list,
+                revoke,
+            } => crate::commands::trust::trust_command(selector, list, revoke),
             Commands::Override {
                 filepath,
                 root,
@@ -906,7 +916,8 @@ impl Commands {
                 run,
                 test,
                 debounce,
-            } => watch_command(filepath.as_deref(), run, test, debounce),
+                trust_config,
+            } => watch_command(filepath.as_deref(), run, test, debounce, trust_config),
             Commands::Doctor { json } => crate::commands::doctor::doctor_command(json),
             Commands::AgentInit {
                 root,

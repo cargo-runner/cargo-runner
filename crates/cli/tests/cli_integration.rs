@@ -1951,3 +1951,118 @@ fn override_help_shows_flags() {
         .stdout(predicate::str::contains("--subcommand"))
         .stdout(predicate::str::contains("--channel"));
 }
+
+/// Regression test for the trust gate's blind spot in the rustc path.
+///
+/// `.cargo-runner.json` can set `rustc.*_framework.exec.pipe`, and when a pipe
+/// is present `Command::execute` stops using argv and runs the whole invocation
+/// through `sh -c`. The gate keyed only on the program name, which is "rustc"
+/// there and allowlisted, so the pipe executed with no prompt and no denial.
+#[test]
+fn rustc_exec_pipe_is_refused_without_approval() {
+    let tmp = TempDir::new().unwrap();
+    let root = canonical(tmp.path());
+    let sentinel = tmp.path().join("pwned.txt");
+
+    std::fs::write(
+        tmp.path().join("standalone.rs"),
+        "fn main() { println!(\"legit\"); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join(".cargo-runner.json"),
+        format!(
+            r#"{{"rustc":{{"binary_framework":{{"exec":{{"pipe":"sh -c 'echo PWNED > {}'"}}}}}}}}"#,
+            sentinel.display()
+        ),
+    )
+    .unwrap();
+
+    // Isolate the trust store so a developer's real approvals cannot affect this.
+    let fake_config = tmp.path().join("config-home");
+
+    cargo_runner()
+        .args(["run", "standalone.rs"])
+        .env("PROJECT_ROOT", &root)
+        .env("XDG_CONFIG_HOME", &fake_config)
+        .env_remove("CARGO_RUNNER_TRUST")
+        .current_dir(tmp.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("pipes output through"));
+
+    assert!(
+        !sentinel.exists(),
+        "the pipe payload ran despite not being approved"
+    );
+}
+
+/// The same command is allowed once trust is granted, so the gate is a consent
+/// step rather than a blanket refusal.
+#[test]
+fn rustc_exec_pipe_runs_once_trusted() {
+    let tmp = TempDir::new().unwrap();
+    let root = canonical(tmp.path());
+    let sentinel = tmp.path().join("allowed.txt");
+
+    std::fs::write(
+        tmp.path().join("standalone.rs"),
+        "fn main() { println!(\"legit\"); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join(".cargo-runner.json"),
+        format!(
+            r#"{{"rustc":{{"binary_framework":{{"exec":{{"pipe":"sh -c 'echo OK > {}'"}}}}}}}}"#,
+            sentinel.display()
+        ),
+    )
+    .unwrap();
+
+    let fake_config = tmp.path().join("config-home");
+
+    cargo_runner()
+        .args(["run", "standalone.rs"])
+        .env("PROJECT_ROOT", &root)
+        .env("XDG_CONFIG_HOME", &fake_config)
+        .env("CARGO_RUNNER_TRUST", "1")
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    assert!(
+        sentinel.exists(),
+        "an approved pipe should still run normally"
+    );
+}
+
+/// `--dry-run` resolves configuration but executes nothing, so it must never be
+/// gated — editors call it continuously while the user browses.
+#[test]
+fn dry_run_is_never_gated() {
+    let tmp = TempDir::new().unwrap();
+    let root = canonical(tmp.path());
+
+    std::fs::write(
+        tmp.path().join("standalone.rs"),
+        "fn main() { println!(\"legit\"); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join(".cargo-runner.json"),
+        r#"{"rustc":{"binary_framework":{"exec":{"pipe":"sh -c 'id'"}}}}"#,
+    )
+    .unwrap();
+
+    let fake_config = tmp.path().join("config-home");
+
+    cargo_runner()
+        .args(["run", "standalone.rs", "--dry-run"])
+        .env("PROJECT_ROOT", &root)
+        .env("XDG_CONFIG_HOME", &fake_config)
+        .env_remove("CARGO_RUNNER_TRUST")
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("rustc"));
+}
