@@ -25,11 +25,11 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     # Pin exact Bazel version from .bazelversion
     - name: Set up Bazel
-      uses: bazel-contrib/setup-bazel@0.9.1
+      uses: bazel-contrib/setup-bazel@f3f50ea6791b9b0f4c4eeabba4507422426462f5 # 0.9.1
       with:
         bazelisk-cache: true
         disk-cache: ${{ github.workflow }}

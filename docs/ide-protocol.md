@@ -8,6 +8,14 @@ Release tags: `cargo-runner-cli-v{version}`. The extension prefers downloading t
 
 All JSON success modes print **only** JSON on stdout (no emoji banners).
 
+> **Adapters must execute `program` + `args`, never `shell`.**
+> The `shell` field is a human-readable preview. Its quoting is not safe to
+> hand to a shell, and repository-controlled data (file paths, target names)
+> flows into it. See [SECURITY.md](../SECURITY.md).
+>
+> A resolved command may also require user approval before it runs — see
+> "Trust" below.
+
 ### Structured errors
 
 When a JSON mode fails, stdout receives:
@@ -159,6 +167,25 @@ cargo runner override src/lib.rs:12 -- !!
 | `-` or `!!` | Remove entire matching override |
 
 Parser: `OverrideManager::parse_override_args` in `crates/core/src/config/override_manager.rs`.
+
+---
+
+## Trust
+
+`.cargo-runner.json` is repository-controlled, so a project that configures a
+custom `command` — or an `extra_env` entry such as `RUSTC_WRAPPER` that changes
+what the build executes — needs a one-time approval per project before
+`cargo runner run` will execute it.
+
+Read-only modes (`runnables`, `context`, `--dry-run`) never prompt and never
+execute, so adapters can call them freely while the user browses.
+
+For `run`, a command awaiting approval exits non-zero with the reason on
+stderr. Adapters should surface that rather than retrying. The user approves
+with `cargo runner trust`, or the adapter can pass `--trust-config` once the
+user has confirmed. `CARGO_RUNNER_TRUST=1` disables the prompt for automation.
+
+Full model: [SECURITY.md](../SECURITY.md).
 
 ---
 

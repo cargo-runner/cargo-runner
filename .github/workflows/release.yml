@@ -39,22 +39,22 @@ jobs:
             archive: zip
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Set up Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       with:
         targets: ${{ matrix.target }}
 
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       with:
         workspaces: "."
 
     # Install cross if building for a different architecture on linux
     - name: Install cross
       if: matrix.use-cross
-      uses: taiki-e/install-action@cross
+      uses: taiki-e/install-action@3f86fa0074f5eccef2cb05a45ee47ba5a81406e3 # cross
 
     - name: Build Binary
       shell: bash
@@ -95,7 +95,7 @@ jobs:
         echo "ASSET_NAME=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: ${{ matrix.target }}
         path: |
@@ -109,10 +109,10 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Download Artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
       with:
         path: artifacts
 
@@ -127,7 +127,7 @@ jobs:
         test -s SHA256SUMS  # fail the release rather than publish an empty manifest
 
     - name: Create Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
         files: |
           artifacts/**/*.tar.gz
@@ -144,9 +144,9 @@ jobs:
       run:
         working-directory: extensions/vscode
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:
         node-version: "20"
         cache: npm
@@ -223,6 +223,6 @@ jobs:
         fi
 
     - name: Attach VSIX to release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
         files: extensions/vscode/*.vsix

@@ -11,6 +11,11 @@ common --repository_cache=~/.cache/bazel-repo
 build --jobs=auto
 build --keep_going
 
+# Fail on lockfile drift instead of silently rewriting MODULE.bazel.lock, which
+# is Bazel 7's default (--lockfile_mode=update). The lock is committed, so a
+# changed module should be an explicit, reviewed update.
+common --lockfile_mode=error
+
 # ── Test defaults ─────────────────────────────────────────────────────────────
 test --test_output=errors
 test --keep_going
