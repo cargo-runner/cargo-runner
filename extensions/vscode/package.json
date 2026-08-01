@@ -42,6 +42,12 @@
     "workspaceContains:**/Cargo.toml",
     "workspaceContains:**/MODULE.bazel"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Cargo Runner resolves and executes build/test commands from the workspace, including repository-local .cargo-runner.json, so it requires a trusted workspace."
+    }
+  },
   "main": "./out/extension.js",
   "extensionDependencies": [
     "rust-lang.rust-analyzer",
@@ -314,7 +320,8 @@
         "cargoRunner.useTaskRunner": {
           "type": "boolean",
           "default": true,
-          "description": "Use VS Code tasks for better concurrency (long-running dx serve / cargo leptos watch)."
+          "scope": "machine-overridable",
+          "description": "Use VS Code tasks for better concurrency (long-running dx serve / cargo leptos watch). Machine-scoped: this selects which execution path runs your code, so a workspace cannot switch it."
         },
         "cargoRunner.enableCodeLens": {
           "type": "boolean",
@@ -324,17 +331,14 @@
         "cargoRunner.enableBreakpointDetection": {
           "type": "boolean",
           "default": true,
-          "description": "When breakpoints exist in the current symbol, Cmd+R starts a debug session."
+          "scope": "machine-overridable",
+          "description": "When breakpoints exist in the current symbol, Cmd+R starts a debug session. Machine-scoped: this selects run vs. debug behavior, so a workspace cannot switch it."
         },
         "cargoRunner.showOutput": {
           "type": "boolean",
           "default": true,
-          "description": "Reveal the terminal/output when running a command."
-        },
-        "cargoRunner.cliMinVersion": {
-          "type": "string",
-          "default": "1.0.0",
-          "description": "Minimum cargo-runner CLI version required by this extension."
+          "scope": "machine-overridable",
+          "description": "Reveal the terminal/output when running a command. Machine-scoped: a workspace cannot hide what it caused to run."
         },
         "cargoRunner.checkCliUpdates": {
           "type": "boolean",

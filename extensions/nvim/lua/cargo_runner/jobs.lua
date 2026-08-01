@@ -289,19 +289,20 @@ function M.start(opts)
       -- explicit opt-in only
       j.phase = "terminal"
       hud.render(M.list())
-      -- `termopen` runs this string through a shell, and argv carries
-      -- workspace-controlled data (file paths, target names). Escape every
-      -- argument, not just the ones containing whitespace, so metacharacters
-      -- like `;` or `$(…)` in a filename cannot be interpreted.
-      local cmd = table.concat(vim.tbl_map(function(a)
-        return vim.fn.shellescape(a)
-      end, argv), " ")
+      -- Pass argv as a list: nvim execs it directly, without `&shell`. A string
+      -- argument would be shell-interpreted, and argv carries
+      -- workspace-controlled data (file paths, target names), so a filename
+      -- containing `;` or `$(…)` would run. Using a list removes the need to
+      -- escape at all.
+      local cmd = argv
+      -- Display only — never fed back to a shell.
+      local shown = table.concat(argv, " ")
       vim.cmd("botright split | resize 12")
       local term_buf = vim.api.nvim_get_current_buf()
       vim.fn.termopen(cmd, { cwd = j.cwd, env = job_env() })
       j.term_buf = term_buf
       j.status = "running"
-      j.combined = "(output in terminal buffer)\n" .. cmd
+      j.combined = "(output in terminal buffer)\n" .. shown
       -- leave insert so user can keep editing other windows
       vim.cmd("stopinsert")
       vim.cmd("wincmd p")

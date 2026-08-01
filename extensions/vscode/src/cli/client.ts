@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as vscode from "vscode";
 import type {
@@ -139,16 +139,4 @@ export class CliClient {
     });
   }
 
-  /** Spawn cargo-runner for interactive/long-running execution (non-JSON). */
-  spawn(
-    args: string[],
-    options: { cwd?: string; env?: Record<string, string> },
-  ): ReturnType<typeof spawn> {
-    // Fire-and-forget; caller must await ensureBinary first.
-    return spawn("cargo-runner", args, {
-      cwd: options.cwd,
-      env: { ...process.env, ...options.env },
-      shell: false,
-    });
-  }
 }

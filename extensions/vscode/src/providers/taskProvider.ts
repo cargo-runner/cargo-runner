@@ -95,21 +95,18 @@ function buildTask(
     cwd: options.cwd,
   };
 
-  // Hand quoting to VS Code: it knows the configured shell and escapes for it.
-  // Manual quoting here only covered args containing spaces, so a path with
-  // shell metacharacters (`;`, `$(…)`, backticks) was interpreted by the shell.
-  const strong = (value: string): vscode.ShellQuotedString => ({
-    value,
-    quoting: vscode.ShellQuoting.Strong,
+  // ProcessExecution runs the binary directly with an argv array — no shell, so
+  // there is nothing to quote and nothing to escape.
+  //
+  // Neither hand-rolled quoting nor ShellExecution+ShellQuoting.Strong is safe
+  // here: VS Code's "strong" quoting is plain concatenation (`'` + value + `'`)
+  // and does not escape an embedded quote, so a file named `x';id;'.rs` breaks
+  // out and the shell executes `id`. Nothing on this path needs shell features,
+  // so the shell is removed entirely rather than quoted around.
+  const execution = new vscode.ProcessExecution(options.binary, args, {
+    cwd: options.cwd,
+    env: options.env,
   });
-  const execution = new vscode.ShellExecution(
-    strong(options.binary),
-    args.map(strong),
-    {
-      cwd: options.cwd,
-      env: options.env,
-    },
-  );
 
   const label =
     options.label ||
