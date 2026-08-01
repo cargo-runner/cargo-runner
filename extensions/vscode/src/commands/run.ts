@@ -130,6 +130,25 @@ export async function debugFileArg(
   await runFileArg(binaryManager, client, output, fileArg);
 }
 
+/**
+ * Quote a single argv entry for `Terminal.sendText`, which writes a raw line
+ * into an interactive shell.
+ *
+ * Args reach here from workspace-controlled data (file paths, resolved target
+ * names), so anything containing shell metacharacters — `;`, `&&`, backticks,
+ * `$(…)` — must not be interpreted. The previous quoting only triggered on
+ * whitespace, letting a file named `` `id`.rs `` execute on Cmd+R.
+ */
+function shellQuote(arg: string): string {
+  if (process.platform === "win32") {
+    // Neutralizes cmd.exe and PowerShell separators. The backtick escapes keep
+    // PowerShell from expanding `$(…)` / subexpressions inside the quotes.
+    return `"${arg.replace(/(["`$])/g, "`$1")}"`;
+  }
+  // POSIX: single quotes suppress every expansion; '\'' re-opens to emit a quote.
+  return `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
 async function runInTerminal(
   binary: string,
   args: string[],
@@ -139,8 +158,8 @@ async function runInTerminal(
   if (!terminal || terminal.exitStatus !== undefined) {
     terminal = vscode.window.createTerminal({ name: "Cargo Runner", cwd });
   }
-  const quoted = args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ");
-  terminal.sendText(`${binary} ${quoted}`, true);
+  const line = [binary, ...args].map(shellQuote).join(" ");
+  terminal.sendText(line, true);
   if (show) {
     terminal.show();
   }

@@ -95,13 +95,21 @@ function buildTask(
     cwd: options.cwd,
   };
 
-  const shellArgs = args.map((a) =>
-    a.includes(" ") && !a.startsWith('"') ? `"${a}"` : a,
-  );
-  const execution = new vscode.ShellExecution(options.binary, shellArgs, {
-    cwd: options.cwd,
-    env: options.env,
+  // Hand quoting to VS Code: it knows the configured shell and escapes for it.
+  // Manual quoting here only covered args containing spaces, so a path with
+  // shell metacharacters (`;`, `$(…)`, backticks) was interpreted by the shell.
+  const strong = (value: string): vscode.ShellQuotedString => ({
+    value,
+    quoting: vscode.ShellQuoting.Strong,
   });
+  const execution = new vscode.ShellExecution(
+    strong(options.binary),
+    args.map(strong),
+    {
+      cwd: options.cwd,
+      env: options.env,
+    },
+  );
 
   const label =
     options.label ||

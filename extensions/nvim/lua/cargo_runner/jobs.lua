@@ -289,8 +289,12 @@ function M.start(opts)
       -- explicit opt-in only
       j.phase = "terminal"
       hud.render(M.list())
+      -- `termopen` runs this string through a shell, and argv carries
+      -- workspace-controlled data (file paths, target names). Escape every
+      -- argument, not just the ones containing whitespace, so metacharacters
+      -- like `;` or `$(…)` in a filename cannot be interpreted.
       local cmd = table.concat(vim.tbl_map(function(a)
-        return a:find("%s") and vim.fn.shellescape(a) or a
+        return vim.fn.shellescape(a)
       end, argv), " ")
       vim.cmd("botright split | resize 12")
       local term_buf = vim.api.nvim_get_current_buf()

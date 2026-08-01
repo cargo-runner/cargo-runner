@@ -15,6 +15,9 @@ on:
 # would never fire here: release.yml creates the release with GITHUB_TOKEN, and
 # GITHUB_TOKEN-triggered events cannot start new workflow runs.
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

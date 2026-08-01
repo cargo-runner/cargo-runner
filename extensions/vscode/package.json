@@ -308,7 +308,8 @@
         "cargoRunner.path": {
           "type": "string",
           "default": "",
-          "description": "Custom path to the cargo-runner binary. Leave empty for auto-download, or set to 'cargo-runner' to use PATH."
+          "scope": "machine",
+          "description": "Custom path to the cargo-runner binary. Leave empty for auto-download, or set to 'cargo-runner' to use PATH. Machine-scoped: a workspace cannot point this at an arbitrary executable."
         },
         "cargoRunner.useTaskRunner": {
           "type": "boolean",
@@ -349,7 +350,8 @@
         "cargoRunner.releaseRepo": {
           "type": "string",
           "default": "cargo-runner/cargo-runner",
-          "description": "GitHub repo used to download prebuilt CLI binaries."
+          "scope": "machine",
+          "description": "GitHub repo used to download prebuilt CLI binaries. Machine-scoped: a workspace cannot redirect downloads to another repo."
         }
       }
     },

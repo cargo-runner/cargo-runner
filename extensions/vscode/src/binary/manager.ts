@@ -8,6 +8,8 @@ import * as tar from "tar";
 
 const execFileAsync = promisify(execFile);
 
+const DEFAULT_RELEASE_REPO = "cargo-runner/cargo-runner";
+
 /** Thrown when the CLI is missing and the user dismissed / timed out the prompt. */
 export class CliMissingError extends Error {
   constructor(message = "Cargo Runner CLI is not installed") {
@@ -40,7 +42,20 @@ export class BinaryManager {
   }
 
   private releaseRepo(): string {
-    return this.config().get<string>("releaseRepo") || "cargo-runner/cargo-runner";
+    const configured = (this.config().get<string>("releaseRepo") || "").trim();
+    if (!configured) {
+      return DEFAULT_RELEASE_REPO;
+    }
+    // This value is interpolated into release URLs. Without a shape check,
+    // `..` segments or an embedded scheme could retarget the download away
+    // from the intended GitHub repo.
+    if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(configured)) {
+      this.output.appendLine(
+        `Ignoring invalid cargoRunner.releaseRepo "${configured}" (expected "owner/repo"); using ${DEFAULT_RELEASE_REPO}`,
+      );
+      return DEFAULT_RELEASE_REPO;
+    }
+    return configured;
   }
 
   /** Extension package version — kept in lockstep with CLI releases. */
@@ -625,6 +640,10 @@ export class BinaryManager {
           reject(new Error("Too many redirects"));
           return;
         }
+        if (!u.startsWith("https://")) {
+          reject(new Error(`Refusing non-HTTPS download URL: ${u}`));
+          return;
+        }
         https
           .get(u, { headers: { "User-Agent": "cargo-runner-vscode" } }, (res) => {
             if (
@@ -633,7 +652,11 @@ export class BinaryManager {
               res.statusCode < 400 &&
               res.headers.location
             ) {
-              follow(res.headers.location, redirects + 1);
+              // Resolve relative redirects against the current URL, then
+              // re-check the scheme so a redirect cannot downgrade to plain
+              // HTTP (the binary is chmod +x'd and executed after download).
+              res.resume();
+              follow(new URL(res.headers.location, u).toString(), redirects + 1);
               return;
             }
             if (res.statusCode !== 200) {
