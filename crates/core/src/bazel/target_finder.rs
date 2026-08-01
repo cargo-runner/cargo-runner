@@ -2,7 +2,6 @@
 
 use super::{BazelTarget, BazelTargetKind, RuleExtractor, StarlarkParser, TargetAnalyzer};
 use crate::error::Result;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Finds Bazel targets for source files
@@ -460,6 +459,7 @@ impl BazelTargetFinder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::TempDir;
 
     #[test]
