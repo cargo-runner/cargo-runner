@@ -67,7 +67,7 @@ impl RunnableDetector {
         let (runnables, _source, _scopes) = if let Some(r) = cached {
             r
         } else {
-            let source = std::fs::read_to_string(file_path)?;
+            let source = crate::bounded_io::read_to_string_capped(file_path)?;
 
             // Use RustParser's methods instead of duplicating logic
             let extended_scopes = self.parser.get_extended_scopes(&source, file_path)?;

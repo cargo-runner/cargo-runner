@@ -13,6 +13,7 @@ pub mod error;
 pub mod parser;
 pub mod patterns;
 pub mod plugins;
+pub mod bounded_io;
 pub mod trust;
 pub mod types;
 

@@ -392,7 +392,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
-    "@types/tar": "^6.1.13",
     "@types/vscode": "1.89.0",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.25.0",

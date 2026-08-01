@@ -27,6 +27,26 @@ jobs:
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+    # A BuildBuddy API key was once committed in .bazelrc, where `common
+    # --remote_header=` sent it on every Bazel invocation. .gitignore already
+    # reserves user.bazelrc for credentials; this makes the shared file's rule
+    # enforced rather than advisory.
+    - name: No credentials in tracked bazelrc
+      shell: bash
+      run: |
+        # Only tracked bazelrc files, ignoring comments (the file documents the
+        # flag on purpose) and values that are shell/env references.
+        hits=$(git ls-files -z '*.bazelrc' '.bazelrc' \
+          | xargs -0 -r grep -InE '^[^#]*remote_header=[^[:space:]]*api-key=[^$[:space:]]' \
+          || true)
+        if [ -n "$hits" ]; then
+          echo "$hits"
+          echo "::error::A literal API key is present in a tracked bazelrc." \
+               "Move it to user.bazelrc (git-ignored) or a CI secret."
+          exit 1
+        fi
+        echo "no literal credentials in tracked bazelrc"
+
     # Pin exact Bazel version from .bazelversion
     - name: Set up Bazel
       uses: bazel-contrib/setup-bazel@f3f50ea6791b9b0f4c4eeabba4507422426462f5 # 0.9.1

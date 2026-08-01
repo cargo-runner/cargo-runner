@@ -175,7 +175,12 @@ export async function activate(
             .dryRun(item.fileArg())
             .then((d) => d.shell)
             .catch(() => item.entry.label));
-        await vscode.env.clipboard.writeText(shell);
+        // This string is derived from repository-controlled config, and its
+        // whole purpose is to be pasted into a terminal. An embedded newline
+        // would make everything after it execute on paste rather than sit there
+        // for the user to read, so strip control characters first.
+        const safe = shell.replace(/[\x00-\x1F\x7F]/g, " ").trim();
+        await vscode.env.clipboard.writeText(safe);
         vscode.window.showInformationMessage("Command copied to clipboard");
       },
     ),

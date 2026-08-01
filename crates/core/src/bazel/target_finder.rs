@@ -24,7 +24,8 @@ impl BazelTargetFinder {
     pub fn find_targets_in_build_file(&mut self, build_file: &Path) -> Result<Vec<BazelTarget>> {
         tracing::debug!("find_targets_in_build_file: {:?}", build_file);
 
-        let content = fs::read_to_string(build_file).map_err(crate::error::Error::IoError)?;
+        let content = crate::bounded_io::read_to_string_capped(build_file)
+            .map_err(crate::error::Error::IoError)?;
 
         let ast = self.parser.parse_build_file(&content)?;
         let rules = RuleExtractor::extract_rules(&ast)?;

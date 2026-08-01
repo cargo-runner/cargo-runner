@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import * as https from "node:https";
 import * as crypto from "node:crypto";
+import * as os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as tar from "tar";
@@ -10,6 +11,24 @@ import * as tar from "tar";
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_RELEASE_REPO = "cargo-runner/cargo-runner";
+
+/**
+ * Absolute path to the PATH-lookup helper.
+ *
+ * `where`/`which` are invoked by name otherwise, and on Windows a bare name is
+ * resolved against the current directory first — so a repository shipping
+ * `where.exe` would supply the helper itself.
+ */
+function lookupHelper(): string {
+  if (process.platform !== "win32") {
+    // Left as a bare name deliberately: POSIX PATH resolution does not consult
+    // the current directory, so there is nothing to defend against here, and
+    // `which` is not at a fixed location across distributions.
+    return "which";
+  }
+  const systemRoot = process.env.SystemRoot || "C:\\Windows";
+  return path.join(systemRoot, "System32", "where.exe");
+}
 
 /** `owner/repo`, rejecting `.`/`..` as either segment. Exported for tests. */
 export function isValidRepoSlug(value: string): boolean {
@@ -508,8 +527,15 @@ export class BinaryManager {
   private async findOnPath(): Promise<string | null> {
     try {
       const { stdout } = await execFileAsync(
-        process.platform === "win32" ? "where" : "which",
+        lookupHelper(),
         ["cargo-runner"],
+        // Run from the user's home, never the workspace. Two things search the
+        // current directory before PATH on Windows: libuv's own program
+        // resolution for a bare name, and `where.exe` itself. Without this, a
+        // repository containing `where.exe` — or a `cargo-runner.exe` that
+        // `where` would report first — gets executed by verifyExecutable below,
+        // during activation.
+        { cwd: os.homedir() },
       );
       const first = stdout
         .split(/\r?\n/)
@@ -540,11 +566,13 @@ export class BinaryManager {
     }
     if (process.platform === "darwin") {
       try {
-        await execFileAsync("xattr", [
-          "-d",
-          "com.apple.quarantine",
-          binaryPath,
-        ]);
+        // Absolute path, and not from the workspace directory — same reasoning
+        // as findOnPath.
+        await execFileAsync(
+          "/usr/bin/xattr",
+          ["-d", "com.apple.quarantine", binaryPath],
+          { cwd: os.homedir() },
+        );
       } catch {
         // attribute may not exist — fine
       }

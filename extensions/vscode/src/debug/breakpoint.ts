@@ -102,7 +102,7 @@ export async function tryDebugAtCursor(
 
   const debugLens = lenses.find(
     (lens) =>
-      lens.command?.title?.toLowerCase().includes("debug") &&
+      isDebugCommand(lens.command?.command) &&
       lens.range.start.line >= symbol.range.start.line - 2 &&
       lens.range.start.line <= symbol.range.end.line,
   );
@@ -158,9 +158,7 @@ export async function showDebugInfo(
       "vscode.executeCodeLensProvider",
       document.uri,
     )) || [];
-  const hasDebug = lenses.some((l) =>
-    l.command?.title?.toLowerCase().includes("debug"),
-  );
+  const hasDebug = lenses.some((l) => isDebugCommand(l.command?.command));
   vscode.window.showInformationMessage(
     [
       `Symbol: ${symbol.name} (${vscode.SymbolKind[symbol.kind]})`,
@@ -170,4 +168,22 @@ export async function showDebugInfo(
     ].join("\n"),
     { modal: true },
   );
+}
+
+/**
+ * Known debug CodeLens command ids.
+ *
+ * `executeCodeLensProvider` returns lenses from *every* provider registered for
+ * the document, so selecting one by a fuzzy title substring meant Cmd+R could
+ * invoke an arbitrary command contributed by some other installed extension
+ * whose lens title merely contained "debug". Matching on the command id keeps
+ * the handoff to the providers actually intended.
+ */
+const DEBUG_COMMAND_IDS = new Set([
+  "rust-analyzer.debugSingle",
+  "rust-analyzer.debug",
+]);
+
+export function isDebugCommand(command: string | undefined): boolean {
+  return command !== undefined && DEBUG_COMMAND_IDS.has(command);
 }

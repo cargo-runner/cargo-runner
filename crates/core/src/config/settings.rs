@@ -59,7 +59,7 @@ impl Config {
     }
 
     pub fn load_from_file(path: &Path) -> Result<Self> {
-        let contents = std::fs::read_to_string(path)?;
+        let contents = crate::bounded_io::read_to_string_capped(path)?;
         let mut config: Config =
             serde_json::from_str(&contents).map_err(|e| Error::ConfigParse(e.to_string()))?;
         config.normalize();
