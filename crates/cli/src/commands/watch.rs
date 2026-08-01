@@ -130,21 +130,16 @@ fn watch_resolved_command(selector: &str, cwd: &Path, debounce_ms: u64) -> Resul
         println!("   cwd:   {}", d.display());
     }
 
-    let program = command.program.clone();
-    let args = command.args.clone();
-    let env = command.env.clone();
-    let work_dir = work_dir.clone();
+    // Replay through Command::execute rather than rebuilding the process here.
+    // A second execution path meant the trust check in `execute` did not apply
+    // to `watch`, which re-runs the resolved command on every file change.
+    let mut replay = command.clone();
+    replay.working_dir = Some(work_dir.clone());
+    replay.env.retain(|k, _| !k.starts_with('_'));
 
     run_notify_loop(&watch_dir, debounce_ms, move |_changed| {
         println!("─────────────────────────────────────────");
-        let mut cmd = StdCommand::new(&program);
-        cmd.args(&args).current_dir(&work_dir);
-        for (k, v) in &env {
-            if !k.starts_with('_') {
-                cmd.env(k, v);
-            }
-        }
-        match cmd.status() {
+        match replay.execute() {
             Ok(s) if s.success() => {
                 style::println_human(format!("{} replay succeeded", style::icon("✅")))
             }

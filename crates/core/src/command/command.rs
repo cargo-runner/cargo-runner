@@ -234,7 +234,54 @@ impl Command {
         }
     }
 
+    /// Program this command will actually launch.
+    ///
+    /// The strategy decides whether `program` or a fixed tool name is used, so
+    /// the trust check has to ask rather than read `self.program` directly.
+    pub fn resolved_program(&self) -> &str {
+        match self.strategy {
+            CommandStrategy::Rustc => "rustc",
+            CommandStrategy::Shell => &self.program,
+            CommandStrategy::CargoScript | CommandStrategy::Cargo => "cargo",
+            CommandStrategy::Bazel => "bazel",
+        }
+    }
+
+    /// Fail unless this command is either innocuous or already approved.
+    ///
+    /// This is the last line of defence, not the place users are asked: the
+    /// CLI prompts before getting here. Keeping the check inside `execute`
+    /// means any future call site inherits it instead of quietly bypassing it.
+    fn authorize(&self) -> io::Result<()> {
+        if crate::trust::bypass_requested() {
+            return Ok(());
+        }
+        let program = self.resolved_program();
+        let crate::trust::Verdict::NeedsConsent(reasons) =
+            crate::trust::evaluate(program, &self.env)
+        else {
+            return Ok(());
+        };
+
+        let approval =
+            crate::trust::approval_for(self.working_dir.as_deref(), program, &self.env);
+        if crate::trust::TrustStore::load().contains(&approval) {
+            return Ok(());
+        }
+
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "refusing to run a command this project configured but you have not approved:\n  {}\n\
+                 Approve it with `cargo runner trust` (or re-run with --trust-config), \
+                 or set CARGO_RUNNER_TRUST=1 in trusted automation.",
+                reasons.join("\n  ")
+            ),
+        ))
+    }
+
     pub fn execute(&self) -> io::Result<ExitStatus> {
+        self.authorize()?;
         match self.strategy {
             CommandStrategy::Rustc => {
                 let mut output_name = None;

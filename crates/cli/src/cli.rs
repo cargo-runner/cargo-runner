@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use crate::commands::{
     agent_init_command, bazel_add_command, bazel_sync_command, build_sync_command, clean_command,
-    context_command, editor_install_command, init_command, override_command, run_command,
-    runnables_command, unset_command, watch_command,
+    context_command, editor_install_command, init_command, override_command, runnables_command,
+    unset_command, watch_command,
 };
 use crate::commands::editor_install::{
     EditorAction, EditorInstallOptions, InstallMethod,
@@ -165,6 +165,14 @@ pub enum Commands {
         #[arg(long)]
         no_nextest: bool,
 
+        /// Approve this project's custom command / environment without prompting
+        ///
+        /// Only relevant when `.cargo-runner.json` configures a program other
+        /// than the usual Rust build tools, or sets an environment variable
+        /// that changes what the build executes.
+        #[arg(long)]
+        trust_config: bool,
+
         /// Extra args forwarded into the generated command (place after `--`)
         #[arg(last = true)]
         passthrough: Vec<String>,
@@ -216,6 +224,22 @@ pub enum Commands {
         /// Clean up all generated configuration files
         #[arg(short, long)]
         clean: bool,
+    },
+
+    /// Review or revoke approvals for project-configured commands
+    ///
+    /// A repository's `.cargo-runner.json` can specify a custom `command` or
+    /// environment (e.g. RUSTC_WRAPPER) that makes cargo-runner execute
+    /// something other than an ordinary Rust build. Those need a one-time
+    /// approval per project, recorded in the trust store.
+    Trust {
+        /// List every recorded approval
+        #[arg(long)]
+        list: bool,
+
+        /// Drop the approvals recorded for the current project
+        #[arg(long)]
+        revoke: bool,
     },
 
     /// Create override configuration for a specific file location
@@ -765,6 +789,7 @@ impl Commands {
                 package,
                 nextest,
                 no_nextest,
+                trust_config,
                 passthrough,
             } => {
                 if json && !dry_run {
@@ -784,7 +809,15 @@ impl Commands {
                     nextest,
                     no_nextest,
                 };
-                run_command(&fp, dry_run, json, quiet, &passthrough, flags)
+                crate::commands::run::run_command_with_trust(
+                    &fp,
+                    dry_run,
+                    json,
+                    quiet,
+                    &passthrough,
+                    flags,
+                    trust_config,
+                )
             }
             Commands::Init {
                 cwd,
@@ -804,6 +837,9 @@ impl Commands {
                 skip_sync,
             ),
             Commands::Unset { clean } => unset_command(clean),
+            Commands::Trust { list, revoke } => {
+                crate::commands::trust::trust_command(list, revoke)
+            }
             Commands::Override {
                 filepath,
                 root,

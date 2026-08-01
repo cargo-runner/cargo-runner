@@ -11,6 +11,7 @@ pub mod init;
 pub mod matching;
 pub mod override_cmd;
 pub mod run;
+pub mod trust;
 pub mod unset;
 pub mod watch;
 pub mod workspace;
