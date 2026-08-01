@@ -46,8 +46,10 @@ pub fn workspace_rs_files(roots: &[PathBuf]) -> Vec<PathBuf> {
             continue;
         }
 
+        // Stay within the scanned root; symlinked directories inside a repo
+        // should not pull unrelated trees into workspace discovery.
         for entry in WalkDir::new(root)
-            .follow_links(true)
+            .follow_links(false)
             .into_iter()
             .filter_entry(|e| {
                 if let Some(name) = e.file_name().to_str()

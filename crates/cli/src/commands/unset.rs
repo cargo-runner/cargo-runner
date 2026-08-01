@@ -23,8 +23,12 @@ pub fn unset_command(clean: bool) -> Result<()> {
             println!("🧹 Cleaning .cargo-runner.json / .cargo-runner.env files…");
 
             let mut removed = 0;
+            // Do not follow symlinks: this deletes files, and a symlinked
+            // directory inside the project (e.g. `vendor -> $HOME`) would
+            // otherwise let the walk reach and delete config files well
+            // outside the project root.
             for entry in WalkDir::new(root)
-                .follow_links(true)
+                .follow_links(false)
                 .into_iter()
                 .filter_map(|e| e.ok())
             {

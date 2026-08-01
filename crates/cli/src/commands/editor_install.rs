@@ -506,27 +506,26 @@ fn dirs_home() -> Result<PathBuf> {
     bail!("HOME is not set");
 }
 
+/// Locate this project's own `extensions/nvim` tree, for dev builds only.
+///
+/// Resolved **only** relative to `CARGO_MANIFEST_DIR`, which is fixed at
+/// compile time and therefore cannot be influenced by whatever directory the
+/// user happens to be standing in.
+///
+/// This deliberately does not search upward from the current directory. Doing
+/// so meant that running `cargo runner nvim install` inside any checkout that
+/// happened to contain `extensions/nvim/lua/cargo_runner/init.lua` would
+/// install *that* tree into the user's packpath — by default as a symlink, so
+/// the foreign repo would keep control of code Neovim executes at every
+/// launch. A released binary has no valid manifest dir, so it always falls
+/// back to the assets embedded at build time.
 fn monorepo_plugin_dir() -> Option<PathBuf> {
-    // Walk from cwd upward looking for extensions/nvim/lua/cargo_runner/init.lua
-    let mut cur = env::current_dir().ok()?;
-    for _ in 0..8 {
-        let candidate = cur.join("extensions/nvim");
-        if candidate.join("lua/cargo_runner/init.lua").is_file() {
-            return Some(candidate);
-        }
-        if !cur.pop() {
-            break;
-        }
-    }
-    // Relative to this crate at compile time (dev builds only — may not exist after install)
-    let manifest_adjacent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../extensions/nvim")
         .canonicalize()
-        .ok();
-    if let Some(ref p) = manifest_adjacent {
-        if p.join("lua/cargo_runner/init.lua").is_file() {
-            return Some(p.clone());
-        }
+        .ok()?;
+    if p.join("lua/cargo_runner/init.lua").is_file() {
+        return Some(p);
     }
     None
 }
@@ -568,8 +567,13 @@ fn install(resolved: &ResolvedEditor, opts: &EditorInstallOptions) -> Result<()>
     }
 
     if dest.exists() {
-        // Only remove if ours or empty-ish
-        if dest.join(MARKER_NAME).is_file() || is_cargo_runner_pack(&dest) {
+        // Require our own marker file before recursively deleting anything.
+        //
+        // This used to also accept `is_cargo_runner_pack()`, which is true for
+        // any directory merely containing `lua/cargo_runner/init.lua` — so
+        // pointing `--pack-dir` at a config directory that had the plugin
+        // installed by hand (e.g. ~/.config/nvim) would delete the whole thing.
+        if dest.join(MARKER_NAME).is_file() {
             fs::remove_dir_all(&dest)
                 .with_context(|| format!("remove existing {}", dest.display()))?;
         } else {
