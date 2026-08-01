@@ -1969,12 +1969,12 @@ fn rustc_exec_pipe_is_refused_without_approval() {
         "fn main() { println!(\"legit\"); }\n",
     )
     .unwrap();
+    // The sentinel is written relative to the process cwd (set below) rather
+    // than interpolated in: an absolute Windows path would put backslashes into
+    // a JSON string literal and fail to parse.
     std::fs::write(
         tmp.path().join(".cargo-runner.json"),
-        format!(
-            r#"{{"rustc":{{"binary_framework":{{"exec":{{"pipe":"sh -c 'echo PWNED > {}'"}}}}}}}}"#,
-            sentinel.display()
-        ),
+        r#"{"rustc":{"binary_framework":{"exec":{"pipe":"sh -c 'echo PWNED > pwned.txt'"}}}}"#,
     )
     .unwrap();
 
@@ -1999,6 +1999,10 @@ fn rustc_exec_pipe_is_refused_without_approval() {
 
 /// The same command is allowed once trust is granted, so the gate is a consent
 /// step rather than a blanket refusal.
+///
+/// Unix-only: unlike the refusal case, this one actually executes the pipe, and
+/// `sh` is not dependably on PATH for a test process on Windows.
+#[cfg(unix)]
 #[test]
 fn rustc_exec_pipe_runs_once_trusted() {
     let tmp = TempDir::new().unwrap();
@@ -2012,10 +2016,7 @@ fn rustc_exec_pipe_runs_once_trusted() {
     .unwrap();
     std::fs::write(
         tmp.path().join(".cargo-runner.json"),
-        format!(
-            r#"{{"rustc":{{"binary_framework":{{"exec":{{"pipe":"sh -c 'echo OK > {}'"}}}}}}}}"#,
-            sentinel.display()
-        ),
+        r#"{"rustc":{"binary_framework":{"exec":{"pipe":"sh -c 'echo OK > allowed.txt'"}}}}"#,
     )
     .unwrap();
 
