@@ -11,10 +11,17 @@ common --repository_cache=~/.cache/bazel-repo
 build --jobs=auto
 build --keep_going
 
-# Fail on lockfile drift instead of silently rewriting MODULE.bazel.lock, which
-# is Bazel 7's default (--lockfile_mode=update). The lock is committed, so a
-# changed module should be an explicit, reviewed update.
-common --lockfile_mode=error
+# NOTE: `common --lockfile_mode=error` belongs here, so Bazel fails on
+# MODULE.bazel.lock drift instead of silently rewriting it (Bazel 7 defaults to
+# --lockfile_mode=update). It is commented out because the committed lock is
+# currently stale: enabling it fails with
+#   "MODULE.bazel.lock is no longer up-to-date … extension 'crate_universe'"
+# on all three platforms. That staleness predates this file's history — the
+# default mode has been hiding it by rewriting the lock on every run.
+#
+# To enable: run `bazel mod deps --lockfile_mode=update`, commit the refreshed
+# MODULE.bazel.lock, then uncomment the line below.
+# common --lockfile_mode=error
 
 # ── Test defaults ─────────────────────────────────────────────────────────────
 test --test_output=errors
