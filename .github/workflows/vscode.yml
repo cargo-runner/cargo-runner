@@ -15,6 +15,9 @@ on:
 # would never fire here: release.yml creates the release with GITHUB_TOKEN, and
 # GITHUB_TOKEN-triggered events cannot start new workflow runs.
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,9 +25,9 @@ jobs:
       run:
         working-directory: extensions/vscode
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: npm
@@ -33,14 +36,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `tar` is the only dependency that ships in the VSIX, so a known
+      # advisory here reaches users rather than just the build.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       - name: Typecheck & bundle
         run: npm run build
+
+      # `npm run build` already ran tsc, so this only executes the compiled
+      # tests. Until now no TypeScript ran in CI at all — including the
+      # ProcessExecution path that resolves every run command.
+      - name: Test
+        run: node --test $(find out -name '*.test.js')
 
       - name: Package VSIX
         run: npx vsce package --no-dependencies
 
       - name: Upload VSIX
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cargo-runner-vscode
           path: extensions/vscode/*.vsix

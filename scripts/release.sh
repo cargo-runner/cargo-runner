@@ -96,6 +96,12 @@ case "$MODE" in
     REASON="Breaking changes (major)"
     ;;
   [0-9]*.[0-9]*.[0-9]*)
+    # The glob above is loose ("digit, anything, dot, ..."), so re-check with a
+    # real regex: $MODE reaches sed programs and Python source below.
+    if [[ ! "$MODE" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+      echo "Invalid version: $MODE (expected X.Y.Z)" >&2
+      exit 1
+    fi
     KIND=explicit
     TARGET="$MODE"
     REASON="Explicit version"
@@ -149,11 +155,11 @@ else
   # VS Code extension (kept in lockstep for Download CLI tag)
   if [[ -f extensions/vscode/package.json ]]; then
     # only replace top-level "version" field (first occurrence after name/description block)
-    python3 - <<PY
-import json, pathlib
+    CR_TARGET="$TARGET" python3 - <<'PY'
+import json, os, pathlib
 p = pathlib.Path("extensions/vscode/package.json")
 data = json.loads(p.read_text())
-data["version"] = "$TARGET"
+data["version"] = os.environ["CR_TARGET"]
 p.write_text(json.dumps(data, indent=2) + "\n")
 PY
   fi
@@ -173,18 +179,19 @@ PY
 EOF
 )
     # Insert after the first "---" following the header, or after line 11
-    python3 - <<PY
+    CR_STUB="$stub" CR_TARGET="$TARGET" python3 - <<'PY'
+import os
 from pathlib import Path
 p = Path("CHANGELOG.md")
 text = p.read_text()
-stub = """$stub"""
+stub = os.environ["CR_STUB"]
 marker = "---\n\n## ["
 if marker in text:
     text = text.replace(marker, "---\n\n" + stub + "## [", 1)
 else:
     text = stub + "\n" + text
 p.write_text(text)
-print("CHANGELOG.md: added stub for $TARGET")
+print("CHANGELOG.md: added stub for " + os.environ["CR_TARGET"])
 PY
   fi
 
@@ -221,14 +228,31 @@ fi
 # crates.io
 if [[ "$NO_CRATES" -eq 0 ]]; then
   echo "→ Publishing crates.io (core then cli)"
-  cargo publish -p cargo-runner-core --allow-dirty 2>&1 || {
-    echo "warn: cargo-runner-core publish failed (already published?)" >&2
+  # Only an "already published" collision is tolerable here. Any other failure
+  # used to be swallowed, letting the script exit 0 with a tag, a GitHub release
+  # and a Marketplace publish out while crates.io stayed a version behind —
+  # exactly the desync the version-lockstep design assumes cannot happen.
+  publish_crate() {
+    local crate="$1" out rc
+    # No --allow-dirty: it disables cargo's "working tree differs from the
+    # commit" guard, which is what makes the published tarball provably the
+    # tagged tree. The bump is committed before this runs.
+    out="$(cargo publish -p "$crate" 2>&1)"
+    rc=$?
+    echo "$out"
+    if [[ $rc -ne 0 ]]; then
+      if grep -qi "already exists\|already uploaded" <<<"$out"; then
+        echo "note: $crate $TARGET is already on crates.io — continuing" >&2
+      else
+        echo "error: publishing $crate failed" >&2
+        return "$rc"
+      fi
+    fi
   }
+  publish_crate cargo-runner-core
   echo "   waiting for index..."
   sleep 20
-  cargo publish -p cargo-runner-cli --allow-dirty 2>&1 || {
-    echo "warn: cargo-runner-cli publish failed (already published?)" >&2
-  }
+  publish_crate cargo-runner-cli
 else
   echo "→ Skipping crates.io"
 fi

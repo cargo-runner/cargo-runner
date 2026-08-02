@@ -31,6 +31,7 @@ pub fn watch_command(
     run_mode: bool,
     test_mode: bool,
     debounce_ms: u64,
+    trust_config: bool,
 ) -> Result<()> {
     let cwd = std::env::current_dir().context("Failed to get current directory")?;
 
@@ -41,7 +42,7 @@ pub fn watch_command(
         let looks_like_rust =
             p.extension().is_some_and(|e| e == "rs") || line.is_some() || fp.contains("::");
         if looks_like_rust {
-            return watch_resolved_command(fp, &cwd, debounce_ms);
+            return watch_resolved_command(fp, &cwd, debounce_ms, trust_config);
         }
     }
 
@@ -95,7 +96,12 @@ pub fn watch_command(
 }
 
 /// Resolve once like `run`, then re-execute that command on each .rs change.
-fn watch_resolved_command(selector: &str, cwd: &Path, debounce_ms: u64) -> Result<()> {
+fn watch_resolved_command(
+    selector: &str,
+    cwd: &Path,
+    debounce_ms: u64,
+    trust_config: bool,
+) -> Result<()> {
     let command = resolve_command_for_selector(selector, RunCargoFlags::default(), &[])?;
     let shell = command.to_shell_command();
     let work_dir = command
@@ -130,21 +136,22 @@ fn watch_resolved_command(selector: &str, cwd: &Path, debounce_ms: u64) -> Resul
         println!("   cwd:   {}", d.display());
     }
 
-    let program = command.program.clone();
-    let args = command.args.clone();
-    let env = command.env.clone();
-    let work_dir = work_dir.clone();
+    // Replay through Command::execute rather than rebuilding the process here.
+    // A second execution path meant the trust check in `execute` did not apply
+    // to `watch`, which re-runs the resolved command on every file change.
+    let mut replay = command.clone();
+    replay.working_dir = Some(work_dir.clone());
+    replay.env.retain(|k, _| !k.starts_with('_'));
+
+    // Ask once, before the loop. `execute` refuses anything unapproved, so
+    // without this the watch would fail on every single file change with no way
+    // to answer. The working_dir is set above first, so the approval recorded
+    // here matches the one `execute` will look for.
+    crate::commands::trust::ensure_trusted(&replay, trust_config)?;
 
     run_notify_loop(&watch_dir, debounce_ms, move |_changed| {
         println!("─────────────────────────────────────────");
-        let mut cmd = StdCommand::new(&program);
-        cmd.args(&args).current_dir(&work_dir);
-        for (k, v) in &env {
-            if !k.starts_with('_') {
-                cmd.env(k, v);
-            }
-        }
-        match cmd.status() {
+        match replay.execute() {
             Ok(s) if s.success() => {
                 style::println_human(format!("{} replay succeeded", style::icon("✅")))
             }

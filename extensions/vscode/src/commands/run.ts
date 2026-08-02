@@ -5,7 +5,8 @@ import type { CliClient } from "../cli/client";
 import { tryDebugAtCursor } from "../debug/breakpoint";
 import { executeAsTask, isLongRunning } from "../providers/taskProvider";
 
-let terminal: vscode.Terminal | undefined;
+/** Live run terminals; exited ones are disposed on the next run. */
+const terminals: vscode.Terminal[] = [];
 
 export async function runAtCursor(
   binaryManager: BinaryManager,
@@ -130,17 +131,45 @@ export async function debugFileArg(
   await runFileArg(binaryManager, client, output, fileArg);
 }
 
+/**
+ * Fallback run path, used when the task runner is disabled or fails.
+ *
+ * The terminal is created with `shellPath`/`shellArgs`, so VS Code execs the
+ * binary directly with an argv array and no shell is involved. The previous
+ * approach — building a command line and calling `sendText` — required quoting
+ * argv entries that carry workspace-controlled data (file paths, resolved
+ * target names), and quoting for an unknown interactive shell is not something
+ * that can be done reliably: `process.platform` does not identify the terminal's
+ * configured profile, so the same string is safe in one shell and executable in
+ * another.
+ *
+ * Each run gets its own terminal, since a terminal bound to a process cannot
+ * accept a second command.
+ */
 async function runInTerminal(
   binary: string,
   args: string[],
   cwd: string,
   show: boolean,
 ): Promise<void> {
-  if (!terminal || terminal.exitStatus !== undefined) {
-    terminal = vscode.window.createTerminal({ name: "Cargo Runner", cwd });
+  // Reap every terminal whose process already exited, but never kill a run the
+  // user may still be watching. Tracking the whole set matters because a
+  // terminal bound to a process cannot be reused, so each run makes a new one —
+  // holding only the most recent handle would strand the earlier ones.
+  for (let i = terminals.length - 1; i >= 0; i--) {
+    if (terminals[i].exitStatus !== undefined) {
+      terminals[i].dispose();
+      terminals.splice(i, 1);
+    }
   }
-  const quoted = args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ");
-  terminal.sendText(`${binary} ${quoted}`, true);
+
+  const terminal = vscode.window.createTerminal({
+    name: "Cargo Runner",
+    cwd,
+    shellPath: binary,
+    shellArgs: args,
+  });
+  terminals.push(terminal);
   if (show) {
     terminal.show();
   }

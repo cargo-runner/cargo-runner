@@ -11,3 +11,18 @@ images/icon-source.html
 images/icon-512.png
 images/icon-128.png
 # keep images/icon.png (extension marketplace icon)
+
+# compiled unit tests — never ship
+**/*.test.js
+
+# npm run build runs tsc *and* esbuild, so out/ holds an unbundled copy of the
+# source tree next to the out/extension.js that `main` actually points at.
+# Ship only the bundle.
+package-lock.json
+out/binary/**
+out/cli/**
+out/commands/**
+out/debug/**
+out/providers/**
+out/util/**
+out/views/**

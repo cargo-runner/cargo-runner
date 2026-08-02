@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
 import * as path from "node:path";
+import type { BinaryManager } from "../binary/manager";
+import { isLongRunning } from "../util/commands";
+
+export { isLongRunning };
 
 export interface CargoRunnerTaskDefinition extends vscode.TaskDefinition {
   type: "cargo-runner";
@@ -7,32 +11,24 @@ export interface CargoRunnerTaskDefinition extends vscode.TaskDefinition {
   cwd?: string;
 }
 
-const LONG_RUNNING = [
-  "serve",
-  "watch",
-  "dev",
-  "dx serve",
-  "leptos watch",
-  "tauri dev",
-  "trunk serve",
-];
-
-export function isLongRunning(shell: string): boolean {
-  const lower = shell.toLowerCase();
-  return LONG_RUNNING.some((p) => lower.includes(p));
-}
 
 export function registerTaskProvider(
   _context: vscode.ExtensionContext,
+  binaryManager: Pick<BinaryManager, "resolveExisting">,
 ): vscode.Disposable {
   return vscode.tasks.registerTaskProvider("cargo-runner", {
     provideTasks: () => [],
-    resolveTask: (task: vscode.Task) => {
+    // `resolveTask` accepts a Thenable, so the binary can be resolved here
+    // rather than assuming a bare name on PATH. `resolveExisting` is used
+    // instead of `ensureBinary` because the latter can raise a download prompt,
+    // which has no place in task resolution.
+    resolveTask: async (task: vscode.Task) => {
       const def = task.definition as CargoRunnerTaskDefinition;
+      const binary = (await binaryManager.resolveExisting()) ?? "cargo-runner";
       return buildTask(def.args, {
         cwd: def.cwd,
         label: task.name,
-        binary: "cargo-runner",
+        binary,
       });
     },
   });
@@ -95,10 +91,15 @@ function buildTask(
     cwd: options.cwd,
   };
 
-  const shellArgs = args.map((a) =>
-    a.includes(" ") && !a.startsWith('"') ? `"${a}"` : a,
-  );
-  const execution = new vscode.ShellExecution(options.binary, shellArgs, {
+  // ProcessExecution runs the binary directly with an argv array — no shell, so
+  // there is nothing to quote and nothing to escape.
+  //
+  // Neither hand-rolled quoting nor ShellExecution+ShellQuoting.Strong is safe
+  // here: VS Code's "strong" quoting is plain concatenation (`'` + value + `'`)
+  // and does not escape an embedded quote, so a file named `x';id;'.rs` breaks
+  // out and the shell executes `id`. Nothing on this path needs shell features,
+  // so the shell is removed entirely rather than quoted around.
+  const execution = new vscode.ProcessExecution(options.binary, args, {
     cwd: options.cwd,
     env: options.env,
   });

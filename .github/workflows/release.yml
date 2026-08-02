@@ -5,6 +5,10 @@ on:
     tags:
       - 'cargo-runner-cli-v*' # Trigger on tags like cargo-runner-cli-v0.1.0
 
+# Least privilege by default; the jobs that publish opt back in explicitly.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   CRATE_NAME: cargo-runner-cli
@@ -35,22 +39,22 @@ jobs:
             archive: zip
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Set up Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       with:
         targets: ${{ matrix.target }}
 
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       with:
         workspaces: "."
 
     # Install cross if building for a different architecture on linux
     - name: Install cross
       if: matrix.use-cross
-      uses: taiki-e/install-action@cross
+      uses: taiki-e/install-action@3f86fa0074f5eccef2cb05a45ee47ba5a81406e3 # cross
 
     - name: Build Binary
       shell: bash
@@ -75,13 +79,56 @@ jobs:
         fi
         cp README.md LICENSE "${ARCHIVE_NAME}/"
         tar -czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+
+        # Digest the archive on the machine that built it. The VS Code extension
+        # downloads this asset, marks it executable and runs it, so it needs
+        # something to verify against. Output is the standard
+        # "<hash>  <basename>" format consumed by `sha256sum -c`.
+        # macOS runners have `shasum`, not `sha256sum`.
+        if command -v sha256sum >/dev/null 2>&1; then
+          sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+        else
+          shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+        fi
+        cat "${ARCHIVE_NAME}.tar.gz.sha256"
+
         echo "ASSET_NAME=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
 
+    # `cargo binstall` is the documented primary install path and verifies only
+    # via minisign, so an unsigned release installs unverified. Skipped when the
+    # secret is absent, so releases keep working until the keypair exists —
+    # see docs/release.md for generating it.
+    - name: Sign archive (minisign)
+      if: env.MINISIGN_SECRET_KEY != ''
+      shell: bash
+      env:
+        MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+      run: |
+        set -euo pipefail
+        curl -sSfL -o /tmp/minisign.tar.gz \
+          https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux.tar.gz \
+          || { echo "::warning::could not fetch minisign; skipping signing"; exit 0; }
+        tar -xzf /tmp/minisign.tar.gz -C /tmp
+        MINISIGN=$(find /tmp -name minisign -type f -perm -u+x | head -1)
+
+        printf '%s' "$MINISIGN_SECRET_KEY" > /tmp/minisign.key
+        # -W would drop the password prompt; the key is password-protected, so
+        # feed it on stdin instead.
+        printf '%s' "$MINISIGN_PASSWORD" | "$MINISIGN" \
+          -S -s /tmp/minisign.key -m "${ASSET_NAME}"
+        shred -u /tmp/minisign.key 2>/dev/null || rm -f /tmp/minisign.key
+        ls -l "${ASSET_NAME}.minisig"
+
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: ${{ matrix.target }}
-        path: ${{ env.ASSET_NAME }}
+        path: |
+          ${{ env.ASSET_NAME }}
+          ${{ env.ASSET_NAME }}.sha256
+          ${{ env.ASSET_NAME }}.minisig
+        if-no-files-found: warn
 
   create-release:
     name: Create GitHub Release
@@ -90,17 +137,30 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Download Artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
       with:
         path: artifacts
 
+    - name: Build SHA256SUMS
+      run: |
+        # Merge the per-target digests into one manifest. Each line already
+        # refers to the archive by basename, so the file works as-is with
+        # `sha256sum -c SHA256SUMS` next to the downloaded assets.
+        find artifacts -name '*.tar.gz.sha256' -exec cat {} + | sort -k2 > SHA256SUMS
+        echo "Published digests:"
+        cat SHA256SUMS
+        test -s SHA256SUMS  # fail the release rather than publish an empty manifest
+
     - name: Create Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
-        files: artifacts/**/*
+        files: |
+          artifacts/**/*.tar.gz
+          artifacts/**/*.minisig
+          SHA256SUMS
         generate_release_notes: true
 
   publish-extension:
@@ -113,9 +173,9 @@ jobs:
       run:
         working-directory: extensions/vscode
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:
         node-version: "20"
         cache: npm
@@ -148,7 +208,9 @@ jobs:
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
         if npx vsce show masterustacean.cargo-runner --json > /tmp/vsce.json 2>/dev/null; then
-          HAS=$(node -p "JSON.parse(require('fs').readFileSync('/tmp/vsce.json','utf8')).versions.some(v => v.version === '$VERSION')")
+          # VERSION goes through the environment rather than being spliced into
+          # the JS source, where a quote would break out of the string literal.
+          HAS=$(VERSION="$VERSION" node -p "JSON.parse(require('fs').readFileSync('/tmp/vsce.json','utf8')).versions.some(v => v.version === process.env.VERSION)")
         else
           HAS=false   # extension not on the Marketplace at all yet
         fi
@@ -170,11 +232,15 @@ jobs:
       if: steps.pub.outputs.ovsx_has == 'false'
       env:
         OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        VERSION: ${{ steps.pub.outputs.version }}
       run: |
-        npx --yes ovsx create-namespace masterustacean || true
+        # `ovsx` is a locked devDependency, so `npx` resolves the version in
+        # package-lock.json. `npx --yes ovsx` would fetch ovsx@latest from the
+        # registry at publish time, inside a job holding OVSX_PAT.
+        npx ovsx create-namespace masterustacean || true
 
         set +e
-        out=$(npx --yes ovsx publish ./*.vsix 2>&1)
+        out=$(npx ovsx publish ./*.vsix 2>&1)
         rc=$?
         set -e
         echo "$out"
@@ -185,10 +251,10 @@ jobs:
         # version that did upload. Treat that as success rather than failing the job.
         if [ $rc -ne 0 ]; then
           echo "$out" | grep -q "isn't active" || exit $rc
-          echo "::warning::${{ steps.pub.outputs.version }} uploaded to Open VSX but not yet active — still processing, no action needed"
+          echo "::warning::${VERSION} uploaded to Open VSX but not yet active — still processing, no action needed"
         fi
 
     - name: Attach VSIX to release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
         files: extensions/vscode/*.vsix

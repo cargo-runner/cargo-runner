@@ -40,6 +40,21 @@ local function candidate_binaries(name)
   }
 end
 
+---True when `resolved` sits inside the current working directory.
+---
+---Exposed on M (rather than a local) so it can be stubbed in tests.
+---@param resolved string
+---@return boolean
+function M._resolves_into_cwd(resolved)
+  local cwd = vim.fn.getcwd()
+  if not cwd or cwd == "" then
+    return false
+  end
+  local abs = vim.fn.fnamemodify(resolved, ":p")
+  local root = vim.fn.fnamemodify(cwd, ":p")
+  return abs:sub(1, #root) == root
+end
+
 ---@param name string
 ---@return string|nil
 local function find_executable(name)
@@ -51,7 +66,11 @@ local function find_executable(name)
     return nil
   end
   local exepath = vim.fn.exepath(name)
-  if exepath ~= "" then
+  -- `exepath` consults the current directory before PATH on Windows, so a
+  -- repository shipping cargo-runner.exe at its root would be picked up and
+  -- executed. Reject anything that resolves inside the cwd; the explicit
+  -- candidates below still cover normal installs.
+  if exepath ~= "" and not M._resolves_into_cwd(exepath) then
     return exepath
   end
   for _, cand in ipairs(candidate_binaries(name)) do
@@ -293,29 +312,8 @@ function M.cursor_file_arg()
   return path .. ":" .. tostring(line), nil
 end
 
-local LONG_RUNNING_PATTERNS = {
-  "serve",
-  "watch",
-  " dev",
-  "dev ",
-  "dx serve",
-  "leptos watch",
-  "tauri dev",
-  "trunk serve",
-}
 
 ---@param shell string|nil
-function M.is_long_running(shell)
-  if not shell or shell == "" then
-    return false
-  end
-  local lower = shell:lower()
-  for _, p in ipairs(LONG_RUNNING_PATTERNS) do
-    if lower:find(p, 1, true) then
-      return true
-    end
-  end
-  return false
-end
+M.is_long_running = require("cargo_runner.util").is_long_running
 
 return M

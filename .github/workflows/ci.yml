@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   # Set this secret in your repo: Settings → Secrets → BUILDBUDDY_API_KEY
@@ -22,11 +25,31 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+    # A BuildBuddy API key was once committed in .bazelrc, where `common
+    # --remote_header=` sent it on every Bazel invocation. .gitignore already
+    # reserves user.bazelrc for credentials; this makes the shared file's rule
+    # enforced rather than advisory.
+    - name: No credentials in tracked bazelrc
+      shell: bash
+      run: |
+        # Only tracked bazelrc files, ignoring comments (the file documents the
+        # flag on purpose) and values that are shell/env references.
+        hits=$(git ls-files -z '*.bazelrc' '.bazelrc' \
+          | xargs -0 -r grep -InE '^[^#]*remote_header=[^[:space:]]*api-key=[^$[:space:]]' \
+          || true)
+        if [ -n "$hits" ]; then
+          echo "$hits"
+          echo "::error::A literal API key is present in a tracked bazelrc." \
+               "Move it to user.bazelrc (git-ignored) or a CI secret."
+          exit 1
+        fi
+        echo "no literal credentials in tracked bazelrc"
 
     # Pin exact Bazel version from .bazelversion
     - name: Set up Bazel
-      uses: bazel-contrib/setup-bazel@0.9.1
+      uses: bazel-contrib/setup-bazel@f3f50ea6791b9b0f4c4eeabba4507422426462f5 # 0.9.1
       with:
         bazelisk-cache: true
         disk-cache: ${{ github.workflow }}
@@ -60,7 +83,7 @@ jobs:
         if [ -n "$BUILDBUDDY_API_KEY" ]; then
           EXTRA_FLAGS="--config=ci --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
         fi
-        if [ "${{ runner.os }}" == "Windows" ]; then
+        if [ "$RUNNER_OS" == "Windows" ]; then
           # MSVC link.exe fails with LNK1181 because rules_rust doc tests exceed MAX_PATH in bazel runfiles
           TARGETS=$(bazel query 'tests(//...) except filter("doc_tests", tests(//...))' | tr -d '\r')
           bazel test $EXTRA_FLAGS $TARGETS
@@ -68,3 +91,44 @@ jobs:
           bazel test $EXTRA_FLAGS //...
         fi
       shell: bash
+
+  # ── Neovim plugin: pure-Lua unit tests (no nvim required) ─────────────────
+  lua:
+    name: Lua unit tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+    - name: Install Lua
+      run: sudo apt-get update && sudo apt-get install -y lua5.4
+
+    - name: Syntax-check every module
+      working-directory: extensions/nvim
+      run: |
+        set -e
+        find lua -name '*.lua' -print0 | xargs -0 -n1 luac5.4 -p
+        echo "all modules parse"
+
+    - name: Unit tests
+      working-directory: extensions/nvim
+      run: lua5.4 tests/util_spec.lua
+
+  # ── Dependency advisories ────────────────────────────────────────────────
+  # Dependabot proposes bumps but does not block a merge; this does. The npm
+  # side is covered by `npm audit` in vscode.yml.
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+    - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+    - name: Cache cargo-deny
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+    - name: Install cargo-deny
+      run: cargo install cargo-deny --locked
+
+    - name: Check advisories, licenses, sources and bans
+      run: cargo deny check

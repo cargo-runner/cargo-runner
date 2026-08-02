@@ -11,6 +11,18 @@ common --repository_cache=~/.cache/bazel-repo
 build --jobs=auto
 build --keep_going
 
+# NOTE: `common --lockfile_mode=error` belongs here, so Bazel fails on
+# MODULE.bazel.lock drift instead of silently rewriting it (Bazel 7 defaults to
+# --lockfile_mode=update). It is commented out because the committed lock is
+# currently stale: enabling it fails with
+#   "MODULE.bazel.lock is no longer up-to-date … extension 'crate_universe'"
+# on all three platforms. That staleness predates this file's history — the
+# default mode has been hiding it by rewriting the lock on every run.
+#
+# To enable: run `bazel mod deps --lockfile_mode=update`, commit the refreshed
+# MODULE.bazel.lock, then uncomment the line below.
+# common --lockfile_mode=error
+
 # ── Test defaults ─────────────────────────────────────────────────────────────
 test --test_output=errors
 test --keep_going
@@ -24,9 +36,17 @@ build --@rules_rust//:extra_rustc_flags=-Dwarnings
 
 # ── Buildbuddy Remote Cache + BES (CI) ────────────────────────────────────────
 build:remote --remote_upload_local_results=true
-# Enable remote config in CI (set by ci-bazel.yml)
+# Enable remote config in CI (set by ci.yml)
 build:ci --config=remote
 
-build --bes_results_url=https://codeitlikemiley.buildbuddy.io/invocation/
-build --bes_backend=grpcs://codeitlikemiley.buildbuddy.io
-common --remote_header=x-buildbuddy-api-key=DeAHtNLfxLAHB1vuenmU
+# BES upload is CI-only: scoped to :ci so local builds don't report to a third
+# party by default. CI supplies the credential out-of-band via
+#   --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}
+# from secrets (see .github/workflows/ci.yml).
+build:ci --bes_results_url=https://codeitlikemiley.buildbuddy.io/invocation/
+build:ci --bes_backend=grpcs://codeitlikemiley.buildbuddy.io
+
+# NEVER put an API key in this file — it is committed and public.
+# For local BES uploads, put the header in user.bazelrc (git-ignored):
+#   common --remote_header=x-buildbuddy-api-key=YOUR_KEY
+try-import %workspace%/user.bazelrc

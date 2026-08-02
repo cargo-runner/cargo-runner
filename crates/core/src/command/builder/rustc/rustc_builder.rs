@@ -274,15 +274,24 @@ impl RustcCommandBuilder {
         };
 
         // Already wrapped
-        if command.program == "rustup" {
+        if command.compiler_prefix.is_some() {
             return;
         }
 
-        let mut new_args = vec!["run".to_string(), channel, command.program.clone()];
-        new_args.extend(command.args.iter().cloned());
-        command.strategy = crate::command::CommandStrategy::Shell;
-        command.program = "rustup".to_string();
-        command.args = new_args;
+        // The channel comes from repository config and becomes an argument to a
+        // spawned process, so accept only toolchain-shaped names — no paths, no
+        // separators, nothing that could be read as another flag.
+        if !is_toolchain_name(&channel) {
+            tracing::warn!("ignoring malformed rustc channel {channel:?}");
+            return;
+        }
+
+        // Record the wrapper instead of rewriting the command into a Shell one.
+        // The previous rewrite set strategy = Shell, which `RustcRunner::
+        // validate_command` rejects outright ("Expected Rustc command type"), and
+        // which would in any case have dropped exec_args / test_filter /
+        // test_binary_args / pipe_command and never run the compiled binary.
+        command.compiler_prefix = Some(vec!["rustup".to_string(), "run".to_string(), channel]);
     }
 
     fn get_test_framework(&self, config: &Config) -> RustcFramework {
@@ -743,5 +752,57 @@ impl RustcCommandBuilder {
         };
         tracing::debug!("Created identity: {:?}", identity);
         identity
+    }
+}
+
+/// A rustup toolchain name: `nightly`, `1.79.0`, `nightly-2024-01-01`,
+/// `stable-x86_64-unknown-linux-gnu`.
+///
+/// Deliberately strict — this value reaches a process argument, and it is read
+/// from `.cargo-runner.json`, which belongs to the repository rather than the
+/// user.
+fn is_toolchain_name(channel: &str) -> bool {
+    !channel.is_empty()
+        && !channel.starts_with('-')
+        && channel
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+'))
+}
+
+#[cfg(test)]
+mod channel_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_real_toolchain_names() {
+        for name in [
+            "nightly",
+            "stable",
+            "beta",
+            "1.79.0",
+            "nightly-2024-01-01",
+            "stable-x86_64-unknown-linux-gnu",
+        ] {
+            assert!(is_toolchain_name(name), "{name} should be accepted");
+        }
+    }
+
+    #[test]
+    fn rejects_paths_flags_and_separators() {
+        for name in [
+            "",
+            "../evil",
+            "./evil",
+            "/bin/sh",
+            "nightly;id",
+            "nightly rustc",
+            "--version",
+            "-C",
+            "a/b",
+            "a\\b",
+            "$(id)",
+        ] {
+            assert!(!is_toolchain_name(name), "{name:?} should be rejected");
+        }
     }
 }

@@ -42,6 +42,12 @@
     "workspaceContains:**/Cargo.toml",
     "workspaceContains:**/MODULE.bazel"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Cargo Runner resolves and executes build/test commands from the workspace, including repository-local .cargo-runner.json, so it requires a trusted workspace."
+    }
+  },
   "main": "./out/extension.js",
   "extensionDependencies": [
     "rust-lang.rust-analyzer",
@@ -308,48 +314,51 @@
         "cargoRunner.path": {
           "type": "string",
           "default": "",
-          "description": "Custom path to the cargo-runner binary. Leave empty for auto-download, or set to 'cargo-runner' to use PATH."
+          "scope": "machine",
+          "description": "Custom path to the cargo-runner binary. Leave empty for auto-download, or set to 'cargo-runner' to use PATH. Machine-scoped: a workspace cannot point this at an arbitrary executable."
         },
         "cargoRunner.useTaskRunner": {
           "type": "boolean",
           "default": true,
-          "description": "Use VS Code tasks for better concurrency (long-running dx serve / cargo leptos watch)."
+          "scope": "machine-overridable",
+          "description": "Use VS Code tasks for better concurrency (long-running dx serve / cargo leptos watch). Machine-scoped: this selects which execution path runs your code, so a workspace cannot switch it."
         },
         "cargoRunner.enableCodeLens": {
           "type": "boolean",
           "default": true,
-          "description": "Show CodeLens Run / Debug / Override actions above runnables."
+          "description": "Show CodeLens Run / Debug / Override actions above runnables.",
+          "scope": "machine-overridable"
         },
         "cargoRunner.enableBreakpointDetection": {
           "type": "boolean",
           "default": true,
-          "description": "When breakpoints exist in the current symbol, Cmd+R starts a debug session."
+          "scope": "machine-overridable",
+          "description": "When breakpoints exist in the current symbol, Cmd+R starts a debug session. Machine-scoped: this selects run vs. debug behavior, so a workspace cannot switch it."
         },
         "cargoRunner.showOutput": {
           "type": "boolean",
           "default": true,
-          "description": "Reveal the terminal/output when running a command."
-        },
-        "cargoRunner.cliMinVersion": {
-          "type": "string",
-          "default": "1.0.0",
-          "description": "Minimum cargo-runner CLI version required by this extension."
+          "scope": "machine-overridable",
+          "description": "Reveal the terminal/output when running a command. Machine-scoped: a workspace cannot hide what it caused to run."
         },
         "cargoRunner.checkCliUpdates": {
           "type": "boolean",
           "default": true,
-          "description": "On activate, check GitHub for a newer cargo-runner CLI and prompt to download it (even if the extension itself was not updated)."
+          "description": "On activate, check GitHub for a newer cargo-runner CLI and prompt to download it (even if the extension itself was not updated).",
+          "scope": "machine-overridable"
         },
         "cargoRunner.cliUpdateCheckIntervalHours": {
           "type": "number",
           "default": 24,
           "minimum": 1,
-          "description": "Minimum hours between CLI update prompts for the same session period."
+          "description": "Minimum hours between CLI update prompts for the same session period.",
+          "scope": "machine-overridable"
         },
         "cargoRunner.releaseRepo": {
           "type": "string",
           "default": "cargo-runner/cargo-runner",
-          "description": "GitHub repo used to download prebuilt CLI binaries."
+          "scope": "machine",
+          "description": "GitHub repo used to download prebuilt CLI binaries. Machine-scoped: a workspace cannot redirect downloads to another repo."
         }
       }
     },
@@ -379,17 +388,18 @@
     "package-ext": "node esbuild.js --production",
     "package": "vsce package --no-dependencies",
     "build": "npm run compile && npm run package-ext",
-    "lint": "tsc -p ./ --noEmit"
+    "lint": "tsc -p ./ --noEmit",
+    "test": "npm run compile && node --test $(find out -name '*.test.js')"
   },
   "dependencies": {
     "tar": "^7.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
-    "@types/tar": "^6.1.13",
     "@types/vscode": "1.89.0",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.25.0",
+    "ovsx": "^1.0.2",
     "typescript": "^5.8.2"
   }
 }

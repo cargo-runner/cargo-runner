@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # Rust crates (workspace root drives crates/core and crates/cli).
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # The VS Code extension. `tar` is its only runtime dependency and ships to
+  # users, so this one matters beyond the build.
+  - package-ecosystem: npm
+    directory: "/extensions/vscode"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Workflow actions. Pinning to a SHA stops a moving tag from changing what
+  # runs; this keeps the pins current.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

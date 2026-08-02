@@ -59,6 +59,10 @@ pub fn agent_init_command(opts: AgentInitOptions) -> Result<()> {
         scan_candidates(&root)?
     };
 
+    // Containment baseline for scan mode; fall back to `root` if it cannot be
+    // resolved (then `starts_with` simply compares the un-normalized path).
+    let canonical_root = fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
+
     // realpath string -> list of alias paths (for display)
     let mut by_real: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
     let mut missing_explicit: Vec<PathBuf> = Vec::new();
@@ -86,6 +90,18 @@ pub fn agent_init_command(opts: AgentInitOptions) -> Result<()> {
         }
         let real = fs::canonicalize(&c).with_context(|| format!("canonicalize {}", c.display()))?;
         if real.is_dir() {
+            continue;
+        }
+        // In scan mode the candidate list comes from the repository itself, so
+        // a symlink such as `.claude/notes.md -> ~/.zshrc` would otherwise make
+        // us write through to a file outside the project. Explicitly-passed
+        // paths are the user's own choice and stay allowed.
+        if !explicit && !real.starts_with(&canonical_root) {
+            eprintln!(
+                "  · skip {}: resolves outside the project root ({})",
+                c.display(),
+                real.display()
+            );
             continue;
         }
         by_real.entry(real).or_default().push(c);

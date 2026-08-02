@@ -7,6 +7,7 @@ import { debugFileArg, runAtCursor, runFileArg } from "./commands/run";
 import { showDebugInfo } from "./debug/breakpoint";
 import { CargoRunnerCodeLensProvider } from "./providers/codeLens";
 import { executeAsTask, registerTaskProvider } from "./providers/taskProvider";
+import { stripControlChars } from "./util/markdown";
 import { OverrideItem, OverridesTreeProvider } from "./views/overridesTree";
 import {
   RunnableNode,
@@ -33,7 +34,7 @@ export async function activate(
     output.appendLine(`CLI install/update prompt error: ${e}`);
   });
 
-  context.subscriptions.push(registerTaskProvider(context));
+  context.subscriptions.push(registerTaskProvider(context, binaryManager));
 
   const runnablesTree = new RunnablesTreeProvider(client);
   const overridesTree = new OverridesTreeProvider(client);
@@ -175,7 +176,12 @@ export async function activate(
             .dryRun(item.fileArg())
             .then((d) => d.shell)
             .catch(() => item.entry.label));
-        await vscode.env.clipboard.writeText(shell);
+        // This string is derived from repository-controlled config, and its
+        // whole purpose is to be pasted into a terminal. An embedded newline
+        // would make everything after it execute on paste rather than sit there
+        // for the user to read, so strip control characters first.
+        const safe = stripControlChars(shell);
+        await vscode.env.clipboard.writeText(safe);
         vscode.window.showInformationMessage("Command copied to clipboard");
       },
     ),

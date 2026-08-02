@@ -1,4 +1,10 @@
-.PHONY: publish release-cli release-vscode release-major release vscode vscode-package install-agent-docs
+.PHONY: test publish release-cli release-vscode release-major release vscode vscode-package install-agent-docs
+
+# Run every test suite: Rust, the VS Code extension, and the Lua plugin.
+test:
+	cargo test --workspace
+	cd extensions/vscode && npm run test
+	cd extensions/nvim && lua tests/util_spec.lua
 
 # Install cargo-runner agent instructions into a project:
 #   make install-agent-docs ROOT=~/Code/my-app

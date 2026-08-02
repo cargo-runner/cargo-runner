@@ -30,6 +30,8 @@ pub struct RunOptions<'a> {
     pub quiet: bool,
     pub passthrough: &'a [String],
     pub flags: RunCargoFlags,
+    /// Approve a project-configured command without prompting.
+    pub trust_config: bool,
 }
 
 pub fn run_command(
@@ -48,6 +50,31 @@ pub fn run_command(
             quiet,
             passthrough,
             flags,
+            trust_config: false,
+        },
+    )
+}
+
+/// Like [`run_command`], but able to pre-approve a project-configured command.
+#[allow(clippy::too_many_arguments)]
+pub fn run_command_with_trust(
+    filepath_arg: &str,
+    dry_run: bool,
+    json: bool,
+    quiet: bool,
+    passthrough: &[String],
+    flags: RunCargoFlags,
+    trust_config: bool,
+) -> Result<()> {
+    run_command_with_options(
+        filepath_arg,
+        RunOptions {
+            dry_run,
+            json,
+            quiet,
+            passthrough,
+            flags,
+            trust_config,
         },
     )
 }
@@ -177,6 +204,11 @@ fn run_command_with_options(filepath_arg: &str, opts: RunOptions<'_>) -> Result<
         if let Some(ref dir) = command.working_dir {
             info!("Working directory: {}", dir.display());
         }
+
+        // Ask before running anything the project configured that is not an
+        // ordinary Rust build. `execute` refuses unapproved commands on its
+        // own; this is where the user actually gets to decide.
+        crate::commands::trust::ensure_trusted(&command, opts.trust_config)?;
 
         // Execute using the Command's execute method which handles working_dir
         let status = command

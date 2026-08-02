@@ -102,8 +102,12 @@ pub fn init_command(
 
     let mut cargo_tomls = Vec::new();
 
+    // Do not follow symlinks: a `.cargo-runner.json` is written next to every
+    // Cargo.toml discovered here, so following a symlink out of the project
+    // would plant config in an unrelated checkout (and `--force` would
+    // overwrite an existing one).
     for entry in WalkDir::new(&project_root)
-        .follow_links(true)
+        .follow_links(false)
         .into_iter()
         .filter_entry(|e| {
             if let Some(name) = e.file_name().to_str()
@@ -728,8 +732,9 @@ fn collect_cargo_workspace_blocks(
 }
 
 fn discover_cargo_tomls(project_root: &Path) -> Vec<PathBuf> {
+    // See the note in init: results drive writes, so stay inside the root.
     WalkDir::new(project_root)
-        .follow_links(true)
+        .follow_links(false)
         .into_iter()
         .filter_entry(|e| {
             if let Some(name) = e.file_name().to_str()

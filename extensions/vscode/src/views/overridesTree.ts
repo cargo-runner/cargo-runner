@@ -2,6 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import type { CliClient } from "../cli/client";
 import type { OverrideListEntry } from "../cli/types";
+import { escapeMarkdown } from "../util/markdown";
 
 export class OverrideItem extends vscode.TreeItem {
   constructor(public readonly entry: OverrideListEntry) {
@@ -12,14 +13,21 @@ export class OverrideItem extends vscode.TreeItem {
     this.contextValue = "cargoRunnerOverride";
     this.iconPath = new vscode.ThemeIcon("settings-gear");
     this.description = summarize(entry);
-    this.tooltip = new vscode.MarkdownString(
-      `**${label}**\n\n` +
-        `File: \`${match.file_path || "?"}\`\n\n` +
-        `Config: \`${entry.config_path}\`\n\n` +
-        "```json\n" +
-        JSON.stringify(entry.override, null, 2) +
-        "\n```",
-    );
+    // Every value here comes from CLI output, which reflects repository-
+    // controlled paths and config. Built with the append* helpers rather than
+    // string concatenation: a backtick in a path used to close the inline code
+    // span, and a fence inside the JSON used to close the block, letting a
+    // repository inject arbitrary markdown into the hover — remote images in
+    // particular leak IP and user-agent on hover alone. `isTrusted` stays at
+    // its default of false, so `command:` links were never executable.
+    const tooltip = new vscode.MarkdownString();
+    tooltip.appendMarkdown(`**${escapeMarkdown(label)}**\n\n`);
+    tooltip.appendMarkdown("File: ");
+    tooltip.appendCodeblock(match.file_path || "?", "text");
+    tooltip.appendMarkdown("Config: ");
+    tooltip.appendCodeblock(entry.config_path, "text");
+    tooltip.appendCodeblock(JSON.stringify(entry.override, null, 2), "json");
+    this.tooltip = tooltip;
     if (match.file_path) {
       this.command = {
         command: "vscode.open",
@@ -89,3 +97,4 @@ export class OverridesTreeProvider
     }
   }
 }
+

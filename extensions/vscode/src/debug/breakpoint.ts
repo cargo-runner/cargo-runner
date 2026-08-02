@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { isDebugCommand } from "../util/commands";
 
 /**
  * Find the tightest function/method document symbol containing `position`.
@@ -102,7 +103,7 @@ export async function tryDebugAtCursor(
 
   const debugLens = lenses.find(
     (lens) =>
-      lens.command?.title?.toLowerCase().includes("debug") &&
+      isDebugCommand(lens.command?.command) &&
       lens.range.start.line >= symbol.range.start.line - 2 &&
       lens.range.start.line <= symbol.range.end.line,
   );
@@ -158,9 +159,7 @@ export async function showDebugInfo(
       "vscode.executeCodeLensProvider",
       document.uri,
     )) || [];
-  const hasDebug = lenses.some((l) =>
-    l.command?.title?.toLowerCase().includes("debug"),
-  );
+  const hasDebug = lenses.some((l) => isDebugCommand(l.command?.command));
   vscode.window.showInformationMessage(
     [
       `Symbol: ${symbol.name} (${vscode.SymbolKind[symbol.kind]})`,
@@ -171,3 +170,4 @@ export async function showDebugInfo(
     { modal: true },
   );
 }
+
