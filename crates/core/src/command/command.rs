@@ -38,6 +38,23 @@ pub struct Command {
     pub compiler_prefix: Option<Vec<String>>,
 }
 
+/// Quote a value for `sh -c`.
+///
+/// Single quotes suppress every expansion; `'\''` closes, escapes a literal
+/// quote, and reopens. Used both for the rustc pipe path — which really does
+/// execute through a shell — and for rendered previews, so a copy-pasted
+/// command means what it shows.
+fn shell_quote(value: &str) -> String {
+    if !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '=' | '+' | ','))
+    {
+        return value.to_string();
+    }
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
 impl Command {
     pub fn new(strategy: CommandStrategy, program: impl Into<String>, args: Vec<String>) -> Self {
         Self {
@@ -100,11 +117,7 @@ impl Command {
                 };
                 for arg in &self.args {
                     cmd.push(' ');
-                    if arg.contains(' ') && !arg.starts_with('\'') {
-                        cmd.push_str(&format!("'{arg}'"));
-                    } else {
-                        cmd.push_str(arg);
-                    }
+                    cmd.push_str(&shell_quote(arg));
                 }
 
                 // Extract output name and append run command
@@ -159,11 +172,7 @@ impl Command {
                 let mut cmd = self.program.clone();
                 for arg in &self.args {
                     cmd.push(' ');
-                    if arg.contains(' ') && !arg.starts_with('\'') {
-                        cmd.push_str(&format!("'{arg}'"));
-                    } else {
-                        cmd.push_str(arg);
-                    }
+                    cmd.push_str(&shell_quote(arg));
                 }
                 cmd
             }
@@ -171,11 +180,7 @@ impl Command {
                 let mut cmd = String::from("cargo");
                 for arg in &self.args {
                     cmd.push(' ');
-                    if arg.contains(' ') && !arg.starts_with('\'') {
-                        cmd.push_str(&format!("'{arg}'"));
-                    } else {
-                        cmd.push_str(arg);
-                    }
+                    cmd.push_str(&shell_quote(arg));
                 }
                 cmd
             }
@@ -183,11 +188,7 @@ impl Command {
                 let mut cmd = String::from("bazel");
                 for arg in &self.args {
                     cmd.push(' ');
-                    if arg.contains(' ') && !arg.starts_with('\'') {
-                        cmd.push_str(&format!("'{arg}'"));
-                    } else {
-                        cmd.push_str(arg);
-                    }
+                    cmd.push_str(&shell_quote(arg));
                 }
                 cmd
             }
@@ -208,21 +209,26 @@ impl Command {
         cmd
     }
 
+    /// Append exec-phase args to a string destined for `sh -c`.
+    ///
+    /// Every value is quoted. `test_filter` in particular is derived from test
+    /// names in the repository's own source, so an unquoted splice here would
+    /// let a test name inject shell syntax once the pipe has been approved.
     fn apply_test_args_to_shell_cmd(&self, shell_cmd: &mut String) {
         if self.args.contains(&"--test".to_string()) {
             if let Some(exec_args) = &self.exec_args {
                 for arg in exec_args {
                     if arg != "{bench_name}" && arg != "{test_name}" {
-                        shell_cmd.push_str(&format!(" {arg}"));
+                        shell_cmd.push_str(&format!(" {}", shell_quote(arg)));
                     }
                 }
             }
             if let Some(ref test_filter) = self.test_filter {
-                shell_cmd.push_str(&format!(" {test_filter}"));
+                shell_cmd.push_str(&format!(" {}", shell_quote(test_filter)));
             }
             if let Some(extra_args) = &self.test_binary_args {
                 for arg in extra_args {
-                    shell_cmd.push_str(&format!(" {arg}"));
+                    shell_cmd.push_str(&format!(" {}", shell_quote(arg)));
                 }
             }
         }
@@ -347,6 +353,8 @@ impl Command {
                     if let Some(pipe_to) = &self.pipe_command {
                         let mut shell_cmd = exec_path;
                         self.apply_test_args_to_shell_cmd(&mut shell_cmd);
+                        // The pipe is a shell fragment by design and consented to as
+                        // such, so it is not quoted — everything spliced around it is.
                         shell_cmd.push_str(&format!(" | {pipe_to}"));
                         run_cmd.arg(shell_cmd);
                     } else {
@@ -364,6 +372,43 @@ impl Command {
             }
             CommandStrategy::Bazel => self.build_process("bazel", true).status(),
         }
+    }
+}
+
+#[cfg(test)]
+mod shell_quote_tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_values_are_left_bare() {
+        for v in ["cargo", "--release", "src/lib.rs", "a::b::c", "KEY=value", "1.2.3"] {
+            assert_eq!(shell_quote(v), v, "{v} should not need quoting");
+        }
+    }
+
+    #[test]
+    fn shell_metacharacters_are_neutralised() {
+        // test_filter comes from names in the repository's own source, so this
+        // is the case that matters once a pipe has been approved.
+        assert_eq!(shell_quote("a;id"), "'a;id'");
+        assert_eq!(shell_quote("$(id)"), "'$(id)'");
+        assert_eq!(shell_quote("`id`"), "'`id`'");
+        assert_eq!(shell_quote("a b"), "'a b'");
+        assert_eq!(shell_quote(""), "''");
+    }
+
+    #[test]
+    fn embedded_single_quotes_cannot_close_the_quoting() {
+        // The bug class that defeated two earlier attempts on this branch: a
+        // value containing a quote must not be able to end its own quoted span.
+        // Verified against a real `sh`, which round-trips this back to the
+        // literal input without executing `id`.
+        let quoted = shell_quote("x';id;'");
+        assert_eq!(quoted, r#"'x'\'';id;'\'''"#);
+
+        // Every `'` in the payload is either the opening/closing wrapper or
+        // part of an escape sequence — none of them leaves quoting open.
+        assert!(quoted.starts_with('\'') && quoted.ends_with('\''));
     }
 }
 

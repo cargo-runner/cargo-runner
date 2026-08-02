@@ -208,7 +208,9 @@ jobs:
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
         if npx vsce show masterustacean.cargo-runner --json > /tmp/vsce.json 2>/dev/null; then
-          HAS=$(node -p "JSON.parse(require('fs').readFileSync('/tmp/vsce.json','utf8')).versions.some(v => v.version === '$VERSION')")
+          # VERSION goes through the environment rather than being spliced into
+          # the JS source, where a quote would break out of the string literal.
+          HAS=$(VERSION="$VERSION" node -p "JSON.parse(require('fs').readFileSync('/tmp/vsce.json','utf8')).versions.some(v => v.version === process.env.VERSION)")
         else
           HAS=false   # extension not on the Marketplace at all yet
         fi
@@ -230,6 +232,7 @@ jobs:
       if: steps.pub.outputs.ovsx_has == 'false'
       env:
         OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        VERSION: ${{ steps.pub.outputs.version }}
       run: |
         # `ovsx` is a locked devDependency, so `npx` resolves the version in
         # package-lock.json. `npx --yes ovsx` would fetch ovsx@latest from the
@@ -248,7 +251,7 @@ jobs:
         # version that did upload. Treat that as success rather than failing the job.
         if [ $rc -ne 0 ]; then
           echo "$out" | grep -q "isn't active" || exit $rc
-          echo "::warning::${{ steps.pub.outputs.version }} uploaded to Open VSX but not yet active — still processing, no action needed"
+          echo "::warning::${VERSION} uploaded to Open VSX but not yet active — still processing, no action needed"
         fi
 
     - name: Attach VSIX to release

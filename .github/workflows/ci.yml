@@ -83,7 +83,7 @@ jobs:
         if [ -n "$BUILDBUDDY_API_KEY" ]; then
           EXTRA_FLAGS="--config=ci --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}"
         fi
-        if [ "${{ runner.os }}" == "Windows" ]; then
+        if [ "$RUNNER_OS" == "Windows" ]; then
           # MSVC link.exe fails with LNK1181 because rules_rust doc tests exceed MAX_PATH in bazel runfiles
           TARGETS=$(bazel query 'tests(//...) except filter("doc_tests", tests(//...))' | tr -d '\r')
           bazel test $EXTRA_FLAGS $TARGETS

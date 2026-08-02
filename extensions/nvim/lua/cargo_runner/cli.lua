@@ -40,6 +40,21 @@ local function candidate_binaries(name)
   }
 end
 
+---True when `resolved` sits inside the current working directory.
+---
+---Exposed on M (rather than a local) so it can be stubbed in tests.
+---@param resolved string
+---@return boolean
+function M._resolves_into_cwd(resolved)
+  local cwd = vim.fn.getcwd()
+  if not cwd or cwd == "" then
+    return false
+  end
+  local abs = vim.fn.fnamemodify(resolved, ":p")
+  local root = vim.fn.fnamemodify(cwd, ":p")
+  return abs:sub(1, #root) == root
+end
+
 ---@param name string
 ---@return string|nil
 local function find_executable(name)
@@ -51,7 +66,11 @@ local function find_executable(name)
     return nil
   end
   local exepath = vim.fn.exepath(name)
-  if exepath ~= "" then
+  -- `exepath` consults the current directory before PATH on Windows, so a
+  -- repository shipping cargo-runner.exe at its root would be picked up and
+  -- executed. Reject anything that resolves inside the cwd; the explicit
+  -- candidates below still cover normal installs.
+  if exepath ~= "" and not M._resolves_into_cwd(exepath) then
     return exepath
   end
   for _, cand in ipairs(candidate_binaries(name)) do

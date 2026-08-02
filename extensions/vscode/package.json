@@ -326,7 +326,8 @@
         "cargoRunner.enableCodeLens": {
           "type": "boolean",
           "default": true,
-          "description": "Show CodeLens Run / Debug / Override actions above runnables."
+          "description": "Show CodeLens Run / Debug / Override actions above runnables.",
+          "scope": "machine-overridable"
         },
         "cargoRunner.enableBreakpointDetection": {
           "type": "boolean",
@@ -343,13 +344,15 @@
         "cargoRunner.checkCliUpdates": {
           "type": "boolean",
           "default": true,
-          "description": "On activate, check GitHub for a newer cargo-runner CLI and prompt to download it (even if the extension itself was not updated)."
+          "description": "On activate, check GitHub for a newer cargo-runner CLI and prompt to download it (even if the extension itself was not updated).",
+          "scope": "machine-overridable"
         },
         "cargoRunner.cliUpdateCheckIntervalHours": {
           "type": "number",
           "default": 24,
           "minimum": 1,
-          "description": "Minimum hours between CLI update prompts for the same session period."
+          "description": "Minimum hours between CLI update prompts for the same session period.",
+          "scope": "machine-overridable"
         },
         "cargoRunner.releaseRepo": {
           "type": "string",
