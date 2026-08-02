@@ -385,7 +385,8 @@
     "package-ext": "node esbuild.js --production",
     "package": "vsce package --no-dependencies",
     "build": "npm run compile && npm run package-ext",
-    "lint": "tsc -p ./ --noEmit"
+    "lint": "tsc -p ./ --noEmit",
+    "test": "npm run compile && node --test $(find out -name '*.test.js')"
   },
   "dependencies": {
     "tar": "^7.4.3"

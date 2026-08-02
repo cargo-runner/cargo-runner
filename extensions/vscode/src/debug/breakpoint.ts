@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { isDebugCommand } from "../util/commands";
 
 /**
  * Find the tightest function/method document symbol containing `position`.
@@ -170,20 +171,3 @@ export async function showDebugInfo(
   );
 }
 
-/**
- * Known debug CodeLens command ids.
- *
- * `executeCodeLensProvider` returns lenses from *every* provider registered for
- * the document, so selecting one by a fuzzy title substring meant Cmd+R could
- * invoke an arbitrary command contributed by some other installed extension
- * whose lens title merely contained "debug". Matching on the command id keeps
- * the handoff to the providers actually intended.
- */
-const DEBUG_COMMAND_IDS = new Set([
-  "rust-analyzer.debugSingle",
-  "rust-analyzer.debug",
-]);
-
-export function isDebugCommand(command: string | undefined): boolean {
-  return command !== undefined && DEBUG_COMMAND_IDS.has(command);
-}

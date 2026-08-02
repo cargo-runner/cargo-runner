@@ -91,3 +91,24 @@ jobs:
           bazel test $EXTRA_FLAGS //...
         fi
       shell: bash
+
+  # ── Neovim plugin: pure-Lua unit tests (no nvim required) ─────────────────
+  lua:
+    name: Lua unit tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+    - name: Install Lua
+      run: sudo apt-get update && sudo apt-get install -y lua5.4
+
+    - name: Syntax-check every module
+      working-directory: extensions/nvim
+      run: |
+        set -e
+        find lua -name '*.lua' -print0 | xargs -0 -n1 luac5.4 -p
+        echo "all modules parse"
+
+    - name: Unit tests
+      working-directory: extensions/nvim
+      run: lua5.4 tests/util_spec.lua

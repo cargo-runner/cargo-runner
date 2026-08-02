@@ -2,6 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import type { CliClient } from "../cli/client";
 import type { OverrideListEntry } from "../cli/types";
+import { escapeMarkdown } from "../util/markdown";
 
 export class OverrideItem extends vscode.TreeItem {
   constructor(public readonly entry: OverrideListEntry) {
@@ -97,7 +98,3 @@ export class OverridesTreeProvider
   }
 }
 
-/** Neutralize markdown control characters in text rendered into a hover. */
-export function escapeMarkdown(text: string): string {
-  return text.replace(/[\\`*_{}[\]()#+\-.!|>~]/g, "\\$&");
-}

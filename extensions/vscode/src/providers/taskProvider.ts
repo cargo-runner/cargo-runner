@@ -1,6 +1,9 @@
 import * as vscode from "vscode";
 import * as path from "node:path";
 import type { BinaryManager } from "../binary/manager";
+import { isLongRunning } from "../util/commands";
+
+export { isLongRunning };
 
 export interface CargoRunnerTaskDefinition extends vscode.TaskDefinition {
   type: "cargo-runner";
@@ -8,20 +11,6 @@ export interface CargoRunnerTaskDefinition extends vscode.TaskDefinition {
   cwd?: string;
 }
 
-const LONG_RUNNING = [
-  "serve",
-  "watch",
-  "dev",
-  "dx serve",
-  "leptos watch",
-  "tauri dev",
-  "trunk serve",
-];
-
-export function isLongRunning(shell: string): boolean {
-  const lower = shell.toLowerCase();
-  return LONG_RUNNING.some((p) => lower.includes(p));
-}
 
 export function registerTaskProvider(
   _context: vscode.ExtensionContext,

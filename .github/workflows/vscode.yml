@@ -44,6 +44,12 @@ jobs:
       - name: Typecheck & bundle
         run: npm run build
 
+      # `npm run build` already ran tsc, so this only executes the compiled
+      # tests. Until now no TypeScript ran in CI at all — including the
+      # ProcessExecution path that resolves every run command.
+      - name: Test
+        run: node --test $(find out -name '*.test.js')
+
       - name: Package VSIX
         run: npx vsce package --no-dependencies
 

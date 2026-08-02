@@ -293,29 +293,8 @@ function M.cursor_file_arg()
   return path .. ":" .. tostring(line), nil
 end
 
-local LONG_RUNNING_PATTERNS = {
-  "serve",
-  "watch",
-  " dev",
-  "dev ",
-  "dx serve",
-  "leptos watch",
-  "tauri dev",
-  "trunk serve",
-}
 
 ---@param shell string|nil
-function M.is_long_running(shell)
-  if not shell or shell == "" then
-    return false
-  end
-  local lower = shell:lower()
-  for _, p in ipairs(LONG_RUNNING_PATTERNS) do
-    if lower:find(p, 1, true) then
-      return true
-    end
-  end
-  return false
-end
+M.is_long_running = require("cargo_runner.util").is_long_running
 
 return M

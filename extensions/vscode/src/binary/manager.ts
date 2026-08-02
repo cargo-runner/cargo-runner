@@ -7,39 +7,16 @@ import * as os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as tar from "tar";
+import { digestForAsset } from "../util/checksum";
+import { isValidRepoSlug } from "../util/repo";
+import { isNewerSemver, tagToSemver } from "../util/semver";
+import { lookupHelper, rustcTarget as resolveRustcTarget } from "../util/target";
 
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_RELEASE_REPO = "cargo-runner/cargo-runner";
 
-/**
- * Absolute path to the PATH-lookup helper.
- *
- * `where`/`which` are invoked by name otherwise, and on Windows a bare name is
- * resolved against the current directory first — so a repository shipping
- * `where.exe` would supply the helper itself.
- */
-function lookupHelper(): string {
-  if (process.platform !== "win32") {
-    // Left as a bare name deliberately: POSIX PATH resolution does not consult
-    // the current directory, so there is nothing to defend against here, and
-    // `which` is not at a fixed location across distributions.
-    return "which";
-  }
-  const systemRoot = process.env.SystemRoot || "C:\\Windows";
-  return path.join(systemRoot, "System32", "where.exe");
-}
-
-/** `owner/repo`, rejecting `.`/`..` as either segment. Exported for tests. */
-export function isValidRepoSlug(value: string): boolean {
-  const parts = value.split("/");
-  if (parts.length !== 2) {
-    return false;
-  }
-  return parts.every(
-    (p) => /^[A-Za-z0-9._-]+$/.test(p) && p !== "." && p !== "..",
-  );
-}
+export { isValidRepoSlug, isNewerSemver, tagToSemver };
 
 /** Thrown when the CLI is missing and the user dismissed / timed out the prompt. */
 export class CliMissingError extends Error {
@@ -103,25 +80,7 @@ export class BinaryManager {
 
   /** Map host platform/arch to rustc target triple used in release assets. */
   rustcTarget(): string {
-    const platform = process.platform;
-    const arch = process.arch;
-
-    if (platform === "darwin" && arch === "arm64") {
-      return "aarch64-apple-darwin";
-    }
-    if (platform === "darwin" && arch === "x64") {
-      return "x86_64-apple-darwin";
-    }
-    if (platform === "linux" && arch === "arm64") {
-      return "aarch64-unknown-linux-gnu";
-    }
-    if (platform === "linux" && arch === "x64") {
-      return "x86_64-unknown-linux-gnu";
-    }
-    if (platform === "win32" && arch === "x64") {
-      return "x86_64-pc-windows-msvc";
-    }
-    throw new Error(`Unsupported platform: ${platform}/${arch}`);
+    return resolveRustcTarget();
   }
 
   binaryFileName(): string {
@@ -715,15 +674,7 @@ export class BinaryManager {
       );
     }
 
-    // Format: "<64-hex>  <basename>" per line, as emitted by sha256sum/shasum.
-    let expected: string | undefined;
-    for (const line of manifest.split(/\r?\n/)) {
-      const m = line.trim().match(/^([0-9a-fA-F]{64})\s+\*?(.+)$/);
-      if (m && path.basename(m[2].trim()) === assetName) {
-        expected = m[1].toLowerCase();
-        break;
-      }
-    }
+    const expected = digestForAsset(manifest, assetName);
     if (!expected) {
       await discard();
       throw new Error(
@@ -883,34 +834,3 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** `cargo-runner-cli-v1.6.2` or `v1.6.2` → `1.6.2` */
-export function tagToSemver(tag: string): string | null {
-  const m = tag.match(/(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/);
-  return m ? m[1] : null;
-}
-
-/** True if `a` is a higher semver than `b` (numeric major.minor.patch only). */
-export function isNewerSemver(a: string, b: string): boolean {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) {
-    return a !== b && a > b;
-  }
-  for (let i = 0; i < 3; i++) {
-    if (pa[i] > pb[i]) {
-      return true;
-    }
-    if (pa[i] < pb[i]) {
-      return false;
-    }
-  }
-  return false;
-}
-
-function parseSemver(v: string): [number, number, number] | null {
-  const m = v.match(/^(\d+)\.(\d+)\.(\d+)/);
-  if (!m) {
-    return null;
-  }
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-}

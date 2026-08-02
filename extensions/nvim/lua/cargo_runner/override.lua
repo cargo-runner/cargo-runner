@@ -8,41 +8,7 @@ local TOKEN_HELP =
   "Tokens: @cmd.sub  +channel  KEY=val  /test-args  --flags  |  @ append  !! clear  !env"
 
 ---Simple shell-ish tokenize (handles quotes loosely).
----@param s string
----@return string[]
-function M.tokenize(s)
-  local tokens = {}
-  local i = 1
-  local n = #s
-  while i <= n do
-    while i <= n and s:sub(i, i):match("%s") do
-      i = i + 1
-    end
-    if i > n then
-      break
-    end
-    local c = s:sub(i, i)
-    if c == '"' or c == "'" then
-      local q = c
-      i = i + 1
-      local start = i
-      while i <= n and s:sub(i, i) ~= q do
-        i = i + 1
-      end
-      table.insert(tokens, s:sub(start, i - 1))
-      if i <= n then
-        i = i + 1
-      end
-    else
-      local start = i
-      while i <= n and not s:sub(i, i):match("%s") do
-        i = i + 1
-      end
-      table.insert(tokens, s:sub(start, i - 1))
-    end
-  end
-  return tokens
-end
+M.tokenize = require("cargo_runner.util").tokenize
 
 local ACTIONS = {
   ["Save & Run"] = "save-run",

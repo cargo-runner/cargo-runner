@@ -7,6 +7,7 @@ import { debugFileArg, runAtCursor, runFileArg } from "./commands/run";
 import { showDebugInfo } from "./debug/breakpoint";
 import { CargoRunnerCodeLensProvider } from "./providers/codeLens";
 import { executeAsTask, registerTaskProvider } from "./providers/taskProvider";
+import { stripControlChars } from "./util/markdown";
 import { OverrideItem, OverridesTreeProvider } from "./views/overridesTree";
 import {
   RunnableNode,
@@ -179,7 +180,7 @@ export async function activate(
         // whole purpose is to be pasted into a terminal. An embedded newline
         // would make everything after it execute on paste rather than sit there
         // for the user to read, so strip control characters first.
-        const safe = shell.replace(/[\x00-\x1F\x7F]/g, " ").trim();
+        const safe = stripControlChars(shell);
         await vscode.env.clipboard.writeText(safe);
         vscode.window.showInformationMessage("Command copied to clipboard");
       },
