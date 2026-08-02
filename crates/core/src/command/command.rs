@@ -28,6 +28,14 @@ pub struct Command {
     pub pipe_command: Option<String>,
     /// Rustc-specific: extra args for test binary
     pub test_binary_args: Option<Vec<String>>,
+    /// Rustc-specific: wrapper that runs the compiler, e.g.
+    /// `["rustup", "run", "nightly"]`.
+    ///
+    /// Kept separate from `program`/`args` so a toolchain channel does not have
+    /// to change the strategy. Rewriting the strategy to `Shell` to fit `rustup`
+    /// in dropped every rustc-specific field below and skipped running the
+    /// compiled binary entirely.
+    pub compiler_prefix: Option<Vec<String>>,
 }
 
 impl Command {
@@ -42,6 +50,7 @@ impl Command {
             exec_args: None,
             pipe_command: None,
             test_binary_args: None,
+            compiler_prefix: None,
         }
     }
 
@@ -83,7 +92,12 @@ impl Command {
     pub fn to_shell_command(&self) -> String {
         match self.strategy {
             CommandStrategy::Rustc => {
-                let mut cmd = String::from("rustc");
+                let mut cmd = match self.compiler_prefix.as_deref() {
+                    Some(prefix) if !prefix.is_empty() => {
+                        format!("{} rustc", prefix.join(" "))
+                    }
+                    _ => String::from("rustc"),
+                };
                 for arg in &self.args {
                     cmd.push(' ');
                     if arg.contains(' ') && !arg.starts_with('\'') {
@@ -295,7 +309,21 @@ impl Command {
                     }
                 }
 
-                let mut rustc_cmd = self.build_process("rustc", true);
+                // With a toolchain prefix the compile step becomes
+                // `rustup run <channel> rustc <args>`; without one it is plain
+                // `rustc <args>`. Either way the run-the-output tail below is
+                // unchanged, which is the whole point of not rewriting the
+                // strategy.
+                let mut rustc_cmd = match self.compiler_prefix.as_deref() {
+                    Some([head, rest @ ..]) => {
+                        let mut c = self.build_process(head, false);
+                        c.args(rest);
+                        c.arg("rustc");
+                        c.args(&self.args);
+                        c
+                    }
+                    _ => self.build_process("rustc", true),
+                };
                 let compile_status = rustc_cmd.status()?;
                 if !compile_status.success() {
                     return Ok(compile_status);
@@ -335,6 +363,80 @@ impl Command {
                 self.build_process("cargo", true).status()
             }
             CommandStrategy::Bazel => self.build_process("bazel", true).status(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod compiler_prefix_tests {
+    use super::*;
+
+    fn rustc_build() -> Command {
+        Command::rustc(vec![
+            "--test".to_string(),
+            "/tmp/x.rs".to_string(),
+            "-o".to_string(),
+            "/tmp/x_test".to_string(),
+        ])
+    }
+
+    #[test]
+    fn without_a_prefix_the_rendering_is_unchanged() {
+        let cmd = rustc_build();
+        let shell = cmd.to_shell_command();
+        assert!(shell.starts_with("rustc --test"), "got: {shell}");
+        assert!(shell.contains("&& /tmp/x_test"), "got: {shell}");
+    }
+
+    #[test]
+    fn a_prefix_wraps_only_the_compile_step() {
+        let mut cmd = rustc_build();
+        cmd.compiler_prefix = Some(vec![
+            "rustup".to_string(),
+            "run".to_string(),
+            "nightly".to_string(),
+        ]);
+        let shell = cmd.to_shell_command();
+
+        assert!(
+            shell.starts_with("rustup run nightly rustc --test"),
+            "compile step should be wrapped: {shell}"
+        );
+        // The compiled binary is still executed — the bug this replaced dropped
+        // this tail entirely by rewriting the strategy to Shell.
+        assert!(
+            shell.contains("&& /tmp/x_test"),
+            "the output binary must still run: {shell}"
+        );
+    }
+
+    #[test]
+    fn a_prefix_does_not_change_the_strategy_or_resolved_program() {
+        let mut cmd = rustc_build();
+        cmd.compiler_prefix = Some(vec!["rustup".into(), "run".into(), "nightly".into()]);
+
+        // Strategy must stay Rustc: RustcRunner::validate_command rejects
+        // anything else, which is what made `+nightly` a hard error.
+        assert_eq!(cmd.strategy, CommandStrategy::Rustc);
+        // And the trust gate should still see rustc, not rustup (which is not
+        // in KNOWN_PROGRAMS and would prompt on every nightly run).
+        assert_eq!(cmd.resolved_program(), "rustc");
+    }
+
+    #[test]
+    fn a_prefix_preserves_the_rustc_specific_fields() {
+        let mut cmd = rustc_build();
+        cmd.compiler_prefix = Some(vec!["rustup".into(), "run".into(), "nightly".into()]);
+        cmd.test_filter = Some("mod::it_works".to_string());
+        cmd.exec_args = Some(vec!["--nocapture".to_string()]);
+        cmd.test_binary_args = Some(vec!["--ignored".to_string()]);
+
+        let shell = cmd.to_shell_command();
+        for expected in ["--nocapture", "mod::it_works", "--ignored"] {
+            assert!(
+                shell.contains(expected),
+                "{expected} should survive: {shell}"
+            );
         }
     }
 }

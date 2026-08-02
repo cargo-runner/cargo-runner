@@ -301,6 +301,8 @@ fn shell_command_from_cargo_override(
         exec_args: base.exec_args,
         pipe_command: base.pipe_command,
         test_binary_args: base.test_binary_args,
+        // Not a rustc command — a toolchain prefix has no meaning here.
+        compiler_prefix: None,
     }
 }
 
@@ -498,6 +500,8 @@ impl crate::plugins::registry::OverlayPlugin for DioxusOverlayPlugin {
             exec_args: command.exec_args,
             pipe_command: command.pipe_command,
             test_binary_args: command.test_binary_args,
+            // Not a rustc command — a toolchain prefix has no meaning here.
+            compiler_prefix: None,
         })
     }
 }
@@ -579,6 +583,8 @@ impl crate::plugins::registry::OverlayPlugin for LeptosOverlayPlugin {
             exec_args: command.exec_args,
             pipe_command: command.pipe_command,
             test_binary_args: command.test_binary_args,
+            // Not a rustc command — a toolchain prefix has no meaning here.
+            compiler_prefix: None,
         })
     }
 }
@@ -670,6 +676,8 @@ impl crate::plugins::registry::OverlayPlugin for TauriOverlayPlugin {
             exec_args: command.exec_args,
             pipe_command: command.pipe_command,
             test_binary_args: command.test_binary_args,
+            // Not a rustc command — a toolchain prefix has no meaning here.
+            compiler_prefix: None,
         })
     }
 }

@@ -2067,3 +2067,63 @@ fn dry_run_is_never_gated() {
         .success()
         .stdout(predicate::str::contains("rustc"));
 }
+
+/// A rustc `channel` used to rewrite the command's strategy to `Shell`, which
+/// `RustcRunner::validate_command` rejects — so `+nightly` on a standalone file
+/// failed outright with "Expected Rustc command type".
+#[test]
+fn rustc_channel_resolves_instead_of_failing_validation() {
+    let tmp = TempDir::new().unwrap();
+    let root = canonical(tmp.path());
+
+    std::fs::write(
+        tmp.path().join("standalone.rs"),
+        "fn main() { println!(\"hi\"); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join(".cargo-runner.json"),
+        r#"{"rustc":{"channel":"nightly"}}"#,
+    )
+    .unwrap();
+
+    // --dry-run so no toolchain has to be installed on the runner.
+    cargo_runner()
+        .args(["run", "standalone.rs", "--dry-run"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("rustup run nightly rustc"))
+        // The compiled binary must still be executed — the old rewrite dropped
+        // this tail along with every rustc-specific field.
+        .stdout(predicate::str::contains("&&"));
+}
+
+/// The channel comes from repository config and becomes a process argument, so
+/// anything not toolchain-shaped is ignored rather than passed through.
+#[test]
+fn malformed_rustc_channel_is_ignored() {
+    let tmp = TempDir::new().unwrap();
+    let root = canonical(tmp.path());
+
+    std::fs::write(
+        tmp.path().join("standalone.rs"),
+        "fn main() { println!(\"hi\"); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join(".cargo-runner.json"),
+        r#"{"rustc":{"channel":"../evil; id"}}"#,
+    )
+    .unwrap();
+
+    cargo_runner()
+        .args(["run", "standalone.rs", "--dry-run"])
+        .env("PROJECT_ROOT", &root)
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("rustc "))
+        .stdout(predicate::str::contains("evil").not());
+}
