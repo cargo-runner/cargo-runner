@@ -158,3 +158,67 @@ crates/cli/Cargo.toml           cargo-runner-core = { version = "X.Y.Z", path = 
 extensions/vscode/package.json  "version": "X.Y.Z"
 GitHub tag                      cargo-runner-cli-vX.Y.Z
 ```
+
+---
+
+## Artifact verification
+
+Every release publishes a `SHA256SUMS` manifest alongside the archives, and the
+VS Code extension verifies an archive's digest before extracting it or marking
+it executable. A release without the manifest fails verification rather than
+installing unverified.
+
+### Enabling signed `cargo binstall` (one-time setup)
+
+`cargo binstall` is the primary documented install path, and its only
+verification mechanism is minisign. Until the keypair below exists, the release
+workflow skips signing and binstall installs **unverified**.
+
+The signing step and the `Cargo.toml` block are deliberately kept separate:
+adding `[package.metadata.binstall.signing]` makes binstall *require* a valid
+signature, so publishing it before releases are actually signed would break
+every install. Do these in order.
+
+1. **Generate a keypair** (keep the secret key out of the repository):
+
+   ```bash
+   minisign -G -s minisign.key -p minisign.pub
+   ```
+
+2. **Add repository secrets** — Settings → Secrets and variables → Actions:
+
+   | Secret | Value |
+   |---|---|
+   | `MINISIGN_SECRET_KEY` | full contents of `minisign.key` |
+   | `MINISIGN_PASSWORD`   | the password chosen in step 1 |
+
+   The `Sign archive (minisign)` step in `release.yml` is guarded on
+   `MINISIGN_SECRET_KEY` being non-empty, so it starts working as soon as these
+   exist — no workflow change needed.
+
+3. **Cut one release** and confirm a `.minisig` is attached to each archive.
+
+4. **Only then**, add to `crates/cli/Cargo.toml` and publish the next release:
+
+   ```toml
+   [package.metadata.binstall.signing]
+   algorithm = "minisign"
+   pubkey = "<contents of minisign.pub, the key line only>"
+   file = "{ url }.minisig"
+   ```
+
+   `file` is needed because minisign writes `<archive>.minisig` while binstall
+   defaults to `{ url }.sig`.
+
+5. Verify end to end on a clean machine:
+
+   ```bash
+   cargo binstall cargo-runner-cli   # should report signature verification
+   ```
+
+To verify a download by hand without binstall:
+
+```bash
+sha256sum -c SHA256SUMS --ignore-missing
+minisign -Vm cargo-runner-cli-<target>-v<version>.tar.gz -P "<pubkey>"
+```

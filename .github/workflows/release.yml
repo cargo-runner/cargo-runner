@@ -94,6 +94,32 @@ jobs:
 
         echo "ASSET_NAME=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
 
+    # `cargo binstall` is the documented primary install path and verifies only
+    # via minisign, so an unsigned release installs unverified. Skipped when the
+    # secret is absent, so releases keep working until the keypair exists —
+    # see docs/release.md for generating it.
+    - name: Sign archive (minisign)
+      if: env.MINISIGN_SECRET_KEY != ''
+      shell: bash
+      env:
+        MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+      run: |
+        set -euo pipefail
+        curl -sSfL -o /tmp/minisign.tar.gz \
+          https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux.tar.gz \
+          || { echo "::warning::could not fetch minisign; skipping signing"; exit 0; }
+        tar -xzf /tmp/minisign.tar.gz -C /tmp
+        MINISIGN=$(find /tmp -name minisign -type f -perm -u+x | head -1)
+
+        printf '%s' "$MINISIGN_SECRET_KEY" > /tmp/minisign.key
+        # -W would drop the password prompt; the key is password-protected, so
+        # feed it on stdin instead.
+        printf '%s' "$MINISIGN_PASSWORD" | "$MINISIGN" \
+          -S -s /tmp/minisign.key -m "${ASSET_NAME}"
+        shred -u /tmp/minisign.key 2>/dev/null || rm -f /tmp/minisign.key
+        ls -l "${ASSET_NAME}.minisig"
+
     - name: Upload Artifact
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
@@ -101,6 +127,8 @@ jobs:
         path: |
           ${{ env.ASSET_NAME }}
           ${{ env.ASSET_NAME }}.sha256
+          ${{ env.ASSET_NAME }}.minisig
+        if-no-files-found: warn
 
   create-release:
     name: Create GitHub Release
@@ -131,6 +159,7 @@ jobs:
       with:
         files: |
           artifacts/**/*.tar.gz
+          artifacts/**/*.minisig
           SHA256SUMS
         generate_release_notes: true
 

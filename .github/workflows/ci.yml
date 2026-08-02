@@ -112,3 +112,23 @@ jobs:
     - name: Unit tests
       working-directory: extensions/nvim
       run: lua5.4 tests/util_spec.lua
+
+  # ── Dependency advisories ────────────────────────────────────────────────
+  # Dependabot proposes bumps but does not block a merge; this does. The npm
+  # side is covered by `npm audit` in vscode.yml.
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+    - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+    - name: Cache cargo-deny
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+    - name: Install cargo-deny
+      run: cargo install cargo-deny --locked
+
+    - name: Check advisories, licenses, sources and bans
+      run: cargo deny check

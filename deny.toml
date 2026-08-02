@@ -1,0 +1,41 @@
+# cargo-deny configuration.
+#
+# Dependabot proposes version bumps but does not block a merge, so nothing
+# stopped a known-vulnerable crate from landing. This does.
+
+[advisories]
+# Fail on any crate with an open RUSTSEC advisory.
+yanked = "deny"
+ignore = []
+
+[bans]
+# Duplicate versions are noisy in a tree this size and are not a correctness
+# problem; surface them without failing the build.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[licenses]
+# The crate is MIT; keep the dependency tree to licenses compatible with that.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+    # notify-6.1.1 is CC0-1.0 — a public-domain dedication, compatible with MIT.
+    "CC0-1.0",
+]
+confidence-threshold = 0.8
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# Only crates.io — the committed Cargo.lock has zero git sources today, and a
+# new one should be a deliberate, reviewed change.
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

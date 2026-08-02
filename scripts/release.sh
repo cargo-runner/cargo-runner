@@ -234,7 +234,10 @@ if [[ "$NO_CRATES" -eq 0 ]]; then
   # exactly the desync the version-lockstep design assumes cannot happen.
   publish_crate() {
     local crate="$1" out rc
-    out="$(cargo publish -p "$crate" --allow-dirty 2>&1)"
+    # No --allow-dirty: it disables cargo's "working tree differs from the
+    # commit" guard, which is what makes the published tarball provably the
+    # tagged tree. The bump is committed before this runs.
+    out="$(cargo publish -p "$crate" 2>&1)"
     rc=$?
     echo "$out"
     if [[ $rc -ne 0 ]]; then
